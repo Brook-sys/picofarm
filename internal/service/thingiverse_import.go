@@ -33,6 +33,22 @@ type ThingiverseFile struct {
 	DownloadURL string `json:"download_url"`
 }
 
+type ThingiverseImportPreviewResult struct {
+	SourceURL string                         `json:"source_url"`
+	Title     string                         `json:"title"`
+	Files     []ThingiverseImportPreviewFile `json:"files"`
+	TotalSTL  int                            `json:"total_stl"`
+	Selected  int                            `json:"selected"`
+}
+
+type ThingiverseImportPreviewFile struct {
+	ID          int    `json:"id"`
+	Name        string `json:"name"`
+	DownloadURL string `json:"download_url"`
+	Selected    bool   `json:"selected"`
+	Exists      bool   `json:"exists"`
+}
+
 func NewThingiverseImportService(settings *SettingsService, stls *STLLibraryService) *ThingiverseImportService {
 	return &ThingiverseImportService{
 		settings: settings,
@@ -42,6 +58,9 @@ func NewThingiverseImportService(settings *SettingsService, stls *STLLibraryServ
 }
 
 func (s *ThingiverseImportService) getToken(ctx context.Context) (string, error) {
+	if s.settings == nil {
+		return "", fmt.Errorf("thingiverse api token not configured")
+	}
 	setting, err := s.settings.Get(ctx, "thingiverse_api_token")
 	if err != nil || setting == nil || strings.TrimSpace(setting.Value) == "" {
 		return "", fmt.Errorf("thingiverse api token not configured")
@@ -223,4 +242,72 @@ func extractThingID(rawURL string) (int, error) {
 	var id int
 	fmt.Sscanf(m[1], "%d", &id)
 	return id, nil
+}
+
+func (s *ThingiverseImportService) ImportPreview(ctx context.Context, req ModelImportRequest) (*ThingiverseImportPreviewResult, error) {
+	resolved, err := s.Resolve(ctx, req.URL)
+	if err != nil {
+		return nil, err
+	}
+
+	token, err := s.getToken(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	body, err := s.do(ctx, http.MethodGet, fmt.Sprintf("/things/%d/files", resolved.ID), token)
+	if err != nil {
+		return nil, err
+	}
+
+	var apiFiles []struct {
+		ID   int    `json:"id"`
+		Name string `json:"name"`
+	}
+	if err := json.Unmarshal(body, &apiFiles); err != nil {
+		return nil, fmt.Errorf("failed to parse files")
+	}
+
+	selected := map[string]bool{}
+	for _, u := range req.STLURLs {
+		selected[u] = true
+	}
+
+	result := &ThingiverseImportPreviewResult{
+		SourceURL: resolved.SourceURL,
+		Title:     resolved.Name,
+		Files:     []ThingiverseImportPreviewFile{},
+	}
+
+	for _, f := range apiFiles {
+		if !strings.HasSuffix(strings.ToLower(f.Name), ".stl") {
+			continue
+		}
+
+		dlURL := fmt.Sprintf("https://api.thingiverse.com/files/%d/download", f.ID)
+		sel := len(selected) == 0 || selected[f.Name]
+
+		exists := false
+		if s.stls != nil {
+			// best effort: check if file with same name exists in stl library
+			// we do not have a direct GetByName, so we skip expensive check for now
+			// existence will be false unless we implement it later
+			exists = false
+		}
+
+		result.Files = append(result.Files, ThingiverseImportPreviewFile{
+			ID:          f.ID,
+			Name:        f.Name,
+			DownloadURL: dlURL,
+			Selected:    sel,
+			Exists:      exists,
+		})
+
+		if sel {
+			result.Selected++
+		}
+		result.TotalSTL++
+	}
+
+	return result, nil
 }

@@ -60,3 +60,17 @@ func (h *ThingiverseImportHandler) Import(w http.ResponseWriter, r *http.Request
 	}
 	respondJSON(w, http.StatusCreated, result)
 }
+
+func (h *ThingiverseImportHandler) ImportPreview(w http.ResponseWriter, r *http.Request) {
+	var req service.ModelImportRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	result, err := h.service.ImportPreview(r.Context(), req)
+	if err != nil {
+		respondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	respondJSON(w, http.StatusOK, result)
+}

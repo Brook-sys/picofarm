@@ -122,6 +122,7 @@ func NewRouter(services *service.Services, hub *realtime.Hub) http.Handler {
 			r.Post("/resolve", thingiverseHandler.Resolve)
 			r.Post("/preview", thingiverseHandler.Preview)
 			r.Post("/import", thingiverseHandler.Import)
+			r.Post("/import-preview", thingiverseHandler.ImportPreview)
 		})
 
 		thingiverseSettings := NewThingiverseSettingsHandler(services.Settings)
