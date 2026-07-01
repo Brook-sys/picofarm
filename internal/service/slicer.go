@@ -14,10 +14,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/Brook-sys/picofarm/internal/model"
 	"github.com/Brook-sys/picofarm/internal/repository"
 	"github.com/Brook-sys/picofarm/internal/storage"
+	"github.com/google/uuid"
 )
 
 type SlicerService struct {
@@ -51,20 +51,20 @@ type SlicerUploadProfileRequest struct {
 }
 
 type SlicerSliceRequest struct {
-	STLFileID          uuid.UUID                 `json:"stl_file_id"`
-	Printer            string                    `json:"printer"`
-	Preset             string                    `json:"preset"`
-	Filament           string                    `json:"filament"`
-	Arrange                bool   `json:"arrange"`
-	Orient                 bool   `json:"orient"`
-	EnableSupport          bool   `json:"enable_support"`
-	BrimType               bool   `json:"brim_type"`
-	PrintSequenceByObject  bool   `json:"print_sequence_by_object"`
-	ExportType             string `json:"export_type"`
-	MulticolorOnePlate bool                      `json:"multicolor_one_plate"`
-	Overrides          map[string]map[string]any `json:"overrides"`
-	DisplayName        string                    `json:"display_name"`
-	SetDefault         bool                      `json:"set_default"`
+	STLFileID             uuid.UUID                 `json:"stl_file_id"`
+	Printer               string                    `json:"printer"`
+	Preset                string                    `json:"preset"`
+	Filament              string                    `json:"filament"`
+	Arrange               bool                      `json:"arrange"`
+	Orient                bool                      `json:"orient"`
+	EnableSupport         bool                      `json:"enable_support"`
+	BrimType              bool                      `json:"brim_type"`
+	PrintSequenceByObject bool                      `json:"print_sequence_by_object"`
+	ExportType            string                    `json:"export_type"`
+	MulticolorOnePlate    bool                      `json:"multicolor_one_plate"`
+	Overrides             map[string]map[string]any `json:"overrides"`
+	DisplayName           string                    `json:"display_name"`
+	SetDefault            bool                      `json:"set_default"`
 }
 
 type SlicerSliceResult struct {
@@ -73,6 +73,27 @@ type SlicerSliceResult struct {
 	FilamentUsedGrams  string                  `json:"filament_used_g,omitempty"`
 	FilamentUsedMM     string                  `json:"filament_used_mm,omitempty"`
 	ContentDisposition string                  `json:"content_disposition,omitempty"`
+}
+
+type SlicerPreviewRequest struct {
+	STLFileID             uuid.UUID `json:"stl_file_id"`
+	Printer               string    `json:"printer"`
+	Preset                string    `json:"preset"`
+	Filament              string    `json:"filament"`
+	Arrange               bool      `json:"arrange"`
+	Orient                bool      `json:"orient"`
+	EnableSupport         bool      `json:"enable_support"`
+	BrimType              bool      `json:"brim_type"`
+	PrintSequenceByObject bool      `json:"print_sequence_by_object"`
+	MulticolorOnePlate    bool      `json:"multicolor_one_plate"`
+}
+
+type SlicerPreviewResult struct {
+	UsesSupport    bool    `json:"usesSupport"`
+	PrintTime      float64 `json:"printTime"`
+	FilamentUsedG  float64 `json:"filamentUsedG"`
+	FilamentUsedMm float64 `json:"filamentUsedMm"`
+	Thumbnail      string  `json:"thumbnail"`
 }
 
 var slicerProfileNameInvalidChars = regexp.MustCompile(`[^a-zA-Z0-9_-]+`)
@@ -317,6 +338,71 @@ func (s *SlicerService) SliceSTL(ctx context.Context, req SlicerSliceRequest) (*
 		_ = s.gcodes.SetDefaultForSTL(ctx, gcode.ID)
 	}
 	return &SlicerSliceResult{GCode: gcode, PrintTimeSeconds: resp.Header.Get("X-Print-Time-Seconds"), FilamentUsedGrams: resp.Header.Get("X-Filament-Used-g"), FilamentUsedMM: resp.Header.Get("X-Filament-Used-mm"), ContentDisposition: resp.Header.Get("Content-Disposition")}, nil
+}
+
+func (s *SlicerService) PreviewSTL(ctx context.Context, req SlicerPreviewRequest) (*SlicerPreviewResult, error) {
+	stl, err := s.stls.GetByID(ctx, req.STLFileID)
+	if err != nil || stl == nil {
+		return nil, fmt.Errorf("stl file not found")
+	}
+	file, err := s.files.GetByID(ctx, stl.FileID)
+	if err != nil || file == nil {
+		return nil, fmt.Errorf("stl source file not found")
+	}
+	reader, err := s.storage.Get(file.StoragePath)
+	if err != nil {
+		return nil, err
+	}
+	defer reader.Close()
+
+	body := &bytes.Buffer{}
+	writer := multipart.NewWriter(body)
+	part, err := writer.CreateFormFile("file", file.OriginalName)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := io.Copy(part, reader); err != nil {
+		return nil, err
+	}
+	addFormField(writer, "printer", req.Printer)
+	addFormField(writer, "preset", req.Preset)
+	addFormField(writer, "filament", req.Filament)
+	addFormField(writer, "resolveProfiles", "true")
+	addFormField(writer, "sanitizeProfiles", "true")
+	if req.Arrange {
+		addFormField(writer, "arrange", "true")
+	}
+	if req.Orient {
+		addFormField(writer, "orient", "true")
+	}
+	if req.EnableSupport {
+		addFormField(writer, "enableSupport", "true")
+	}
+	if req.BrimType {
+		addFormField(writer, "brim_type", "true")
+	}
+	if req.PrintSequenceByObject {
+		addFormField(writer, "print_sequence_by_object", "true")
+	}
+	if req.MulticolorOnePlate {
+		addFormField(writer, "multicolorOnePlate", "true")
+	}
+	writer.Close()
+
+	resp, err := s.doRaw(ctx, http.MethodPost, "/slice/preview", body, writer.FormDataContentType())
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 400 {
+		errBody, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("slicer error: %d %s", resp.StatusCode, strings.TrimSpace(string(errBody)))
+	}
+	var result SlicerPreviewResult
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("invalid preview response")
+	}
+	return &result, nil
 }
 
 func (s *SlicerService) do(ctx context.Context, method, path string, body io.Reader, contentType string) ([]byte, error) {

@@ -6,13 +6,13 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/Brook-sys/picofarm/internal/realtime"
+	"github.com/Brook-sys/picofarm/internal/service"
+	"github.com/Brook-sys/picofarm/internal/version"
 	sentryhttp "github.com/getsentry/sentry-go/http"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
-	"github.com/Brook-sys/picofarm/internal/realtime"
-	"github.com/Brook-sys/picofarm/internal/service"
-	"github.com/Brook-sys/picofarm/internal/version"
 )
 
 // NewRouter creates the HTTP router with all routes.
@@ -319,6 +319,7 @@ func NewRouter(services *service.Services, hub *realtime.Hub) http.Handler {
 				r.Post("/profiles/upload-json", slicerHandler.UploadProfileJSON)
 				r.Post("/profiles/{category}/{name}/update-from-source", slicerHandler.UpdateProfileFromSource)
 				r.Post("/resolve-profiles", slicerHandler.ResolveProfiles)
+				r.Post("/preview", slicerHandler.PreviewSTL)
 				r.Post("/slice-stl", slicerHandler.SliceSTL)
 			})
 		}

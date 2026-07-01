@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/Brook-sys/picofarm/internal/service"
+	"github.com/go-chi/chi/v5"
 )
 
 type SlicerHandler struct {
@@ -120,6 +120,20 @@ func (h *SlicerHandler) ResolveProfiles(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	result, err := h.service.ResolveProfiles(r.Context(), payload)
+	if err != nil {
+		respondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	respondJSON(w, http.StatusOK, result)
+}
+
+func (h *SlicerHandler) PreviewSTL(w http.ResponseWriter, r *http.Request) {
+	var req service.SlicerPreviewRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	result, err := h.service.PreviewSTL(r.Context(), req)
 	if err != nil {
 		respondError(w, http.StatusBadRequest, err.Error())
 		return
