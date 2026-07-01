@@ -55,10 +55,9 @@ type SlicerSliceRequest struct {
 	Printer            string                    `json:"printer"`
 	Preset             string                    `json:"preset"`
 	Filament           string                    `json:"filament"`
-	BedType            string                    `json:"bed_type"`
-	Plate              string                    `json:"plate"`
 	Arrange            bool                      `json:"arrange"`
 	Orient             bool                      `json:"orient"`
+	EnableSupport      bool                      `json:"enable_support"`
 	ExportType         string                    `json:"export_type"`
 	MulticolorOnePlate bool                      `json:"multicolor_one_plate"`
 	Overrides          map[string]map[string]any `json:"overrides"`
@@ -261,8 +260,6 @@ func (s *SlicerService) SliceSTL(ctx context.Context, req SlicerSliceRequest) (*
 	addFormField(writer, "printer", req.Printer)
 	addFormField(writer, "preset", req.Preset)
 	addFormField(writer, "filament", req.Filament)
-	addFormField(writer, "bedType", req.BedType)
-	addFormField(writer, "plate", req.Plate)
 	addFormField(writer, "exportType", firstNonEmpty(req.ExportType, "gcode"))
 	addFormField(writer, "resolveProfiles", "true")
 	addFormField(writer, "sanitizeProfiles", "true")
@@ -271,6 +268,9 @@ func (s *SlicerService) SliceSTL(ctx context.Context, req SlicerSliceRequest) (*
 	}
 	if req.Orient {
 		addFormField(writer, "orient", "true")
+	}
+	if req.EnableSupport {
+		addFormField(writer, "enableSupport", "true")
 	}
 	if req.MulticolorOnePlate {
 		addFormField(writer, "multicolorOnePlate", "true")
