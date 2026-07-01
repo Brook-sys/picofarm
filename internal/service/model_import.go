@@ -60,7 +60,7 @@ var (
 	metaTagPattern = regexp.MustCompile(`(?is)<meta[^>]+(?:property|name)=["']([^"']+)["'][^>]+content=["']([^"']*)["'][^>]*>`)
 	titlePattern   = regexp.MustCompile(`(?is)<title[^>]*>(.*?)</title>`)
 	stlLinkPattern = regexp.MustCompile(`(?i)(?:href|src|data-[^=]*)=["']([^"']+\.stl(?:\?[^"']*)?)["']`)
-	stlJsonPattern = regexp.MustCompile(`(?i)["'](?:file|download|stl|model)["']\s*:\s*["']([^"']+\.stl(?:\?[^"']*)?)["']`)
+	stlJsonPattern = regexp.MustCompile(`(?i)["'](?:file|download|stl|model)["']\s*:\s*["']([^"'\\]+\.stl(?:\?[^"'\\]*)?)["']`)
 )
 
 func NewModelImportService(projects *ProjectService, parts *PartService, designs *DesignService, stls *STLLibraryService, tags *repository.TagRepository) *ModelImportService {
@@ -151,7 +151,14 @@ func (s *ModelImportService) Import(ctx context.Context, req ModelImportRequest)
 }
 
 func (s *ModelImportService) downloadSTL(ctx context.Context, file ModelImportFile) (*model.STLLibraryFile, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, file.URL, nil)
+	target := file.URL
+	// if it's just a filename, try common Printables direct download pattern
+	if !strings.HasPrefix(target, "http") {
+		// we cannot reliably guess the download URL without the fileId
+		// so we skip for now
+		return nil, fmt.Errorf("relative STL without full URL not supported yet: %s", target)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -165,7 +172,7 @@ func (s *ModelImportService) downloadSTL(ctx context.Context, file ModelImportFi
 	}
 	name := file.Name
 	if name == "" {
-		name = filepath.Base(strings.Split(file.URL, "?")[0])
+		name = filepath.Base(strings.Split(target, "?")[0])
 	}
 	if !strings.HasSuffix(strings.ToLower(name), ".stl") {
 		name += ".stl"
@@ -257,6 +264,19 @@ func extractSTLLinks(html string) []ModelImportFile {
 		addSTLLink(&files, &seen, match[1])
 	}
 
+	// 3. bare filenames (Printables style - "NeptuneGearHousing.stl")
+	rawBare := regexp.MustCompile(`(?i)"?([A-Za-z0-9_.-]+\.stl)"?`)
+	for _, match := range rawBare.FindAllStringSubmatch(html, -1) {
+		if len(match) < 2 {
+			continue
+		}
+		name := match[1]
+		if !seen[name] {
+			seen[name] = true
+			files = append(files, ModelImportFile{Name: name, URL: name})
+		}
+	}
+
 	return files
 }
 
@@ -280,6 +300,10 @@ func resolveURL(base, ref string) string {
 	if strings.HasPrefix(ref, "http://") || strings.HasPrefix(ref, "https://") {
 		return ref
 	}
+	// bare filename → keep as-is
+	if !strings.Contains(ref, "/") {
+		return ref
+	}
 	u, err := url.Parse(base)
 	if err != nil {
 		return ref
@@ -288,7 +312,12 @@ func resolveURL(base, ref string) string {
 	if err != nil {
 		return ref
 	}
-	return u.ResolveReference(refURL).String()
+	res := u.ResolveReference(refURL).String()
+	// if result ends with the original filename, use it
+	if strings.HasSuffix(res, filepath.Base(ref)) {
+		return res
+	}
+	return ref
 }
 
 func htmlUnescape(value string) string {
