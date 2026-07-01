@@ -59,7 +59,8 @@ type ModelImportResult struct {
 var (
 	metaTagPattern = regexp.MustCompile(`(?is)<meta[^>]+(?:property|name)=["']([^"']+)["'][^>]+content=["']([^"']*)["'][^>]*>`)
 	titlePattern   = regexp.MustCompile(`(?is)<title[^>]*>(.*?)</title>`)
-	stlLinkPattern = regexp.MustCompile(`(?i)https?://[^"'<>\\s]+\.stl(?:\?[^"'<>\\s]*)?`)
+	stlLinkPattern = regexp.MustCompile(`(?i)(?:href|src|data-[^=]*)=["']([^"']+\.stl(?:\?[^"']*)?)["']`)
+	stlJsonPattern = regexp.MustCompile(`(?i)["'](?:file|download|stl|model)["']\s*:\s*["']([^"']+\.stl(?:\?[^"']*)?)["']`)
 )
 
 func NewModelImportService(projects *ProjectService, parts *PartService, designs *DesignService, stls *STLLibraryService, tags *repository.TagRepository) *ModelImportService {
@@ -85,6 +86,11 @@ func (s *ModelImportService) Preview(ctx context.Context, rawURL string) (*Model
 	}
 	meta := parseMetaTags(body)
 	title := firstNonEmpty(meta["og:title"], meta["twitter:title"], extractTitle(body), parsed.Host)
+	stlFiles := extractSTLLinks(body)
+	for i := range stlFiles {
+		stlFiles[i].URL = resolveURL(rawURL, stlFiles[i].URL)
+	}
+
 	preview := &ModelImportPreview{
 		Provider:    provider,
 		SourceURL:   rawURL,
@@ -92,8 +98,8 @@ func (s *ModelImportService) Preview(ctx context.Context, rawURL string) (*Model
 		Description: htmlUnescape(firstNonEmpty(meta["og:description"], meta["description"], meta["twitter:description"])),
 		Author:      htmlUnescape(firstNonEmpty(meta["author"], meta["article:author"])),
 		License:     htmlUnescape(firstNonEmpty(meta["license"])),
-		ImageURL:    firstNonEmpty(meta["og:image"], meta["twitter:image"]),
-		STLFiles:    extractSTLLinks(body),
+		ImageURL:    resolveURL(rawURL, firstNonEmpty(meta["og:image"], meta["twitter:image"])),
+		STLFiles:    stlFiles,
 	}
 	return preview, nil
 }
@@ -234,15 +240,55 @@ func extractTitle(html string) string {
 func extractSTLLinks(html string) []ModelImportFile {
 	seen := map[string]bool{}
 	files := []ModelImportFile{}
-	for _, raw := range stlLinkPattern.FindAllString(html, -1) {
-		if seen[raw] {
+
+	// 1. href/src attributes
+	for _, match := range stlLinkPattern.FindAllStringSubmatch(html, -1) {
+		if len(match) < 2 {
 			continue
 		}
-		seen[raw] = true
-		name := filepath.Base(strings.Split(raw, "?")[0])
-		files = append(files, ModelImportFile{Name: name, URL: raw})
+		addSTLLink(&files, &seen, match[1])
 	}
+
+	// 2. JSON-like keys
+	for _, match := range stlJsonPattern.FindAllStringSubmatch(html, -1) {
+		if len(match) < 2 {
+			continue
+		}
+		addSTLLink(&files, &seen, match[1])
+	}
+
 	return files
+}
+
+func addSTLLink(files *[]ModelImportFile, seen *map[string]bool, raw string) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return
+	}
+	if (*seen)[raw] {
+		return
+	}
+	(*seen)[raw] = true
+	name := filepath.Base(strings.Split(raw, "?")[0])
+	*files = append(*files, ModelImportFile{Name: name, URL: raw})
+}
+
+func resolveURL(base, ref string) string {
+	if ref == "" {
+		return ""
+	}
+	if strings.HasPrefix(ref, "http://") || strings.HasPrefix(ref, "https://") {
+		return ref
+	}
+	u, err := url.Parse(base)
+	if err != nil {
+		return ref
+	}
+	refURL, err := url.Parse(ref)
+	if err != nil {
+		return ref
+	}
+	return u.ResolveReference(refURL).String()
 }
 
 func htmlUnescape(value string) string {
