@@ -55,10 +55,12 @@ type SlicerSliceRequest struct {
 	Printer            string                    `json:"printer"`
 	Preset             string                    `json:"preset"`
 	Filament           string                    `json:"filament"`
-	Arrange            bool                      `json:"arrange"`
-	Orient             bool                      `json:"orient"`
-	EnableSupport      bool                      `json:"enable_support"`
-	ExportType         string                    `json:"export_type"`
+	Arrange                bool   `json:"arrange"`
+	Orient                 bool   `json:"orient"`
+	EnableSupport          bool   `json:"enable_support"`
+	BrimType               bool   `json:"brim_type"`
+	PrintSequenceByObject  bool   `json:"print_sequence_by_object"`
+	ExportType             string `json:"export_type"`
 	MulticolorOnePlate bool                      `json:"multicolor_one_plate"`
 	Overrides          map[string]map[string]any `json:"overrides"`
 	DisplayName        string                    `json:"display_name"`
@@ -271,6 +273,12 @@ func (s *SlicerService) SliceSTL(ctx context.Context, req SlicerSliceRequest) (*
 	}
 	if req.EnableSupport {
 		addFormField(writer, "enableSupport", "true")
+	}
+	if req.BrimType {
+		addFormField(writer, "brim_type", "true")
+	}
+	if req.PrintSequenceByObject {
+		addFormField(writer, "print_sequence_by_object", "true")
 	}
 	if req.MulticolorOnePlate {
 		addFormField(writer, "multicolorOnePlate", "true")
