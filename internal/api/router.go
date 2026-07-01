@@ -111,6 +111,12 @@ func NewRouter(services *service.Services, hub *realtime.Hub) http.Handler {
 			})
 		})
 
+		modelImportHandler := NewModelImportHandler(services.ModelImport)
+		r.Route("/model-import", func(r chi.Router) {
+			r.Post("/preview", modelImportHandler.Preview)
+			r.Post("/import", modelImportHandler.Import)
+		})
+
 		// Tasks (Work Instances)
 		if services.Tasks != nil {
 			taskHandler := NewTaskHandler(services.Tasks)

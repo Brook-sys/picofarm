@@ -156,6 +156,12 @@ CREATE TABLE IF NOT EXISTS projects (
     allowed_printer_ids TEXT DEFAULT '[]',  -- JSON array of printer UUIDs
     default_settings TEXT DEFAULT '{}',     -- JSON object for print settings
     notes TEXT DEFAULT '',
+    source_url TEXT DEFAULT '',
+    source_provider TEXT DEFAULT '',
+    source_author TEXT DEFAULT '',
+    source_license TEXT DEFAULT '',
+    source_description TEXT DEFAULT '',
+    cover_file_id TEXT REFERENCES files(id),
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );

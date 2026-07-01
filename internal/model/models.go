@@ -26,6 +26,12 @@ type Project struct {
 	AllowedPrinterIDs []uuid.UUID            `json:"allowed_printer_ids,omitempty"`
 	DefaultSettings   map[string]interface{} `json:"default_settings,omitempty"`
 	Notes             string                 `json:"notes,omitempty"`
+	SourceURL         string                 `json:"source_url,omitempty"`
+	SourceProvider    string                 `json:"source_provider,omitempty"`
+	SourceAuthor      string                 `json:"source_author,omitempty"`
+	SourceLicense     string                 `json:"source_license,omitempty"`
+	SourceDescription string                 `json:"source_description,omitempty"`
+	CoverFileID       *uuid.UUID             `json:"cover_file_id,omitempty"`
 	CreatedAt         time.Time              `json:"created_at"`
 	UpdatedAt         time.Time              `json:"updated_at"`
 	// Aggregated stats from tasks (computed, not stored)

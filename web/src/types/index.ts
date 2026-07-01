@@ -16,6 +16,12 @@ export interface Project {
   allowed_printer_ids?: string[]
   default_settings?: Record<string, unknown>
   notes?: string
+  source_url?: string
+  source_provider?: string
+  source_author?: string
+  source_license?: string
+  source_description?: string
+  cover_file_id?: string
   created_at: string
   updated_at: string
   // Aggregated stats from tasks (computed)

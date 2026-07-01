@@ -168,9 +168,9 @@ func (r *ProjectRepository) Create(ctx context.Context, p *model.Project) error 
 	defaultSettingsJSON, _ := json.Marshal(p.DefaultSettings)
 
 	_, err := r.db.ExecContext(ctx, `
-		INSERT INTO projects (id, name, description, target_date, tags, template_id, source, external_order_id, customer_notes, sku, price_cents, printer_type, allowed_printer_ids, default_settings, notes, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, p.ID, p.Name, p.Description, p.TargetDate, tagsJSON, p.TemplateID, p.Source, p.ExternalOrderID, p.CustomerNotes, p.SKU, p.PriceCents, p.PrinterType, allowedPrinterIDsJSON, defaultSettingsJSON, p.Notes, p.CreatedAt, p.UpdatedAt)
+		INSERT INTO projects (id, name, description, target_date, tags, template_id, source, external_order_id, customer_notes, sku, price_cents, printer_type, allowed_printer_ids, default_settings, notes, source_url, source_provider, source_author, source_license, source_description, cover_file_id, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, p.ID, p.Name, p.Description, p.TargetDate, tagsJSON, p.TemplateID, p.Source, p.ExternalOrderID, p.CustomerNotes, p.SKU, p.PriceCents, p.PrinterType, allowedPrinterIDsJSON, defaultSettingsJSON, p.Notes, p.SourceURL, p.SourceProvider, p.SourceAuthor, p.SourceLicense, p.SourceDescription, p.CoverFileID, p.CreatedAt, p.UpdatedAt)
 	return err
 }
 
@@ -179,9 +179,9 @@ func (r *ProjectRepository) GetByID(ctx context.Context, id uuid.UUID) (*model.P
 	var p model.Project
 	var tagsJSON, allowedPrinterIDsJSON, defaultSettingsJSON []byte
 	err := scanRow(r.db.QueryRowContext(ctx, `
-		SELECT id, name, description, target_date, tags, template_id, source, external_order_id, customer_notes, sku, price_cents, printer_type, allowed_printer_ids, default_settings, notes, created_at, updated_at
+		SELECT id, name, description, target_date, tags, template_id, source, external_order_id, customer_notes, sku, price_cents, printer_type, allowed_printer_ids, default_settings, notes, source_url, source_provider, source_author, source_license, source_description, cover_file_id, created_at, updated_at
 		FROM projects WHERE id = ?
-	`, id), &p.ID, &p.Name, &p.Description, &p.TargetDate, &tagsJSON, &p.TemplateID, &p.Source, &p.ExternalOrderID, &p.CustomerNotes, &p.SKU, &p.PriceCents, &p.PrinterType, &allowedPrinterIDsJSON, &defaultSettingsJSON, &p.Notes, &p.CreatedAt, &p.UpdatedAt)
+	`, id), &p.ID, &p.Name, &p.Description, &p.TargetDate, &tagsJSON, &p.TemplateID, &p.Source, &p.ExternalOrderID, &p.CustomerNotes, &p.SKU, &p.PriceCents, &p.PrinterType, &allowedPrinterIDsJSON, &defaultSettingsJSON, &p.Notes, &p.SourceURL, &p.SourceProvider, &p.SourceAuthor, &p.SourceLicense, &p.SourceDescription, &p.CoverFileID, &p.CreatedAt, &p.UpdatedAt)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -201,7 +201,7 @@ func (r *ProjectRepository) GetByID(ctx context.Context, id uuid.UUID) (*model.P
 // List retrieves all projects.
 func (r *ProjectRepository) List(ctx context.Context) ([]model.Project, error) {
 	rows, err := r.db.QueryContext(ctx, `
-		SELECT id, name, description, target_date, tags, template_id, source, external_order_id, customer_notes, sku, price_cents, printer_type, allowed_printer_ids, default_settings, notes, created_at, updated_at
+		SELECT id, name, description, target_date, tags, template_id, source, external_order_id, customer_notes, sku, price_cents, printer_type, allowed_printer_ids, default_settings, notes, source_url, source_provider, source_author, source_license, source_description, cover_file_id, created_at, updated_at
 		FROM projects ORDER BY updated_at DESC
 	`)
 	if err != nil {
@@ -213,7 +213,7 @@ func (r *ProjectRepository) List(ctx context.Context) ([]model.Project, error) {
 	for rows.Next() {
 		var p model.Project
 		var tagsJSON, allowedPrinterIDsJSON, defaultSettingsJSON []byte
-		if err := scanRow(rows, &p.ID, &p.Name, &p.Description, &p.TargetDate, &tagsJSON, &p.TemplateID, &p.Source, &p.ExternalOrderID, &p.CustomerNotes, &p.SKU, &p.PriceCents, &p.PrinterType, &allowedPrinterIDsJSON, &defaultSettingsJSON, &p.Notes, &p.CreatedAt, &p.UpdatedAt); err != nil {
+		if err := scanRow(rows, &p.ID, &p.Name, &p.Description, &p.TargetDate, &tagsJSON, &p.TemplateID, &p.Source, &p.ExternalOrderID, &p.CustomerNotes, &p.SKU, &p.PriceCents, &p.PrinterType, &allowedPrinterIDsJSON, &defaultSettingsJSON, &p.Notes, &p.SourceURL, &p.SourceProvider, &p.SourceAuthor, &p.SourceLicense, &p.SourceDescription, &p.CoverFileID, &p.CreatedAt, &p.UpdatedAt); err != nil {
 			return nil, err
 		}
 		p.Tags = unmarshalStringArray(tagsJSON)
@@ -236,9 +236,9 @@ func (r *ProjectRepository) Update(ctx context.Context, p *model.Project) error 
 	defaultSettingsJSON, _ := json.Marshal(p.DefaultSettings)
 
 	_, err := r.db.ExecContext(ctx, `
-		UPDATE projects SET name = ?, description = ?, target_date = ?, tags = ?, template_id = ?, source = ?, external_order_id = ?, customer_notes = ?, sku = ?, price_cents = ?, printer_type = ?, allowed_printer_ids = ?, default_settings = ?, notes = ?, updated_at = ?
+		UPDATE projects SET name = ?, description = ?, target_date = ?, tags = ?, template_id = ?, source = ?, external_order_id = ?, customer_notes = ?, sku = ?, price_cents = ?, printer_type = ?, allowed_printer_ids = ?, default_settings = ?, notes = ?, source_url = ?, source_provider = ?, source_author = ?, source_license = ?, source_description = ?, cover_file_id = ?, updated_at = ?
 		WHERE id = ?
-	`, p.Name, p.Description, p.TargetDate, tagsJSON, p.TemplateID, p.Source, p.ExternalOrderID, p.CustomerNotes, p.SKU, p.PriceCents, p.PrinterType, allowedPrinterIDsJSON, defaultSettingsJSON, p.Notes, p.UpdatedAt, p.ID)
+	`, p.Name, p.Description, p.TargetDate, tagsJSON, p.TemplateID, p.Source, p.ExternalOrderID, p.CustomerNotes, p.SKU, p.PriceCents, p.PrinterType, allowedPrinterIDsJSON, defaultSettingsJSON, p.Notes, p.SourceURL, p.SourceProvider, p.SourceAuthor, p.SourceLicense, p.SourceDescription, p.CoverFileID, p.UpdatedAt, p.ID)
 	return err
 }
 
@@ -251,7 +251,7 @@ func (r *ProjectRepository) Delete(ctx context.Context, id uuid.UUID) error {
 // ListByTemplateID retrieves all projects created from a given template (legacy).
 func (r *ProjectRepository) ListByTemplateID(ctx context.Context, templateID uuid.UUID) ([]model.Project, error) {
 	rows, err := r.db.QueryContext(ctx, `
-		SELECT id, name, description, target_date, tags, template_id, source, external_order_id, customer_notes, sku, price_cents, printer_type, allowed_printer_ids, default_settings, notes, created_at, updated_at
+		SELECT id, name, description, target_date, tags, template_id, source, external_order_id, customer_notes, sku, price_cents, printer_type, allowed_printer_ids, default_settings, notes, source_url, source_provider, source_author, source_license, source_description, cover_file_id, created_at, updated_at
 		FROM projects WHERE template_id = ? ORDER BY created_at DESC
 	`, templateID)
 	if err != nil {
@@ -263,7 +263,7 @@ func (r *ProjectRepository) ListByTemplateID(ctx context.Context, templateID uui
 	for rows.Next() {
 		var p model.Project
 		var tagsJSON, allowedPrinterIDsJSON, defaultSettingsJSON []byte
-		if err := scanRow(rows, &p.ID, &p.Name, &p.Description, &p.TargetDate, &tagsJSON, &p.TemplateID, &p.Source, &p.ExternalOrderID, &p.CustomerNotes, &p.SKU, &p.PriceCents, &p.PrinterType, &allowedPrinterIDsJSON, &defaultSettingsJSON, &p.Notes, &p.CreatedAt, &p.UpdatedAt); err != nil {
+		if err := scanRow(rows, &p.ID, &p.Name, &p.Description, &p.TargetDate, &tagsJSON, &p.TemplateID, &p.Source, &p.ExternalOrderID, &p.CustomerNotes, &p.SKU, &p.PriceCents, &p.PrinterType, &allowedPrinterIDsJSON, &defaultSettingsJSON, &p.Notes, &p.SourceURL, &p.SourceProvider, &p.SourceAuthor, &p.SourceLicense, &p.SourceDescription, &p.CoverFileID, &p.CreatedAt, &p.UpdatedAt); err != nil {
 			return nil, err
 		}
 		p.Tags = unmarshalStringArray(tagsJSON)
@@ -283,9 +283,9 @@ func (r *ProjectRepository) GetBySKU(ctx context.Context, sku string) (*model.Pr
 	var p model.Project
 	var tagsJSON, allowedPrinterIDsJSON, defaultSettingsJSON []byte
 	err := scanRow(r.db.QueryRowContext(ctx, `
-		SELECT id, name, description, target_date, tags, template_id, source, external_order_id, customer_notes, sku, price_cents, printer_type, allowed_printer_ids, default_settings, notes, created_at, updated_at
+		SELECT id, name, description, target_date, tags, template_id, source, external_order_id, customer_notes, sku, price_cents, printer_type, allowed_printer_ids, default_settings, notes, source_url, source_provider, source_author, source_license, source_description, cover_file_id, created_at, updated_at
 		FROM projects WHERE sku = ?
-	`, sku), &p.ID, &p.Name, &p.Description, &p.TargetDate, &tagsJSON, &p.TemplateID, &p.Source, &p.ExternalOrderID, &p.CustomerNotes, &p.SKU, &p.PriceCents, &p.PrinterType, &allowedPrinterIDsJSON, &defaultSettingsJSON, &p.Notes, &p.CreatedAt, &p.UpdatedAt)
+	`, sku), &p.ID, &p.Name, &p.Description, &p.TargetDate, &tagsJSON, &p.TemplateID, &p.Source, &p.ExternalOrderID, &p.CustomerNotes, &p.SKU, &p.PriceCents, &p.PrinterType, &allowedPrinterIDsJSON, &defaultSettingsJSON, &p.Notes, &p.SourceURL, &p.SourceProvider, &p.SourceAuthor, &p.SourceLicense, &p.SourceDescription, &p.CoverFileID, &p.CreatedAt, &p.UpdatedAt)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}

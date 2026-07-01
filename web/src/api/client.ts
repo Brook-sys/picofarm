@@ -103,6 +103,11 @@ export const projectsApi = {
     fetchApi<import('../types').Task[]>(`/projects/${id}/tasks`),
 }
 
+export const modelImportApi = {
+  preview: (url: string) => fetchApi<{ provider: string; source_url: string; title: string; description: string; author: string; license: string; image_url: string; stl_files: Array<{ name: string; url: string }> }>('/model-import/preview', { method: 'POST', body: JSON.stringify({ url }) }),
+  import: (data: { url: string; project_name?: string; stl_urls?: string[] }) => fetchApi<{ project: import('../types').Project }>('/model-import/import', { method: 'POST', body: JSON.stringify(data) }),
+}
+
 // Tasks API (Work Instances)
 export const tasksApi = {
   list: (filters?: { project_id?: string; order_id?: string; status?: string }) => {

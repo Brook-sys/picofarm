@@ -1,9 +1,9 @@
 import { useState, useMemo } from 'react'
 import { Link } from 'react-router-dom'
-import { Plus, FolderKanban, Calendar, Tag, LayoutGrid, Table, ArrowUpDown, Trash2, Play } from 'lucide-react'
+import { Plus, FolderKanban, Calendar, Tag, LayoutGrid, Table, ArrowUpDown, Trash2, Play, Link as LinkIcon } from 'lucide-react'
 import { useQueries } from '@tanstack/react-query'
 import { useProjects, useCreateProject, useDeleteProject } from '../hooks/useProjects'
-import { projectsApi, enqueueProjectParts } from '../api/client'
+import { projectsApi, enqueueProjectParts, modelImportApi } from '../api/client'
 import { cn, formatRelativeTime } from '../lib/utils'
 import type { ProjectSummary } from '../types'
 
@@ -38,6 +38,7 @@ function SortHeader({
 
 export default function Projects() {
   const [showCreate, setShowCreate] = useState(false)
+  const [showImport, setShowImport] = useState(false)
   const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid')
   const [sortField, setSortField] = useState<SortField>('updated_at')
   const [sortDir, setSortDir] = useState<SortDir>('desc')
@@ -49,6 +50,9 @@ export default function Projects() {
 
   const [toastMessage, setToastMessage] = useState('')
   const [printingId, setPrintingId] = useState<string | null>(null)
+  const [importUrl, setImportUrl] = useState('')
+  const [importPreview, setImportPreview] = useState<{ provider: string; title: string; description: string; image_url: string; stl_files: Array<{ name: string; url: string }> } | null>(null)
+  const [importBusy, setImportBusy] = useState('')
 
   const handlePrintProject = async (projectId: string) => {
     setPrintingId(projectId)
@@ -143,6 +147,37 @@ export default function Projects() {
     setShowCreate(false)
   }
 
+  const previewImportUrl = async () => {
+    setImportBusy('preview')
+    try {
+      const preview = await modelImportApi.preview(importUrl)
+      setImportPreview(preview)
+    } catch (err) {
+      setToastMessage(err instanceof Error ? err.message : 'Failed to preview URL')
+      setTimeout(() => setToastMessage(''), 3500)
+    } finally {
+      setImportBusy('')
+    }
+  }
+
+  const importFromUrl = async () => {
+    setImportBusy('import')
+    try {
+      await modelImportApi.import({ url: importUrl, project_name: importPreview?.title, stl_urls: importPreview?.stl_files.map(f => f.url) || [] })
+      setShowImport(false)
+      setImportPreview(null)
+      setImportUrl('')
+      setToastMessage('Projeto importado com sucesso')
+      setTimeout(() => setToastMessage(''), 3500)
+      window.location.reload()
+    } catch (err) {
+      setToastMessage(err instanceof Error ? err.message : 'Failed to import URL')
+      setTimeout(() => setToastMessage(''), 3500)
+    } finally {
+      setImportBusy('')
+    }
+  }
+
   const handleDelete = async (projectId: string) => {
     if (confirmDelete !== projectId) {
       setConfirmDelete(projectId)
@@ -179,13 +214,19 @@ export default function Projects() {
             Manage your maker projects
           </p>
         </div>
-        <button
-          onClick={() => setShowCreate(true)}
-          className="btn btn-primary"
-        >
-          <Plus className="h-4 w-4 mr-2" />
-          New Project
-        </button>
+        <div className="flex gap-2">
+          <button onClick={() => setShowImport(true)} className="btn btn-secondary">
+            <LinkIcon className="h-4 w-4 mr-2" />
+            Import URL
+          </button>
+          <button
+            onClick={() => setShowCreate(true)}
+            className="btn btn-primary"
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            New Project
+          </button>
+        </div>
       </div>
 
       {/* View Toggle */}
@@ -351,6 +392,20 @@ export default function Projects() {
               </div>
             </Link>
           ))}
+        </div>
+      )}
+
+      {showImport && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="card w-full max-w-2xl p-6">
+            <h2 className="text-xl font-semibold text-surface-100 mb-4">Importar de URL</h2>
+            <div className="space-y-4">
+              <label className="block"><span className="block text-sm font-medium text-surface-300 mb-1">MakerWorld / Printables URL</span><input value={importUrl} onChange={e => setImportUrl(e.target.value)} className="input" placeholder="https://www.printables.com/model/..." autoFocus /></label>
+              {importPreview && <div className="rounded-xl border border-surface-800 bg-surface-900/70 p-4"><div className="flex gap-4">{importPreview.image_url && <img src={importPreview.image_url} className="h-24 w-24 rounded-lg object-cover" />}<div className="min-w-0"><div className="text-xs text-accent-300">{importPreview.provider}</div><div className="text-lg font-semibold text-surface-100 truncate">{importPreview.title}</div><p className="mt-1 line-clamp-3 text-sm text-surface-400">{importPreview.description}</p><div className="mt-2 text-xs text-surface-500">{importPreview.stl_files.length} STL detectado(s)</div></div></div></div>}
+              <div className="rounded-lg border border-surface-800 bg-surface-950/40 p-3 text-xs text-surface-500">Somente arquivos STL serão importados para Files e vinculados ao projeto. 3MF/G-code/perfis são ignorados.</div>
+            </div>
+            <div className="flex justify-end gap-3 mt-6"><button type="button" onClick={() => setShowImport(false)} className="btn btn-ghost">Cancel</button><button type="button" disabled={!importUrl || !!importBusy} onClick={previewImportUrl} className="btn btn-secondary">{importBusy === 'preview' ? 'Loading...' : 'Preview'}</button><button type="button" disabled={!importPreview || !!importBusy} onClick={importFromUrl} className="btn btn-primary">{importBusy === 'import' ? 'Importing...' : 'Import Project'}</button></div>
+          </div>
         </div>
       )}
 
