@@ -21,6 +21,12 @@ import QuoteDetail from './pages/QuoteDetail'
 import Customers from './pages/Customers'
 import CustomerDetail from './pages/CustomerDetail'
 import PublicQuote from './pages/PublicQuote'
+import Cameras from './pages/Cameras'
+import Archives from './pages/Archives'
+import PrintQueue from './pages/PrintQueue'
+import GCodeFiles from './pages/GCodeFiles'
+import SlicerSettings from './pages/SlicerSettings'
+import Notifications from './pages/Notifications'
 import ErrorFallback from './components/ErrorFallback'
 import { useWebSocket } from './hooks/useWebSocket'
 
@@ -48,6 +54,10 @@ function App() {
         <Route path="/customers" element={<Customers />} />
         <Route path="/customers/:id" element={<CustomerDetail />} />
         <Route path="/timeline" element={<Timeline />} />
+        <Route path="/queue" element={<PrintQueue />} />
+        <Route path="/files" element={<GCodeFiles />} />
+        <Route path="/slicer" element={<SlicerSettings />} />
+        <Route path="/notifications" element={<Notifications />} />
         <Route path="/projects" element={<Projects />} />
         <Route path="/projects/:id" element={<ProjectDetail />} />
         <Route path="/tasks" element={<Tasks />} />
@@ -56,6 +66,8 @@ function App() {
         <Route path="/templates/*" element={<Navigate to="/projects" replace />} />
         <Route path="/printers" element={<Printers />} />
         <Route path="/printers/:id" element={<PrinterDetail />} />
+        <Route path="/cameras" element={<Cameras />} />
+        <Route path="/archives" element={<Archives />} />
         <Route path="/materials" element={<Materials />} />
         <Route path="/expenses" element={<Expenses />} />
         <Route path="/sales" element={<Sales />} />

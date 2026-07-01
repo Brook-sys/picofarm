@@ -132,6 +132,7 @@ export interface Part {
   description: string
   quantity: number
   status: PartStatus
+  material_type?: string
   created_at: string
   updated_at: string
 }
@@ -178,6 +179,14 @@ export interface BuildVolume {
   z: number
 }
 
+export interface PrinterMacro {
+  id: number
+  title: string
+  command: string
+  created_at: string
+  updated_at: string
+}
+
 export interface Printer {
   id: string
   name: string
@@ -185,6 +194,7 @@ export interface Printer {
   manufacturer: string
   connection_type: ConnectionType
   connection_uri: string
+  fluidd_url?: string
   api_key?: string
   serial_number?: string
   status: PrinterStatus
@@ -194,6 +204,8 @@ export interface Printer {
   notes: string
   cost_per_hour_cents: number // Hourly cost in cents (e.g. 150 = $1.50/hr)
   purchase_price_cents: number // Purchase price in cents for ROI tracking
+  maintenance_mode?: boolean // When true, printer is out of service
+  restrict_gcode_model?: boolean
   created_at: string
   updated_at: string
 }
@@ -208,6 +220,114 @@ export interface HMSError {
 export interface LightState {
   node: string
   mode: string
+}
+
+export interface Camera {
+  id: string
+  printer_id?: string
+  name: string
+  type: string
+  url: string
+  enabled: boolean
+  token?: string
+  token_expires_at?: string
+  created_at: string
+  updated_at: string
+}
+
+export interface Timelapse {
+  id: string
+  printer_id?: string
+  camera_id?: string
+  print_job_id?: string
+  status: string
+  frames_path?: string
+  video_path?: string
+  frame_count: number
+  started_at?: string
+  completed_at?: string
+  created_at: string
+  updated_at: string
+}
+
+export interface PrintArchive {
+  id: string
+  job_id?: string
+  printer_id?: string
+  status: string
+  start_time?: string
+  end_time?: string
+  duration_seconds: number
+  filament_used_grams: number
+  cost_cents: number
+  thumbnail_file_id?: string | null
+  notes: string
+  tags: string[]
+  created_at: string
+  updated_at: string
+}
+
+export interface NotificationChannel {
+  id: string
+  name: string
+  type: 'telegram' | 'discord' | 'webhook'
+  enabled: boolean
+  config: Record<string, unknown>
+  events: string[]
+  printer_ids: string[]
+  min_severity: 'info' | 'success' | 'warning' | 'error' | 'critical'
+  created_at: string
+  updated_at: string
+}
+
+export interface NotificationDelivery {
+  id: string
+  channel_id: string
+  event_type: string
+  severity: string
+  status: string
+  attempts: number
+  last_error: string
+  payload_json: string
+  sent_at?: string
+  created_at: string
+}
+
+export interface NotificationTemplate {
+  id?: string
+  channel_id?: string
+  event_type: string
+  format: 'text' | 'telegram_html' | 'discord_embed' | 'json'
+  title_template: string
+  body_template: string
+  payload_template: string
+  enabled: boolean
+  created_at?: string
+  updated_at?: string
+}
+
+export interface NotificationPreview {
+  title: string
+  body: string
+  payload?: Record<string, unknown>
+}
+
+export interface PrinterCapabilities {
+  can_start_print: boolean
+  can_pause: boolean
+  can_resume: boolean
+  can_cancel: boolean
+  can_run_gcode: boolean
+  can_set_feed_rate: boolean
+  can_set_speed_profile: boolean
+  can_upload_file: boolean
+  can_control_fans: boolean
+  can_control_temps: boolean
+  can_control_lights: boolean
+  can_skip_objects: boolean
+  can_jog: boolean
+  can_confirm_plate_clear: boolean
+  has_ams: boolean
 }
 
 export interface PrinterState {
@@ -240,6 +360,9 @@ export interface PrinterState {
   speed_percent?: number
   speed_level?: number       // 1=silent, 2=standard, 3=sport, 4=ludicrous
   print_real_speed?: number
+
+  // Protocol capabilities
+  capabilities?: PrinterCapabilities
 
   // Network
   wifi_signal?: string
@@ -350,6 +473,7 @@ export interface MaterialSpool {
   purchase_cost: number
   location: string
   status: SpoolStatus
+  default_for_material: boolean
   notes: string
   created_at: string
   updated_at: string
@@ -412,6 +536,156 @@ export interface PrintOutcome {
   notes?: string
   material_used: number
   material_cost: number
+}
+
+export type QueueItemStatus = 'draft' | 'queued' | 'ready' | 'blocked' | 'printing' | 'paused' | 'done' | 'failed' | 'cancelled'
+export type QueueSourceType = 'upload' | 'print_job' | 'manual' | 'library' | 'project'
+
+export interface GCodeMetadata {
+  slicer?: string
+  material_type?: string
+  material_color?: string
+  print_settings_id?: string
+  printer_settings_id?: string
+  filament_settings_id?: string
+  printer_model?: string
+  filament_name?: string
+  filament_grams?: number
+  estimated_seconds?: number
+  layer_height?: number
+  nozzle_diameter?: number
+  bed_temp?: number
+  nozzle_temp?: number
+  thumbnail_file_id?: string | null
+  original_thumbnail_file_id?: string
+  raw?: Record<string, unknown>
+}
+
+export interface Tag {
+  id: string
+  name: string
+  color: string
+  created_at: string
+  updated_at: string
+}
+
+export interface GCodeLibraryResponse {
+  items: GCodeLibraryFile[]
+  total: number
+  page: number
+  page_size: number
+}
+
+export interface STLLibraryResponse {
+  items: STLLibraryFile[]
+  total: number
+  page: number
+  page_size: number
+}
+
+export interface FileLibraryResponse {
+  stl_files: STLLibraryFile[]
+  root_gcode_files: GCodeLibraryFile[]
+}
+
+export interface STLLibraryFile {
+  id: string
+  file_id: string
+  display_name: string
+  file_name: string
+  size_bytes: number
+  thumbnail_file_id?: string | null
+  tags?: Tag[]
+  gcodes?: GCodeLibraryFile[]
+  created_at: string
+  updated_at: string
+}
+
+export interface GCodeLibraryFile {
+  id: string
+  file_id: string
+  display_name: string
+  file_name: string
+  material_type?: string
+  material_color?: string
+  filament_name?: string
+  filament_grams?: number
+  estimated_seconds?: number
+  layer_height?: number
+  nozzle_diameter?: number
+  bed_temp?: number
+  nozzle_temp?: number
+  thumbnail_file_id?: string | null
+  parent_stl_id?: string | null
+  default_for_stl: boolean
+  metadata?: GCodeMetadata
+  print_count: number
+  tags?: Tag[]
+  created_at: string
+  updated_at: string
+}
+
+export interface GCodeQueueItem {
+  id: string
+  source_type: QueueSourceType
+  source_id?: string
+  project_id?: string | null
+  file_id: string
+  file_name: string
+  display_name: string
+  status: QueueItemStatus
+  priority: number
+  progress: number
+  assigned_printer_id?: string | null
+  assigned_spool_id?: string | null
+  material_type?: string
+  material_color?: string
+  filament_name?: string
+  filament_grams?: number
+  estimated_seconds?: number
+  layer_height?: number
+  nozzle_diameter?: number
+  bed_temp?: number
+  nozzle_temp?: number
+  thumbnail_file_id?: string | null
+  metadata?: GCodeMetadata
+  notes?: string
+  created_at: string
+  updated_at: string
+}
+
+export interface QueueItem {
+  item: GCodeQueueItem
+  file?: FileRecord
+  printer?: Printer
+  spool?: MaterialSpool
+  material?: Material
+  preflight?: PreflightCheckResult
+  column: 'ready' | 'blocked' | 'active'
+  blocked_by?: string[]
+}
+
+export interface QueueSummary {
+  ready_count: number
+  blocked_count: number
+  active_count: number
+  estimated_seconds: number
+  total_filament_grams: number
+}
+
+export interface FileRecord {
+  id: string
+  hash: string
+  original_name: string
+  content_type: string
+  size_bytes: number
+  storage_path: string
+  created_at: string
+}
+
+export interface QueueResponse {
+  items: QueueItem[]
+  summary: QueueSummary
 }
 
 export interface PrintJob {

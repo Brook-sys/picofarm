@@ -8,22 +8,24 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/philjestin/daedalus/internal/bambu"
-	"github.com/philjestin/daedalus/internal/crypto"
-	"github.com/philjestin/daedalus/internal/model"
-	"github.com/philjestin/daedalus/internal/printer"
-	"github.com/philjestin/daedalus/internal/realtime"
-	"github.com/philjestin/daedalus/internal/receipt"
-	"github.com/philjestin/daedalus/internal/repository"
-	"github.com/philjestin/daedalus/internal/storage"
-	"github.com/philjestin/daedalus/internal/threemf"
+	"github.com/Brook-sys/picofarm/internal/bambu"
+	"github.com/Brook-sys/picofarm/internal/crypto"
+	"github.com/Brook-sys/picofarm/internal/model"
+	"github.com/Brook-sys/picofarm/internal/printer"
+	"github.com/Brook-sys/picofarm/internal/realtime"
+	"github.com/Brook-sys/picofarm/internal/receipt"
+	"github.com/Brook-sys/picofarm/internal/repository"
+	"github.com/Brook-sys/picofarm/internal/storage"
+	"github.com/Brook-sys/picofarm/internal/threemf"
 )
 
 // Services holds all service instances.
@@ -48,15 +50,23 @@ type Services struct {
 	Backup          *BackupService
 	Dispatcher      *DispatcherService
 	// New services for feature gaps
-	Orders   *OrderService
-	Alerts   *AlertService
-	Tags     *TagService
-	Shopify  *ShopifyService
-	Timeline *TimelineService
-	Tasks     *TaskService
-	Feedback  *FeedbackService
-	Customers *CustomerService
-	Quotes    *QuoteService
+	Orders        *OrderService
+	Alerts        *AlertService
+	Tags          *TagService
+	Shopify       *ShopifyService
+	Timeline      *TimelineService
+	Tasks         *TaskService
+	Feedback      *FeedbackService
+	Customers     *CustomerService
+	Quotes        *QuoteService
+	Cameras       *CameraService
+	Timelapses    *TimelapseService
+	PrintArchives *PrintArchiveService
+	Queue         *QueueService
+	GCodeLibrary  *GCodeLibraryService
+	STLLibrary    *STLLibraryService
+	Notifications *NotificationService
+	Slicer        *SlicerService
 }
 
 // EtsyConfig holds Etsy OAuth configuration.
@@ -76,18 +86,18 @@ func NewServices(repos *repository.Repositories, store storage.Storage, printerM
 	bambuCloudClient := bambu.NewCloudClient()
 
 	services := &Services{
-		Projects:  &ProjectService{repo: repos.Projects, printJobRepo: repos.PrintJobs, printerRepo: repos.Printers, spoolRepo: repos.Spools, templateRepo: repos.Templates, designRepo: repos.Designs, saleRepo: repos.Sales, partRepo: repos.Parts, supplyRepo: repos.ProjectSupplies, repos: repos, printerMgr: printerMgr, hub: hub, storage: store},
-		Parts:     &PartService{repo: repos.Parts},
-		Designs:   &DesignService{repo: repos.Designs, fileRepo: repos.Files, storage: store},
-		Printers:  &PrinterService{repo: repos.Printers, printJobRepo: repos.PrintJobs, saleRepo: repos.Sales, manager: printerMgr, hub: hub, discovery: printer.NewDiscovery(), bambuCloudRepo: repos.BambuCloud, bambuCloud: bambuCloudClient},
-		Materials: &MaterialService{repo: repos.Materials},
-		Spools:    &SpoolService{repo: repos.Spools},
-		PrintJobs: &PrintJobService{repo: repos.PrintJobs, printerRepo: repos.Printers, designRepo: repos.Designs, spoolRepo: repos.Spools, materialRepo: repos.Materials, projectRepo: repos.Projects, printerMgr: printerMgr, hub: hub, storage: store},
-		Files:     &FileService{repo: repos.Files, storage: store},
-		Expenses:  &ExpenseService{repo: repos.Expenses, materialRepo: repos.Materials, spoolRepo: repos.Spools, fileRepo: repos.Files, settingsRepo: repos.Settings, repos: repos, storage: store},
-		Sales:     &SaleService{repo: repos.Sales, taskRepo: repos.Tasks},
-		Stats:     &StatsService{expenseRepo: repos.Expenses, saleRepo: repos.Sales, printJobRepo: repos.PrintJobs},
-		Templates: &TemplateService{repo: repos.Templates, projectRepo: repos.Projects, partRepo: repos.Parts, designRepo: repos.Designs, printJobRepo: repos.PrintJobs, spoolRepo: repos.Spools, materialRepo: repos.Materials, printerRepo: repos.Printers},
+		Projects:        &ProjectService{repo: repos.Projects, printJobRepo: repos.PrintJobs, printerRepo: repos.Printers, spoolRepo: repos.Spools, templateRepo: repos.Templates, designRepo: repos.Designs, saleRepo: repos.Sales, partRepo: repos.Parts, supplyRepo: repos.ProjectSupplies, repos: repos, printerMgr: printerMgr, hub: hub, storage: store},
+		Parts:           &PartService{repo: repos.Parts},
+		Designs:         &DesignService{repo: repos.Designs, fileRepo: repos.Files, gcodeRepo: repos.GCodeLibrary, stlRepo: repos.STLLibrary, storage: store},
+		Printers:        &PrinterService{repo: repos.Printers, settingsRepo: repos.Settings, printJobRepo: repos.PrintJobs, queueRepo: repos.QueueItems, saleRepo: repos.Sales, macroRepo: repos.PrinterMacros, manager: printerMgr, hub: hub, discovery: printer.NewDiscovery(), bambuCloudRepo: repos.BambuCloud, bambuCloud: bambuCloudClient, reconnecting: make(map[uuid.UUID]time.Time)},
+		Materials:       &MaterialService{repo: repos.Materials},
+		Spools:          &SpoolService{repo: repos.Spools},
+		PrintJobs:       &PrintJobService{repo: repos.PrintJobs, printerRepo: repos.Printers, designRepo: repos.Designs, spoolRepo: repos.Spools, materialRepo: repos.Materials, projectRepo: repos.Projects, queueRepo: repos.QueueItems, printerMgr: printerMgr, hub: hub, storage: store},
+		Files:           &FileService{repo: repos.Files, storage: store},
+		Expenses:        &ExpenseService{repo: repos.Expenses, materialRepo: repos.Materials, spoolRepo: repos.Spools, fileRepo: repos.Files, settingsRepo: repos.Settings, repos: repos, storage: store},
+		Sales:           &SaleService{repo: repos.Sales, taskRepo: repos.Tasks},
+		Stats:           &StatsService{expenseRepo: repos.Expenses, saleRepo: repos.Sales, printJobRepo: repos.PrintJobs, queueRepo: repos.QueueItems, spoolRepo: repos.Spools},
+		Templates:       &TemplateService{repo: repos.Templates, projectRepo: repos.Projects, partRepo: repos.Parts, designRepo: repos.Designs, printJobRepo: repos.PrintJobs, spoolRepo: repos.Spools, materialRepo: repos.Materials, printerRepo: repos.Printers},
 		Etsy:            nil, // Initialize separately with config
 		Squarespace:     nil, // Initialize below after Templates is ready
 		BambuCloud:      NewBambuCloudService(repos.BambuCloud, repos.Printers, printerMgr, bambuCloudClient),
@@ -123,6 +133,15 @@ func NewServices(repos *repository.Repositories, store storage.Storage, printerM
 	services.Feedback = &FeedbackService{repo: repos.Feedback}
 	services.Customers = NewCustomerService(repos.Customers, hub)
 	services.Quotes = NewQuoteService(repos.Quotes, repos.Customers, repos.Orders, repos, hub)
+	services.Cameras = &CameraService{repo: repos.Cameras}
+	services.Timelapses = &TimelapseService{repo: repos.Timelapses}
+	services.PrintArchives = &PrintArchiveService{repo: repos.PrintArchives}
+	services.Queue = NewQueueService(repos, store, printerMgr, hub)
+	services.GCodeLibrary = NewGCodeLibraryService(repos, store, services.Queue)
+	services.STLLibrary = NewSTLLibraryService(repos, store)
+	services.Notifications = NewNotificationService(repos.Notifications)
+	services.Queue.SetNotificationService(services.Notifications)
+	services.Slicer = NewSlicerService(services.Settings, repos, store, services.GCodeLibrary)
 
 	// Wire job completion callback to auto-complete checklist items
 	services.PrintJobs.SetOnJobCompleted(services.Tasks.HandleJobCompleted)
@@ -154,19 +173,19 @@ func (s *Services) SetBackupService(backup *BackupService) {
 
 // ProjectService handles project business logic.
 type ProjectService struct {
-	repo            *repository.ProjectRepository
-	printJobRepo    *repository.PrintJobRepository
-	printerRepo     *repository.PrinterRepository
-	spoolRepo       *repository.SpoolRepository
-	templateRepo    *repository.TemplateRepository
-	designRepo      *repository.DesignRepository
-	saleRepo        *repository.SaleRepository
-	partRepo        *repository.PartRepository
-	supplyRepo      *repository.ProjectSupplyRepository
-	repos           *repository.Repositories // For transaction support
-	printerMgr      *printer.Manager
-	hub             *realtime.Hub
-	storage         storage.Storage
+	repo         *repository.ProjectRepository
+	printJobRepo *repository.PrintJobRepository
+	printerRepo  *repository.PrinterRepository
+	spoolRepo    *repository.SpoolRepository
+	templateRepo *repository.TemplateRepository
+	designRepo   *repository.DesignRepository
+	saleRepo     *repository.SaleRepository
+	partRepo     *repository.PartRepository
+	supplyRepo   *repository.ProjectSupplyRepository
+	repos        *repository.Repositories // For transaction support
+	printerMgr   *printer.Manager
+	hub          *realtime.Hub
+	storage      storage.Storage
 }
 
 // Create creates a new project.
@@ -359,15 +378,15 @@ func (s *ProjectService) GetProjectSummary(ctx context.Context, projectID uuid.U
 
 // StartProductionResult contains the result of starting production.
 type StartProductionResult struct {
-	JobsStarted    int               `json:"jobs_started"`
-	JobsSkipped    int               `json:"jobs_skipped"`
-	FailedJobs     []StartJobFailure `json:"failed_jobs,omitempty"`
+	JobsStarted int               `json:"jobs_started"`
+	JobsSkipped int               `json:"jobs_skipped"`
+	FailedJobs  []StartJobFailure `json:"failed_jobs,omitempty"`
 }
 
 // StartJobFailure represents a job that failed to start.
 type StartJobFailure struct {
-	JobID   uuid.UUID `json:"job_id"`
-	Reason  string    `json:"reason"`
+	JobID  uuid.UUID `json:"job_id"`
+	Reason string    `json:"reason"`
 }
 
 // StartProduction auto-assigns resources and starts all queued jobs for a project.
@@ -580,9 +599,11 @@ func (s *PartService) Delete(ctx context.Context, id uuid.UUID) error {
 
 // DesignService handles design business logic.
 type DesignService struct {
-	repo     *repository.DesignRepository
-	fileRepo *repository.FileRepository
-	storage  storage.Storage
+	repo      *repository.DesignRepository
+	fileRepo  *repository.FileRepository
+	gcodeRepo *repository.GCodeLibraryRepository
+	stlRepo   *repository.STLLibraryRepository
+	storage   storage.Storage
 }
 
 // Create creates a new design version with file upload.
@@ -666,6 +687,97 @@ func (s *DesignService) Create(ctx context.Context, partID uuid.UUID, filename s
 	return design, nil
 }
 
+func (s *DesignService) CreateFromRootFileLibrary(ctx context.Context, partID, fileID uuid.UUID, fileKind string, notes string) (*model.Design, error) {
+	switch fileKind {
+	case "stl":
+		return s.CreateFromSTLLibrary(ctx, partID, fileID, notes)
+	default:
+		return s.CreateFromGCodeLibrary(ctx, partID, fileID, notes)
+	}
+}
+
+func (s *DesignService) CreateFromGCodeLibrary(ctx context.Context, partID, gcodeFileID uuid.UUID, notes string) (*model.Design, error) {
+	if partID == uuid.Nil {
+		return nil, fmt.Errorf("part ID is required")
+	}
+	if gcodeFileID == uuid.Nil {
+		return nil, fmt.Errorf("gcode file ID is required")
+	}
+	entry, err := s.gcodeRepo.GetByID(ctx, gcodeFileID)
+	if err != nil {
+		return nil, err
+	}
+	if entry == nil {
+		return nil, fmt.Errorf("gcode file not found")
+	}
+	if entry.ParentSTLID != nil {
+		return nil, fmt.Errorf("only root files can be added as parts")
+	}
+	file, err := s.fileRepo.GetByID(ctx, entry.FileID)
+	if err != nil {
+		return nil, err
+	}
+	if file == nil {
+		return nil, fmt.Errorf("file not found")
+	}
+	design := &model.Design{
+		PartID:        partID,
+		FileID:        file.ID,
+		FileName:      file.OriginalName,
+		FileHash:      file.Hash,
+		FileSizeBytes: file.SizeBytes,
+		FileType:      model.FileTypeGCODE,
+		Notes:         notes,
+	}
+	if err := s.repo.Create(ctx, design); err != nil {
+		return nil, fmt.Errorf("failed to create design: %w", err)
+	}
+	return design, nil
+}
+
+func (s *DesignService) CreateFromSTLLibrary(ctx context.Context, partID, stlFileID uuid.UUID, notes string) (*model.Design, error) {
+	if partID == uuid.Nil {
+		return nil, fmt.Errorf("part ID is required")
+	}
+	if stlFileID == uuid.Nil {
+		return nil, fmt.Errorf("stl file ID is required")
+	}
+	entry, err := s.stlRepo.GetByID(ctx, stlFileID)
+	if err != nil {
+		return nil, err
+	}
+	if entry == nil {
+		return nil, fmt.Errorf("stl file not found")
+	}
+	file, err := s.fileRepo.GetByID(ctx, entry.FileID)
+	if err != nil {
+		return nil, err
+	}
+	if file == nil {
+		return nil, fmt.Errorf("file not found")
+	}
+	design := &model.Design{
+		PartID:        partID,
+		FileID:        file.ID,
+		FileName:      file.OriginalName,
+		FileHash:      file.Hash,
+		FileSizeBytes: file.SizeBytes,
+		FileType:      model.FileTypeSTL,
+		Notes:         notes,
+	}
+	if err := s.repo.Create(ctx, design); err != nil {
+		return nil, fmt.Errorf("failed to create design: %w", err)
+	}
+	return design, nil
+}
+
+func (s *DesignService) Delete(ctx context.Context, id uuid.UUID) error {
+	if id == uuid.Nil {
+		return fmt.Errorf("design ID is required")
+	}
+	return s.repo.Delete(ctx, id)
+}
+
 // GetByID retrieves a design by ID.
 func (s *DesignService) GetByID(ctx context.Context, id uuid.UUID) (*model.Design, error) {
 	return s.repo.GetByID(ctx, id)
@@ -742,14 +854,20 @@ func (s *DesignService) OpenInExternalApp(ctx context.Context, id uuid.UUID, app
 
 // PrinterService handles printer business logic.
 type PrinterService struct {
-	repo           *repository.PrinterRepository
-	printJobRepo   *repository.PrintJobRepository
-	saleRepo       *repository.SaleRepository
-	manager        *printer.Manager
-	hub            *realtime.Hub
-	discovery      *printer.Discovery
-	bambuCloudRepo *repository.BambuCloudRepository
-	bambuCloud     *bambu.CloudClient
+	repo              *repository.PrinterRepository
+	settingsRepo      *repository.SettingsRepository
+	printJobRepo      *repository.PrintJobRepository
+	queueRepo         *repository.QueueItemRepository
+	saleRepo          *repository.SaleRepository
+	macroRepo         *repository.PrinterMacroRepository
+	manager           *printer.Manager
+	hub               *realtime.Hub
+	discovery         *printer.Discovery
+	bambuCloudRepo    *repository.BambuCloudRepository
+	bambuCloud        *bambu.CloudClient
+	reconnectMu       sync.Mutex
+	reconnecting      map[uuid.UUID]time.Time
+	autoReconnectOnce sync.Once
 }
 
 // Create creates a new printer.
@@ -757,31 +875,263 @@ func (s *PrinterService) Create(ctx context.Context, p *model.Printer) error {
 	if p.Name == "" {
 		return fmt.Errorf("printer name is required")
 	}
+	s.ensureFluiddURL(p)
 	if err := s.repo.Create(ctx, p); err != nil {
 		return err
 	}
+	if s.settingsRepo != nil {
+		printers, _ := s.repo.List(ctx)
+		if len(printers) == 1 {
+			s.settingsRepo.Set(ctx, "default_printer_id", p.ID.String())
+		}
+	}
 
-	// Connect printer if not manual
-	if p.ConnectionType != model.ConnectionTypeManual {
+	// Connect printer if not manual and not in maintenance mode
+	if p.ConnectionType != model.ConnectionTypeManual && !p.MaintenanceMode {
 		go s.manager.Connect(p)
 	}
 
 	return nil
 }
 
+func (s *PrinterService) GetDefault(ctx context.Context) (*model.Printer, error) {
+	printers, err := s.repo.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if len(printers) == 0 {
+		return nil, nil
+	}
+	if len(printers) == 1 {
+		return &printers[0], nil
+	}
+	if s.settingsRepo != nil {
+		setting, err := s.settingsRepo.Get(ctx, "default_printer_id")
+		if err == nil && setting != nil && setting.Value != "" {
+			id, err := uuid.Parse(setting.Value)
+			if err == nil {
+				p, err := s.repo.GetByID(ctx, id)
+				if err == nil && p != nil {
+					return p, nil
+				}
+			}
+		}
+	}
+	return &printers[0], nil
+}
+
+func (s *PrinterService) SetDefault(ctx context.Context, id uuid.UUID) error {
+	p, err := s.repo.GetByID(ctx, id)
+	if err != nil {
+		return err
+	}
+	if p == nil {
+		return fmt.Errorf("printer not found")
+	}
+	if s.settingsRepo == nil {
+		return fmt.Errorf("settings unavailable")
+	}
+	return s.settingsRepo.Set(ctx, "default_printer_id", id.String())
+}
+
 // GetByID retrieves a printer by ID.
 func (s *PrinterService) GetByID(ctx context.Context, id uuid.UUID) (*model.Printer, error) {
-	return s.repo.GetByID(ctx, id)
+	p, err := s.repo.GetByID(ctx, id)
+	if err != nil || p == nil {
+		return p, err
+	}
+	s.ensureFluiddURL(p)
+	return p, nil
 }
 
 // List retrieves all printers.
 func (s *PrinterService) List(ctx context.Context) ([]model.Printer, error) {
-	return s.repo.List(ctx)
+	printers, err := s.repo.List(ctx)
+	if err != nil {
+		return printers, err
+	}
+	for i := range printers {
+		s.ensureFluiddURL(&printers[i])
+	}
+	return printers, nil
+}
+
+func (s *PrinterService) ensureFluiddURL(p *model.Printer) {
+	if p.FluiddURL != "" {
+		return
+	}
+	if p.ConnectionType != model.ConnectionTypeMoonraker || p.ConnectionURI == "" {
+		return
+	}
+	if u, err := url.Parse(p.ConnectionURI); err == nil {
+		host := u.Hostname()
+		scheme := u.Scheme
+		if scheme == "" {
+			scheme = "http"
+		}
+		if host != "" {
+			p.FluiddURL = fmt.Sprintf("%s://%s", scheme, host)
+		}
+	}
 }
 
 // Update updates a printer.
 func (s *PrinterService) Update(ctx context.Context, p *model.Printer) error {
-	return s.repo.Update(ctx, p)
+	s.ensureFluiddURL(p)
+	previous, err := s.repo.GetByID(ctx, p.ID)
+	if err != nil {
+		return err
+	}
+	if err := s.repo.Update(ctx, p); err != nil {
+		return err
+	}
+	if p.MaintenanceMode {
+		s.manager.Disconnect(p.ID)
+		return nil
+	}
+	if previous != nil && previous.MaintenanceMode && p.ConnectionType != model.ConnectionTypeManual {
+		go s.manager.Connect(p)
+	}
+	return nil
+}
+
+func (s *PrinterService) Reconnect(ctx context.Context, id uuid.UUID) error {
+	p, err := s.repo.GetByID(ctx, id)
+	if err != nil {
+		return err
+	}
+	if p == nil {
+		return fmt.Errorf("printer not found")
+	}
+	if p.ConnectionType == model.ConnectionTypeManual {
+		return fmt.Errorf("manual printers do not support reconnection")
+	}
+	if p.MaintenanceMode {
+		return fmt.Errorf("printer is in maintenance mode")
+	}
+	s.manager.Disconnect(id)
+	return s.manager.Connect(p)
+}
+
+func (s *PrinterService) ReconnectAsync(ctx context.Context, id uuid.UUID) error {
+	s.reconnectMu.Lock()
+	if s.reconnecting == nil {
+		s.reconnecting = make(map[uuid.UUID]time.Time)
+	}
+	if started, ok := s.reconnecting[id]; ok && time.Since(started) < 15*time.Second {
+		s.reconnectMu.Unlock()
+		return nil
+	}
+	s.reconnecting[id] = time.Now()
+	s.reconnectMu.Unlock()
+
+	go func() {
+		defer func() {
+			s.reconnectMu.Lock()
+			delete(s.reconnecting, id)
+			s.reconnectMu.Unlock()
+		}()
+		if err := s.Reconnect(context.Background(), id); err != nil {
+			slog.Warn("printer reconnect failed", "printer_id", id, "error", err)
+		}
+	}()
+	return nil
+}
+
+func (s *PrinterService) ReconnectOfflinePrinters(ctx context.Context) {
+	printers, err := s.repo.List(ctx)
+	if err != nil {
+		slog.Warn("failed to list printers for auto reconnect", "error", err)
+		return
+	}
+	for i := range printers {
+		p := &printers[i]
+		if p.ConnectionType == model.ConnectionTypeManual || p.MaintenanceMode {
+			continue
+		}
+		state, err := s.manager.GetState(p.ID)
+		if err == nil && state.Status != model.PrinterStatusOffline && state.Status != model.PrinterStatusError {
+			continue
+		}
+		_ = s.ReconnectAsync(ctx, p.ID)
+	}
+}
+
+func (s *PrinterService) RunMacro(ctx context.Context, id uuid.UUID, macro string) error {
+	p, err := s.repo.GetByID(ctx, id)
+	if err != nil {
+		return err
+	}
+	if p == nil {
+		return fmt.Errorf("printer not found")
+	}
+	macro = strings.TrimSpace(macro)
+	if macro == "" {
+		return fmt.Errorf("macro is required")
+	}
+	return s.manager.RunMacro(id, macro)
+}
+
+func (s *PrinterService) ListMacros(ctx context.Context) ([]model.PrinterMacro, error) {
+	return s.macroRepo.List(ctx)
+}
+
+func (s *PrinterService) CreateMacro(ctx context.Context, title, command string) (*model.PrinterMacro, error) {
+	macro := &model.PrinterMacro{Title: strings.TrimSpace(title), Command: strings.TrimSpace(command)}
+	if macro.Title == "" {
+		return nil, fmt.Errorf("title is required")
+	}
+	if macro.Command == "" {
+		return nil, fmt.Errorf("command is required")
+	}
+	if err := s.macroRepo.Create(ctx, macro); err != nil {
+		return nil, err
+	}
+	return macro, nil
+}
+
+func (s *PrinterService) UpdateMacro(ctx context.Context, macro *model.PrinterMacro) (*model.PrinterMacro, error) {
+	macro.Title = strings.TrimSpace(macro.Title)
+	macro.Command = strings.TrimSpace(macro.Command)
+	if macro.Title == "" {
+		return nil, fmt.Errorf("title is required")
+	}
+	if macro.Command == "" {
+		return nil, fmt.Errorf("command is required")
+	}
+	if err := s.macroRepo.Update(ctx, macro); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("macro not found")
+		}
+		return nil, err
+	}
+	return macro, nil
+}
+
+func (s *PrinterService) DeleteMacro(ctx context.Context, id int64) error {
+	if err := s.macroRepo.Delete(ctx, id); err != nil {
+		if err == sql.ErrNoRows {
+			return fmt.Errorf("macro not found")
+		}
+		return err
+	}
+	return nil
+}
+
+// SetMaintenanceMode enables or disables maintenance mode for a printer.
+func (s *PrinterService) SetMaintenanceMode(ctx context.Context, id uuid.UUID, maintenanceMode bool) (*model.Printer, error) {
+	p, err := s.repo.GetByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if p == nil {
+		return nil, fmt.Errorf("printer not found")
+	}
+	p.MaintenanceMode = maintenanceMode
+	if err := s.Update(ctx, p); err != nil {
+		return nil, err
+	}
+	return p, nil
 }
 
 // Delete removes a printer.
@@ -798,6 +1148,96 @@ func (s *PrinterService) GetState(ctx context.Context, id uuid.UUID) (*model.Pri
 // GetAllStates retrieves real-time state for all printers.
 func (s *PrinterService) GetAllStates(ctx context.Context) map[uuid.UUID]*model.PrinterState {
 	return s.manager.GetAllStates()
+}
+
+func (s *PrinterService) EmergencyStop(ctx context.Context) []error {
+	return s.manager.EmergencyStop()
+}
+
+func (s *PrinterService) SetPrintSpeed(ctx context.Context, id uuid.UUID, level int) error {
+	if level < 1 || level > 4 {
+		return fmt.Errorf("speed level must be between 1 and 4")
+	}
+	return s.manager.SetPrintSpeed(id, level)
+}
+
+func (s *PrinterService) SetFeedRate(ctx context.Context, id uuid.UUID, percent int) error {
+	if percent < 25 || percent > 200 {
+		return fmt.Errorf("feed rate must be between 25 and 200")
+	}
+	return s.manager.SetFeedRate(id, percent)
+}
+
+func (s *PrinterService) GetCapabilities(ctx context.Context, id uuid.UUID) (model.PrinterCapabilities, error) {
+	p, err := s.repo.GetByID(ctx, id)
+	if err != nil {
+		return model.PrinterCapabilities{}, err
+	}
+	if p == nil {
+		return model.PrinterCapabilities{}, fmt.Errorf("printer not found")
+	}
+	if p.ConnectionType == model.ConnectionTypeManual || p.MaintenanceMode {
+		return model.PrinterCapabilities{}, nil
+	}
+	return s.manager.Capabilities(id)
+}
+
+func (s *PrinterService) SetFanSpeed(ctx context.Context, id uuid.UUID, fan string, speed int) error {
+	if speed < 0 || speed > 100 {
+		return fmt.Errorf("fan speed must be between 0 and 100")
+	}
+	return s.manager.SetFanSpeed(id, fan, speed)
+}
+
+func (s *PrinterService) SetLEDMode(ctx context.Context, id uuid.UUID, mode string) error {
+	if mode != "on" && mode != "off" && mode != "flashing" {
+		return fmt.Errorf("unsupported LED mode")
+	}
+	return s.manager.SetLEDMode(id, mode)
+}
+
+func (s *PrinterService) SkipObject(ctx context.Context, id uuid.UUID, objectID string) error {
+	if objectID == "" {
+		return fmt.Errorf("object id is required")
+	}
+	return s.manager.SkipObject(id, objectID)
+}
+
+func (s *PrinterService) Jog(ctx context.Context, id uuid.UUID, axis string, distance float64) error {
+	if distance < -100 || distance > 100 {
+		return fmt.Errorf("jog distance must be between -100 and 100")
+	}
+	return s.manager.Jog(id, axis, distance)
+}
+
+func (s *PrinterService) SetTemperature(ctx context.Context, id uuid.UUID, heater string, temp float64) error {
+	if temp < 0 || temp > 350 {
+		return fmt.Errorf("temperature out of range")
+	}
+	return s.manager.SetTemperature(id, heater, temp)
+}
+
+func (s *PrinterService) PlateCleared(ctx context.Context, id uuid.UUID) error {
+	return s.manager.PlateCleared(id)
+}
+
+func (s *PrinterService) AMSLoad(ctx context.Context, id uuid.UUID, amsID string, slotID string) error {
+	if amsID == "" || slotID == "" {
+		return fmt.Errorf("ams_id and slot_id are required")
+	}
+	return s.manager.AMSLoad(id, amsID, slotID)
+}
+
+func (s *PrinterService) AMSUnload(ctx context.Context, id uuid.UUID) error {
+	return s.manager.AMSUnload(id)
+}
+
+func (s *PrinterService) AMSRefresh(ctx context.Context, id uuid.UUID) error {
+	return s.manager.AMSRefresh(id)
+}
+
+func (s *PrinterService) SetAMSFilamentBackup(ctx context.Context, id uuid.UUID, enabled bool) error {
+	return s.manager.SetAMSFilamentBackup(id, enabled)
 }
 
 // ListJobs retrieves all print jobs for a printer.
@@ -996,6 +1436,23 @@ func (s *PrinterService) DiscoverPrinters(ctx context.Context) ([]printer.Discov
 // non-manual printers. Called at startup to restore connections.
 // For bambu_cloud printers, credentials are refreshed from the stored
 // cloud auth so that token updates from later logins are picked up.
+func (s *PrinterService) StartAutoReconnect(ctx context.Context) {
+	s.autoReconnectOnce.Do(func() {
+		go func() {
+			ticker := time.NewTicker(5 * time.Second)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case <-ticker.C:
+					s.ReconnectOfflinePrinters(ctx)
+				}
+			}
+		}()
+	})
+}
+
 func (s *PrinterService) ConnectAllPrinters(ctx context.Context) {
 	printers, err := s.repo.List(ctx)
 	if err != nil {
@@ -1086,10 +1543,10 @@ func (s *PrinterService) refreshBambuToken(ctx context.Context, auth *model.Bamb
 
 // BambuCloudService handles Bambu Cloud authentication and device management.
 type BambuCloudService struct {
-	cloud      *bambu.CloudClient
-	repo       *repository.BambuCloudRepository
+	cloud       *bambu.CloudClient
+	repo        *repository.BambuCloudRepository
 	printerRepo *repository.PrinterRepository
-	printerMgr *printer.Manager
+	printerMgr  *printer.Manager
 }
 
 // NewBambuCloudService creates a new BambuCloudService.
@@ -1263,8 +1720,8 @@ func (s *BambuCloudService) AddDevice(ctx context.Context, devID string) (*model
 		Model:          device.DevProductName,
 		Manufacturer:   "Bambu Lab",
 		ConnectionType: model.ConnectionTypeBambuCloud,
-		ConnectionURI:  auth.MQTTUsername,   // Store MQTT username here
-		APIKey:         auth.AccessToken,     // Store auth token here
+		ConnectionURI:  auth.MQTTUsername, // Store MQTT username here
+		APIKey:         auth.AccessToken,  // Store auth token here
 		SerialNumber:   device.DevID,
 		NozzleDiameter: device.NozzleDiameter,
 	}
@@ -1315,6 +1772,14 @@ func (s *MaterialService) ListByType(ctx context.Context, matType model.Material
 	return s.repo.ListByType(ctx, matType)
 }
 
+// Update updates an existing material.
+func (s *MaterialService) Update(ctx context.Context, m *model.Material) error {
+	if m.Name == "" {
+		return fmt.Errorf("material name is required")
+	}
+	return s.repo.Update(ctx, m)
+}
+
 // Delete removes a material by ID.
 func (s *MaterialService) Delete(ctx context.Context, id uuid.UUID) error {
 	return s.repo.Delete(ctx, id)
@@ -1333,7 +1798,13 @@ func (s *SpoolService) Create(ctx context.Context, sp *model.MaterialSpool) erro
 	if sp.RemainingWeight == 0 {
 		sp.RemainingWeight = sp.InitialWeight
 	}
-	return s.repo.Create(ctx, sp)
+	if err := s.repo.Create(ctx, sp); err != nil {
+		return err
+	}
+	if sp.DefaultForMaterial {
+		return s.repo.SetDefaultForMaterial(ctx, sp.ID)
+	}
+	return s.repo.EnsureDefaultForMaterialID(ctx, sp.MaterialID)
 }
 
 // GetByID retrieves a spool by ID.
@@ -1346,6 +1817,20 @@ func (s *SpoolService) List(ctx context.Context) ([]model.MaterialSpool, error) 
 	return s.repo.List(ctx)
 }
 
+// Update updates a spool.
+func (s *SpoolService) Update(ctx context.Context, sp *model.MaterialSpool) error {
+	if sp.MaterialID == uuid.Nil {
+		return fmt.Errorf("material ID is required")
+	}
+	if err := s.repo.Update(ctx, sp); err != nil {
+		return err
+	}
+	if sp.DefaultForMaterial {
+		return s.repo.SetDefaultForMaterial(ctx, sp.ID)
+	}
+	return s.repo.EnsureDefaultForMaterialID(ctx, sp.MaterialID)
+}
+
 // Delete deletes a spool by ID.
 func (s *SpoolService) Delete(ctx context.Context, id uuid.UUID) error {
 	return s.repo.Delete(ctx, id)
@@ -1354,16 +1839,17 @@ func (s *SpoolService) Delete(ctx context.Context, id uuid.UUID) error {
 // PrintJobService handles print job business logic.
 // Jobs are immutable once created - state changes are recorded as events.
 type PrintJobService struct {
-	repo            *repository.PrintJobRepository
-	printerRepo     *repository.PrinterRepository
-	designRepo      *repository.DesignRepository
-	spoolRepo       *repository.SpoolRepository
-	materialRepo    *repository.MaterialRepository
-	projectRepo     *repository.ProjectRepository
-	printerMgr      *printer.Manager
-	hub             *realtime.Hub
-	storage         storage.Storage
-	onJobCompleted  func(ctx context.Context, job *model.PrintJob)
+	repo           *repository.PrintJobRepository
+	printerRepo    *repository.PrinterRepository
+	designRepo     *repository.DesignRepository
+	spoolRepo      *repository.SpoolRepository
+	materialRepo   *repository.MaterialRepository
+	projectRepo    *repository.ProjectRepository
+	queueRepo      *repository.QueueItemRepository
+	printerMgr     *printer.Manager
+	hub            *realtime.Hub
+	storage        storage.Storage
+	onJobCompleted func(ctx context.Context, job *model.PrintJob)
 }
 
 // SetOnJobCompleted sets a callback invoked when a print job completes successfully.
@@ -1603,9 +2089,9 @@ func (s *PrintJobService) captureMaterialSnapshot(ams *model.AMSState) *model.Ma
 
 // PreflightCheckResult contains the result of a preflight validation.
 type PreflightCheckResult struct {
-	Ready      bool                     `json:"ready"`
+	Ready      bool                      `json:"ready"`
 	Validation *model.MaterialValidation `json:"validation,omitempty"`
-	AMSState   *model.AMSState          `json:"ams_state,omitempty"`
+	AMSState   *model.AMSState           `json:"ams_state,omitempty"`
 	Warnings   []string                  `json:"warnings,omitempty"`
 	Errors     []string                  `json:"errors,omitempty"`
 }
@@ -1724,6 +2210,24 @@ func (s *PrintJobService) AssignResources(ctx context.Context, jobID, printerID,
 // ListByProject retrieves print jobs for a project.
 func (s *PrintJobService) ListByProject(ctx context.Context, projectID uuid.UUID) ([]model.PrintJob, error) {
 	return s.repo.ListByProject(ctx, projectID)
+}
+
+func (s *PrintJobService) Delete(ctx context.Context, id uuid.UUID) error {
+	if s.queueRepo != nil {
+		_ = s.queueRepo.DeleteBySourcePrintJob(ctx, id)
+	}
+	return s.repo.Delete(ctx, id)
+}
+
+func (s *PrintJobService) DeleteByProject(ctx context.Context, projectID uuid.UUID) error {
+	if s.queueRepo != nil {
+		_ = s.queueRepo.DeleteByProjectPrintJobs(ctx, projectID)
+	}
+	return s.repo.DeleteByProject(ctx, projectID)
+}
+
+func (s *PrintJobService) DeleteByPrinter(ctx context.Context, printerID uuid.UUID) error {
+	return s.repo.DeleteByPrinter(ctx, printerID)
 }
 
 // RecordPrintingStarted records that the printer has begun printing (called by printer callbacks).
@@ -2057,10 +2561,10 @@ func (s *PrintJobService) RecordOutcome(ctx context.Context, id uuid.UUID, outco
 
 // RetryRequest contains parameters for retrying a failed job.
 type RetryRequest struct {
-	PrinterID       *uuid.UUID       // Optional: use different printer
-	MaterialSpoolID *uuid.UUID       // Optional: use different spool
+	PrinterID       *uuid.UUID             // Optional: use different printer
+	MaterialSpoolID *uuid.UUID             // Optional: use different spool
 	FailureCategory *model.FailureCategory // Classify why the original failed
-	Notes           string           // Notes for the retry
+	Notes           string                 // Notes for the retry
 }
 
 // Retry creates a new job from a failed job, linking them in a retry chain.
@@ -2349,6 +2853,33 @@ func (s *FileService) GetReader(ctx context.Context, id uuid.UUID) (io.ReadClose
 	return reader, file, nil
 }
 
+// Upload saves a file (for custom thumbnails etc.) and returns the created File record.
+func (s *FileService) Upload(ctx context.Context, filename string, reader io.Reader) (*model.File, error) {
+	storagePath, hash, size, err := s.storage.Save(filename, reader)
+	if err != nil {
+		return nil, err
+	}
+	f := &model.File{Hash: hash, OriginalName: filename, ContentType: contentTypeFromFilename(filename), SizeBytes: size, StoragePath: storagePath}
+	if err := s.repo.Create(ctx, f); err != nil {
+		return nil, err
+	}
+	return f, nil
+}
+
+func contentTypeFromFilename(name string) string {
+	ext := strings.ToLower(filepath.Ext(name))
+	switch ext {
+	case ".jpg", ".jpeg":
+		return "image/jpeg"
+	case ".png":
+		return "image/png"
+	case ".gif":
+		return "image/gif"
+	default:
+		return "application/octet-stream"
+	}
+}
+
 // getContentType returns MIME type for file extension.
 func getContentType(ext string) string {
 	switch ext {
@@ -2595,54 +3126,54 @@ func (s *ExpenseService) parseReceiptAsync(ctx context.Context, expenseID uuid.U
 // or creates a new one. Returns the material ID.
 // filamentColorHex maps common filament color names to hex values.
 var filamentColorHex = map[string]string{
-	"black":          "#000000",
-	"white":          "#FFFFFF",
-	"red":            "#FF0000",
-	"blue":           "#0000FF",
-	"green":          "#008000",
-	"yellow":         "#FFFF00",
-	"orange":         "#FF8C00",
-	"purple":         "#800080",
-	"pink":           "#FF69B4",
-	"gray":           "#808080",
-	"grey":           "#808080",
-	"silver":         "#C0C0C0",
-	"gold":           "#FFD700",
-	"brown":          "#8B4513",
-	"beige":          "#F5DEB3",
-	"ivory":          "#FFFFF0",
-	"cream":          "#FFFDD0",
-	"cyan":           "#00FFFF",
-	"magenta":        "#FF00FF",
-	"teal":           "#008080",
-	"navy":           "#000080",
-	"olive":          "#808000",
-	"maroon":         "#800000",
-	"coral":          "#FF7F50",
-	"salmon":         "#FA8072",
-	"turquoise":      "#40E0D0",
-	"lavender":       "#E6E6FA",
-	"lilac":          "#C8A2C8",
-	"mint":           "#3EB489",
-	"jade":           "#00A86B",
-	"transparent":    "#E0E0E0",
-	"natural":        "#F5F0E1",
-	"matte black":    "#1A1A1A",
-	"matte white":    "#F0F0F0",
-	"charcoal":       "#36454F",
-	"dark grey":      "#555555",
-	"dark gray":      "#555555",
-	"light grey":     "#BBBBBB",
-	"light gray":     "#BBBBBB",
-	"dark blue":      "#00008B",
-	"light blue":     "#ADD8E6",
-	"sky blue":       "#87CEEB",
-	"dark green":     "#006400",
-	"light green":    "#90EE90",
-	"dark red":       "#8B0000",
-	"bambu green":    "#00AE42",
-	"jade white":     "#E8E0D8",
-	"arctic blue":    "#6CB4EE",
+	"black":       "#000000",
+	"white":       "#FFFFFF",
+	"red":         "#FF0000",
+	"blue":        "#0000FF",
+	"green":       "#008000",
+	"yellow":      "#FFFF00",
+	"orange":      "#FF8C00",
+	"purple":      "#800080",
+	"pink":        "#FF69B4",
+	"gray":        "#808080",
+	"grey":        "#808080",
+	"silver":      "#C0C0C0",
+	"gold":        "#FFD700",
+	"brown":       "#8B4513",
+	"beige":       "#F5DEB3",
+	"ivory":       "#FFFFF0",
+	"cream":       "#FFFDD0",
+	"cyan":        "#00FFFF",
+	"magenta":     "#FF00FF",
+	"teal":        "#008080",
+	"navy":        "#000080",
+	"olive":       "#808000",
+	"maroon":      "#800000",
+	"coral":       "#FF7F50",
+	"salmon":      "#FA8072",
+	"turquoise":   "#40E0D0",
+	"lavender":    "#E6E6FA",
+	"lilac":       "#C8A2C8",
+	"mint":        "#3EB489",
+	"jade":        "#00A86B",
+	"transparent": "#E0E0E0",
+	"natural":     "#F5F0E1",
+	"matte black": "#1A1A1A",
+	"matte white": "#F0F0F0",
+	"charcoal":    "#36454F",
+	"dark grey":   "#555555",
+	"dark gray":   "#555555",
+	"light grey":  "#BBBBBB",
+	"light gray":  "#BBBBBB",
+	"dark blue":   "#00008B",
+	"light blue":  "#ADD8E6",
+	"sky blue":    "#87CEEB",
+	"dark green":  "#006400",
+	"light green": "#90EE90",
+	"dark red":    "#8B0000",
+	"bambu green": "#00AE42",
+	"jade white":  "#E8E0D8",
+	"arctic blue": "#6CB4EE",
 }
 
 func (s *ExpenseService) findOrCreateMaterial(ctx context.Context, fm *model.FilamentMetadata, unitPriceCents int) (uuid.UUID, error) {
@@ -2757,12 +3288,12 @@ type ConfirmExpenseRequest struct {
 
 // ConfirmExpenseItem contains the user's decisions for each expense item.
 type ConfirmExpenseItem struct {
-	ItemID       uuid.UUID `json:"item_id"`
-	CreateSpool  bool      `json:"create_spool"`
-	MaterialID   *uuid.UUID `json:"material_id,omitempty"` // Use existing material
-	NewMaterial  *model.Material `json:"new_material,omitempty"` // Create new material
-	WeightGrams  float64   `json:"weight_grams,omitempty"`
-	DiameterMM   float64   `json:"diameter_mm,omitempty"`
+	ItemID      uuid.UUID       `json:"item_id"`
+	CreateSpool bool            `json:"create_spool"`
+	MaterialID  *uuid.UUID      `json:"material_id,omitempty"`  // Use existing material
+	NewMaterial *model.Material `json:"new_material,omitempty"` // Create new material
+	WeightGrams float64         `json:"weight_grams,omitempty"`
+	DiameterMM  float64         `json:"diameter_mm,omitempty"`
 }
 
 // ConfirmExpense confirms an expense and applies inventory changes.
@@ -3071,7 +3602,151 @@ type StatsService struct {
 	expenseRepo    *repository.ExpenseRepository
 	saleRepo       *repository.SaleRepository
 	printJobRepo   *repository.PrintJobRepository
+	queueRepo      *repository.QueueItemRepository
+	spoolRepo      *repository.SpoolRepository
 	projectService *ProjectService
+}
+
+type UsageStats struct {
+	TotalPrints         int     `json:"total_prints"`
+	SuccessfulPrints    int     `json:"successful_prints"`
+	FailedPrints        int     `json:"failed_prints"`
+	TotalPrintHours     float64 `json:"total_print_hours"`
+	TotalFilamentUsed   float64 `json:"total_filament_used_grams"`
+	TotalFilamentWasted float64 `json:"total_filament_wasted_grams"`
+	SpoolsInUse         int     `json:"spools_in_use"`
+}
+
+func (s *StatsService) GetUsageStats(ctx context.Context, since *time.Time) (*UsageStats, error) {
+	stats := &UsageStats{}
+	inPeriod := func(t time.Time) bool {
+		return since == nil || !t.Before(*since)
+	}
+	if s.printJobRepo != nil {
+		jobs, err := s.printJobRepo.List(ctx, nil, nil)
+		if err != nil {
+			return nil, err
+		}
+		for _, job := range jobs {
+			if job.CompletedAt != nil && !inPeriod(*job.CompletedAt) {
+				continue
+			}
+			if job.CompletedAt == nil && !inPeriod(job.CreatedAt) {
+				continue
+			}
+			stats.TotalPrints++
+			if job.Outcome != nil && job.Outcome.Success {
+				stats.SuccessfulPrints++
+			} else if job.Outcome != nil && !job.Outcome.Success {
+				stats.FailedPrints++
+			}
+			if job.ActualSeconds != nil {
+				stats.TotalPrintHours += float64(*job.ActualSeconds) / 3600.0
+			}
+			if job.MaterialUsedGrams != nil {
+				stats.TotalFilamentUsed += *job.MaterialUsedGrams
+				if job.Outcome != nil && !job.Outcome.Success {
+					stats.TotalFilamentWasted += *job.MaterialUsedGrams
+				}
+			}
+		}
+	}
+	if s.queueRepo != nil {
+		items, err := s.queueRepo.ListTerminalDirect(ctx)
+		if err != nil {
+			return nil, err
+		}
+		for _, item := range items {
+			if !inPeriod(item.UpdatedAt) {
+				continue
+			}
+			currentAttemptDone := item.Status == model.QueueItemStatusDone
+			currentAttemptFailed := item.Status == model.QueueItemStatusFailed || item.Status == model.QueueItemStatusCancelled
+			failedAttempts := item.FailedAttempts
+			if currentAttemptFailed && failedAttempts == 0 {
+				failedAttempts = 1
+			}
+			stats.TotalPrints += failedAttempts
+			if currentAttemptDone {
+				stats.TotalPrints++
+				stats.SuccessfulPrints++
+			}
+			stats.FailedPrints += failedAttempts
+			consumedGrams := queueItemConsumedGrams(item)
+			if item.EstimatedSeconds != nil {
+				stats.TotalPrintHours += float64(queueItemConsumedSeconds(item)) / 3600.0
+			}
+			stats.TotalFilamentWasted += item.WastedGrams
+			stats.TotalFilamentUsed += item.WastedGrams
+			if currentAttemptDone {
+				stats.TotalFilamentUsed += consumedGrams
+			} else if currentAttemptFailed && item.WastedGrams == 0 {
+				stats.TotalFilamentWasted += consumedGrams
+				stats.TotalFilamentUsed += consumedGrams
+			}
+		}
+	}
+	if s.spoolRepo != nil {
+		spools, err := s.spoolRepo.List(ctx)
+		if err != nil {
+			return nil, err
+		}
+		for _, spool := range spools {
+			if spool.Status == model.SpoolStatusInUse {
+				stats.SpoolsInUse++
+			}
+		}
+	}
+	return stats, nil
+}
+
+func queueItemConsumedGrams(item model.QueueItem) float64 {
+	if item.FilamentGrams == nil {
+		return 0
+	}
+	if item.Status == model.QueueItemStatusDone {
+		return *item.FilamentGrams
+	}
+	progress := item.Progress
+	if progress < 0 {
+		progress = 0
+	}
+	if progress > 100 {
+		progress = 100
+	}
+	if progress == 0 {
+		progress = queueItemElapsedProgress(item)
+	}
+	return *item.FilamentGrams * progress / 100
+}
+
+func queueItemConsumedSeconds(item model.QueueItem) int {
+	if item.EstimatedSeconds == nil {
+		return 0
+	}
+	if item.Status == model.QueueItemStatusDone {
+		return *item.EstimatedSeconds
+	}
+	progress := item.Progress
+	if progress <= 0 {
+		progress = queueItemElapsedProgress(item)
+	}
+	if progress > 100 {
+		progress = 100
+	}
+	return int(float64(*item.EstimatedSeconds) * progress / 100)
+}
+
+func queueItemElapsedProgress(item model.QueueItem) float64 {
+	if item.EstimatedSeconds == nil || *item.EstimatedSeconds <= 0 {
+		return 0
+	}
+	elapsed := item.UpdatedAt.Sub(item.CreatedAt).Seconds()
+	if elapsed <= 0 {
+		return 0
+	}
+	progress := elapsed / float64(*item.EstimatedSeconds) * 100
+	return min(progress, 100)
 }
 
 // GetFinancialSummary returns aggregated financial data.
@@ -3142,6 +3817,18 @@ func (s *StatsService) GetFinancialSummary(ctx context.Context, since *time.Time
 		if job.Outcome != nil {
 			if job.Outcome.Success {
 				summary.SuccessfulPrintCount++
+			}
+		}
+	}
+
+	if s.queueRepo != nil {
+		items, err := s.queueRepo.ListTerminalDirect(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get queue items: %w", err)
+		}
+		for _, item := range items {
+			if item.Status == model.QueueItemStatusDone {
+				summary.TotalMaterialUsedGrams += queueItemConsumedGrams(item)
 			}
 		}
 	}
@@ -3309,19 +3996,19 @@ func (s *StatsService) GetSalesByChannel(ctx context.Context, period string) ([]
 
 // ProjectSales represents aggregated sales data for a project.
 type ProjectSales struct {
-	ProjectID            string `json:"project_id"`
-	ProjectName          string `json:"project_name"`
-	GrossCents           int    `json:"gross_cents"`
-	NetCents             int    `json:"net_cents"`
-	Count                int    `json:"count"`
-	AvgCents             int    `json:"avg_cents"`
-	UnitCostCents        int    `json:"unit_cost_cents"`
-	TotalCOGS            int    `json:"total_cogs_cents"`
-	ProfitCents          int    `json:"profit_cents"`
-	EstimatedPrintSeconds int   `json:"estimated_print_seconds"`
-	TotalPrintSeconds    int    `json:"total_print_seconds"`
-	FirstSale            string `json:"first_sale"`
-	LastSale             string `json:"last_sale"`
+	ProjectID             string `json:"project_id"`
+	ProjectName           string `json:"project_name"`
+	GrossCents            int    `json:"gross_cents"`
+	NetCents              int    `json:"net_cents"`
+	Count                 int    `json:"count"`
+	AvgCents              int    `json:"avg_cents"`
+	UnitCostCents         int    `json:"unit_cost_cents"`
+	TotalCOGS             int    `json:"total_cogs_cents"`
+	ProfitCents           int    `json:"profit_cents"`
+	EstimatedPrintSeconds int    `json:"estimated_print_seconds"`
+	TotalPrintSeconds     int    `json:"total_print_seconds"`
+	FirstSale             string `json:"first_sale"`
+	LastSale              string `json:"last_sale"`
 }
 
 // GetSalesByProject returns sales aggregated by project.
@@ -3485,8 +4172,8 @@ func (s *TemplateService) GetDesigns(ctx context.Context, templateID uuid.UUID) 
 
 // CreateFromTemplateOptions contains options for creating a project from a template.
 type CreateFromTemplateOptions struct {
-	OrderQuantity   int        // Multiplier for quantity_per_order
-	ExternalOrderID string     // For Etsy orders later
+	OrderQuantity   int    // Multiplier for quantity_per_order
+	ExternalOrderID string // For Etsy orders later
 	CustomerNotes   string
 	Source          string     // "manual", "etsy", "api"
 	MaterialSpoolID *uuid.UUID // Optional spool override
@@ -4090,12 +4777,12 @@ type SettingsService struct {
 
 // sensitiveKeys lists settings that should be encrypted at rest.
 var sensitiveKeys = map[string]bool{
-	"anthropic_api_key":       true,
-	"etsy_client_id":          true,
-	"etsy_access_token":       true,
-	"etsy_refresh_token":      true,
-	"bambu_cloud_token":       true,
-	"bambu_cloud_password":    true,
+	"anthropic_api_key":    true,
+	"etsy_client_id":       true,
+	"etsy_access_token":    true,
+	"etsy_refresh_token":   true,
+	"bambu_cloud_token":    true,
+	"bambu_cloud_password": true,
 }
 
 // isSensitive checks if a key should be encrypted.

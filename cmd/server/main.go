@@ -10,14 +10,14 @@ import (
 	"time"
 
 	"github.com/getsentry/sentry-go"
-	"github.com/philjestin/daedalus/internal/api"
-	"github.com/philjestin/daedalus/internal/database"
-	"github.com/philjestin/daedalus/internal/printer"
-	"github.com/philjestin/daedalus/internal/realtime"
-	"github.com/philjestin/daedalus/internal/repository"
-	"github.com/philjestin/daedalus/internal/service"
-	"github.com/philjestin/daedalus/internal/storage"
-	"github.com/philjestin/daedalus/internal/version"
+	"github.com/Brook-sys/picofarm/internal/api"
+	"github.com/Brook-sys/picofarm/internal/database"
+	"github.com/Brook-sys/picofarm/internal/printer"
+	"github.com/Brook-sys/picofarm/internal/realtime"
+	"github.com/Brook-sys/picofarm/internal/repository"
+	"github.com/Brook-sys/picofarm/internal/service"
+	"github.com/Brook-sys/picofarm/internal/storage"
+	"github.com/Brook-sys/picofarm/internal/version"
 	"github.com/joho/godotenv"
 )
 
@@ -47,12 +47,12 @@ func main() {
 	slog.SetDefault(logger)
 
 	// Get configuration from environment
-	port := getEnv("PORT", "8080")
+	port := getEnv("PORT", "8084")
 	uploadDir := getEnv("UPLOAD_DIR", "./uploads")
 
 	// Etsy OAuth configuration (optional)
 	etsyClientID := os.Getenv("ETSY_CLIENT_ID")
-	etsyRedirectURI := getEnv("ETSY_REDIRECT_URI", "http://localhost:8080/api/integrations/etsy/callback")
+	etsyRedirectURI := getEnv("ETSY_REDIRECT_URI", "http://localhost:8084/api/integrations/etsy/callback")
 
 	// Open SQLite database
 	dbPath := os.Getenv("DATABASE_PATH")

@@ -5,9 +5,9 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-	"github.com/philjestin/daedalus/internal/database"
-	"github.com/philjestin/daedalus/internal/model"
-	"github.com/philjestin/daedalus/internal/repository"
+	"github.com/Brook-sys/picofarm/internal/database"
+	"github.com/Brook-sys/picofarm/internal/model"
+	"github.com/Brook-sys/picofarm/internal/repository"
 )
 
 func newQuoteTestServices(t *testing.T) (*QuoteService, *CustomerService, *OrderService, *repository.Repositories) {

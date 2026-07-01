@@ -10,9 +10,13 @@ import {
   Loader2,
   Check,
   Key,
-  Cloud
+  Cloud,
+  AlertTriangle,
+  XCircle,
+  ExternalLink,
+  RefreshCw
 } from 'lucide-react'
-import { usePrinters, useCreatePrinter, useDeletePrinter, usePrinterStates } from '../hooks/usePrinters'
+import { usePrinters, useCreatePrinter, useDeletePrinter, usePrinterStates, useDefaultPrinter, useSetDefaultPrinter } from '../hooks/usePrinters'
 import { printersApi, bambuCloudApi, type DiscoveredPrinter } from '../api/client'
 import { cn, getStatusBadge } from '../lib/utils'
 import type { ConnectionType, CloudDevice } from '../types'
@@ -20,6 +24,8 @@ import type { ConnectionType, CloudDevice } from '../types'
 export default function Printers() {
   const { data: printers = [], isLoading, refetch } = usePrinters()
   const { data: printerStates = {} } = usePrinterStates()
+  const { data: defaultPrinter } = useDefaultPrinter()
+  const setDefaultPrinter = useSetDefaultPrinter()
   const createPrinter = useCreatePrinter()
   const deletePrinter = useDeletePrinter()
 
@@ -32,6 +38,9 @@ export default function Printers() {
   const [accessCode, setAccessCode] = useState('')
   const [serialNumber, setSerialNumber] = useState('')
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
+  const [emergencyTarget, setEmergencyTarget] = useState<{ id: string; name: string } | null>(null)
+  const [reconnectingPrinter, setReconnectingPrinter] = useState<string | null>(null)
+  const [createError, setCreateError] = useState('')
 
   // Bambu Cloud state
   const [showCloud, setShowCloud] = useState(false)
@@ -186,19 +195,25 @@ export default function Printers() {
 
   const handleCreate = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
+    setCreateError('')
     const formData = new FormData(e.currentTarget)
     
-    await createPrinter.mutateAsync({
-      name: formData.get('name') as string,
-      model: formData.get('model') as string,
-      manufacturer: formData.get('manufacturer') as string,
-      connection_type: formData.get('connection_type') as ConnectionType,
-      connection_uri: formData.get('connection_uri') as string,
-      location: formData.get('location') as string,
-      cost_per_hour_cents: Math.round(parseFloat(formData.get('cost_per_hour') as string || '0') * 100),
-    })
-    
-    setShowAdd(false)
+    try {
+      await createPrinter.mutateAsync({
+        name: formData.get('name') as string,
+        model: formData.get('model') as string,
+        manufacturer: formData.get('manufacturer') as string,
+        connection_type: formData.get('connection_type') as ConnectionType,
+        connection_uri: formData.get('connection_uri') as string,
+        fluidd_url: formData.get('fluidd_url') as string,
+        location: formData.get('location') as string,
+        cost_per_hour_cents: Math.round(parseFloat(formData.get('cost_per_hour') as string || '0') * 100),
+        restrict_gcode_model: formData.get('restrict_gcode_model') === 'on',
+      })
+      setShowAdd(false)
+    } catch (err) {
+      setCreateError(err instanceof Error ? err.message : 'Failed to add printer')
+    }
   }
 
   const handleDelete = async (id: string) => {
@@ -210,8 +225,56 @@ export default function Printers() {
     setConfirmDelete(null)
   }
 
+  const handleMaintenance = async (id: string, enabled: boolean) => {
+    await printersApi.setMaintenanceMode(id, enabled)
+    refetch()
+  }
+
+  const handleReconnect = async (id: string) => {
+    setReconnectingPrinter(id)
+    try {
+      await printersApi.reconnect(id)
+      window.setTimeout(() => refetch(), 1500)
+    } finally {
+      window.setTimeout(() => setReconnectingPrinter(null), 1500)
+    }
+  }
+
+  const confirmEmergencyStop = async () => {
+    if (!emergencyTarget) return
+    await printersApi.runMacro(emergencyTarget.id, 'M112')
+    setEmergencyTarget(null)
+    refetch()
+  }
+
   return (
     <div className="p-4 sm:p-6 lg:p-8">
+      {emergencyTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+          <div className="w-full max-w-lg rounded-2xl border border-red-500/40 bg-surface-950 shadow-2xl">
+            <div className="border-b border-red-500/20 bg-red-500/10 p-5">
+              <div className="flex items-center gap-3">
+                <div className="rounded-xl bg-red-500/20 p-3 text-red-300"><XCircle className="h-7 w-7" /></div>
+                <div>
+                  <h2 className="text-xl font-semibold text-red-200">Confirmar parada de emergência</h2>
+                  <p className="text-sm text-red-300/80">{emergencyTarget.name}</p>
+                </div>
+              </div>
+            </div>
+            <div className="space-y-3 p-5 text-sm text-surface-300">
+              <p>Tem certeza que deseja executar a parada de emergência?</p>
+              <p>Essa ação tenta interromper imediatamente a impressora. A impressão atual pode ser perdida, o estado da máquina pode exigir inspeção manual e o equipamento pode precisar ser reinicializado ou re-homed antes de voltar a operar.</p>
+              <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-amber-200">
+                Use apenas quando houver risco, falha crítica ou necessidade real de interromper a máquina imediatamente.
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 border-t border-surface-800 p-5">
+              <button onClick={() => setEmergencyTarget(null)} className="btn btn-secondary cursor-pointer">Cancelar</button>
+              <button onClick={confirmEmergencyStop} className="inline-flex cursor-pointer items-center rounded-lg border border-red-500/70 bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-500">Sim, parar agora</button>
+            </div>
+          </div>
+        </div>
+      )}
       {/* Header */}
       <div className="flex items-center justify-between mb-8">
         <div>
@@ -238,7 +301,7 @@ export default function Printers() {
             Scan Network
           </button>
           <button
-            onClick={() => setShowAdd(true)}
+            onClick={() => { setCreateError(''); setShowAdd(true) }}
             className="btn btn-primary"
           >
             <Plus className="h-4 w-4 mr-2" />
@@ -260,7 +323,7 @@ export default function Printers() {
             Add your first printer to start managing your farm
           </p>
           <button 
-            onClick={() => setShowAdd(true)}
+            onClick={() => { setCreateError(''); setShowAdd(true) }}
             className="btn btn-primary"
           >
             <Plus className="h-4 w-4 mr-2" />
@@ -271,36 +334,102 @@ export default function Printers() {
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {printers.map((printer) => {
             const state = printerStates[printer.id]
+            const status = state?.status || 'offline'
+            const cardClass = printer.maintenance_mode
+              ? 'border-2 border-amber-400/90 bg-amber-500/15 shadow-[0_0_28px_rgba(245,158,11,0.24)]'
+              : status === 'printing'
+                ? 'border-2 border-emerald-400/90 bg-emerald-500/15 shadow-[0_0_32px_rgba(16,185,129,0.28)]'
+                : status === 'idle'
+                  ? 'border-2 border-blue-400/90 bg-blue-500/15 shadow-[0_0_28px_rgba(59,130,246,0.25)]'
+                  : status === 'error'
+                    ? 'border-2 border-red-400/90 bg-red-500/15 shadow-[0_0_30px_rgba(239,68,68,0.26)]'
+                    : 'border-2 border-surface-700 bg-surface-900/30 opacity-60 grayscale-[0.45]'
+            const stateBarClass = printer.maintenance_mode
+              ? 'bg-amber-400'
+              : status === 'printing'
+                ? 'bg-emerald-400 animate-pulse'
+                : status === 'idle'
+                  ? 'bg-blue-400'
+                  : status === 'error'
+                    ? 'bg-red-400'
+                    : 'bg-surface-600'
+            const iconClass = printer.maintenance_mode
+              ? 'bg-amber-500/30 text-amber-200 ring-2 ring-amber-400/50'
+              : status === 'printing'
+                ? 'bg-emerald-500/30 text-emerald-200 ring-2 ring-emerald-400/50 animate-pulse'
+                : status === 'idle'
+                  ? 'bg-blue-500/30 text-blue-200 ring-2 ring-blue-400/50'
+                  : status === 'error'
+                    ? 'bg-red-500/30 text-red-200 ring-2 ring-red-400/50'
+                    : 'bg-surface-800 text-surface-500 ring-1 ring-surface-700'
             return (
-              <Link key={printer.id} to={`/printers/${printer.id}`} className="card p-5 block hover:border-surface-600 transition-colors">
-                <div className="flex items-start justify-between mb-4">
+              <Link key={printer.id} to={`/printers/${printer.id}`} className={cn('card relative overflow-hidden p-5 block border shadow-lg transition-all hover:scale-[1.01]', cardClass)}>
+                <div className={cn('absolute inset-y-0 left-0 w-1.5', stateBarClass)} />
+                <div className="flex items-start justify-between mb-4 pl-1">
                   <div className="flex items-center gap-3">
-                    <div className={cn(
-                      'p-2 rounded-lg',
-                      state?.status === 'printing' ? 'bg-emerald-500/20' :
-                      state?.status === 'idle' ? 'bg-blue-500/20' :
-                      state?.status === 'error' ? 'bg-red-500/20' :
-                      'bg-surface-800'
-                    )}>
-                      <PrinterIcon className={cn(
-                        'h-5 w-5',
-                        state?.status === 'printing' ? 'text-emerald-400' :
-                        state?.status === 'idle' ? 'text-blue-400' :
-                        state?.status === 'error' ? 'text-red-400' :
-                        'text-surface-500'
-                      )} />
+                    <div className={cn('p-2 rounded-lg', iconClass)}>
+                      <PrinterIcon className="h-5 w-5" />
                     </div>
                     <div>
-                      <h3 className="font-semibold text-surface-100">
+                      <h3 className="font-semibold text-surface-100 flex items-center gap-2">
                         {printer.name}
+                        {defaultPrinter?.id === printer.id && <span className="badge bg-accent-500/20 text-accent-300 border-accent-500/30">Default</span>}
                       </h3>
                       <p className="text-sm text-surface-500">
                         {printer.model || printer.manufacturer || 'Unknown model'}
                       </p>
+                      {printer.maintenance_mode && (
+                        <span className="inline-flex mt-1 text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400">
+                          Maintenance
+                        </span>
+                      )}
                     </div>
                   </div>
+                  <div className="flex items-center gap-1" onClick={(e) => { e.preventDefault(); e.stopPropagation() }}>
+                      {(status === 'offline' || status === 'error') && !printer.maintenance_mode && printer.connection_type !== 'manual' && (
+                        <button
+                          onClick={() => handleReconnect(printer.id)}
+                          disabled={reconnectingPrinter === printer.id}
+                          className="inline-flex cursor-pointer items-center rounded-lg border border-blue-500/50 bg-blue-500/20 px-2.5 py-1 text-xs font-semibold text-blue-300 hover:bg-blue-500/30 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          <RefreshCw className={cn('h-3.5 w-3.5 mr-1', reconnectingPrinter === printer.id && 'animate-spin')} />
+                          Reconectar
+                        </button>
+                      )}
+                      <button
+                        onClick={() => handleMaintenance(printer.id, !printer.maintenance_mode)}
+                       className={cn(
+                         'inline-flex cursor-pointer items-center rounded-lg border px-2.5 py-1 text-xs font-semibold transition-colors',
+                         printer.maintenance_mode ? 'border-emerald-500/40 bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25' : 'border-amber-500/60 bg-amber-500/20 text-amber-200 hover:bg-amber-500/30'
+                       )}
+                     >
+                       <AlertTriangle className="h-3.5 w-3.5 mr-1" />
+                       {printer.maintenance_mode ? 'Sair' : 'Manutenção'}
+                     </button>
+                      <button onClick={() => setEmergencyTarget({ id: printer.id, name: printer.name })} className="inline-flex cursor-pointer items-center rounded-lg border border-red-500/60 bg-red-500/20 px-2.5 py-1 text-xs font-semibold text-red-300 hover:bg-red-500/30">
+                        <XCircle className="h-3.5 w-3.5 mr-1" /> Emergência
+                      </button>
+                      {printer.fluidd_url && (
+                        <a href={printer.fluidd_url} target="_blank" rel="noreferrer" className="inline-flex cursor-pointer items-center rounded-lg border border-blue-500/50 bg-blue-500/20 px-2.5 py-1 text-xs font-semibold text-blue-300 hover:bg-blue-500/30">
+                          <ExternalLink className="h-3.5 w-3.5 mr-1" /> Fluidd
+                        </a>
+                      )}
+                      {defaultPrinter?.id !== printer.id && (
+                       <button onClick={() => setDefaultPrinter.mutate(printer.id)} className="cursor-pointer text-xs rounded px-2 py-0.5 bg-accent-500/20 text-accent-300 hover:bg-accent-500/30">
+                         Set default
+                       </button>
+                     )}
+                   </div>
                   {confirmDelete === printer.id ? (
-                    <div className="flex items-center gap-1" onClick={(e) => { e.preventDefault(); e.stopPropagation() }}>
+                    <div className="flex items-center gap-1" onClick={(e) => {
+                     const t = e.target as HTMLElement
+                     if (t.closest('a') || t.closest('button')) {
+                       e.stopPropagation()
+                       return
+                     }
+                     e.preventDefault()
+                     e.stopPropagation()
+                   }}>
                       <button
                         onClick={() => setConfirmDelete(null)}
                         className="text-xs text-surface-500 hover:text-surface-300 px-1.5 py-0.5"
@@ -891,9 +1020,16 @@ export default function Printers() {
                     You can adjust this later from the printer detail page.
                   </p>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-surface-300 mb-1">
-                    Connection Type
+                 <label className="flex items-start gap-3 rounded-lg border border-surface-800 bg-surface-900/50 p-3">
+                   <input type="checkbox" name="restrict_gcode_model" defaultChecked className="mt-1" />
+                   <span>
+                     <span className="block text-sm font-medium text-surface-200">Permitir apenas G-code específico deste modelo</span>
+                     <span className="text-xs text-surface-500">Bloqueia impressão quando printer_model do G-code não corresponde ao modelo desta impressora.</span>
+                   </span>
+                 </label>
+                 <div>
+                   <label className="block text-sm font-medium text-surface-300 mb-1">
+                     Connection Type
                   </label>
                   <select name="connection_type" className="input">
                     <option value="manual">Manual (No Integration)</option>
@@ -910,13 +1046,28 @@ export default function Printers() {
                     type="text"
                     name="connection_uri"
                     className="input"
-                    placeholder="http://192.168.1.100"
+                    placeholder="http://192.168.1.100:7125"
                   />
                   <p className="text-xs text-surface-500 mt-1">
                     Leave empty for manual printers
                   </p>
                 </div>
-              </div>
+                <div>
+                  <label className="block text-sm font-medium text-surface-300 mb-1">
+                    Fluidd URL
+                  </label>
+                  <input
+                    type="text"
+                    name="fluidd_url"
+                    className="input"
+                    placeholder="http://192.168.1.100"
+                  />
+                  <p className="text-xs text-surface-500 mt-1">
+                    Optional. Moonraker defaults to the same host on port 80.
+                  </p>
+                </div>
+          {createError && <div className="text-sm text-red-400">{createError}</div>}
+        </div>
               <div className="flex justify-end gap-3 mt-6">
                 <button
                   type="button"

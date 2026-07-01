@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/philjestin/daedalus/internal/crypto"
-	"github.com/philjestin/daedalus/internal/model"
+	"github.com/Brook-sys/picofarm/internal/crypto"
+	"github.com/Brook-sys/picofarm/internal/model"
 )
 
 // EtsyRepository handles Etsy integration database operations.

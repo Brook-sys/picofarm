@@ -60,10 +60,10 @@ type Task struct {
 	StartedAt   *time.Time `json:"started_at,omitempty"`
 	CompletedAt *time.Time `json:"completed_at,omitempty"`
 	// Loaded relations
-	Project        *Project             `json:"project,omitempty"`
-	Jobs           []PrintJob           `json:"jobs,omitempty"`
-	ChecklistItems []TaskChecklistItem  `json:"checklist_items,omitempty"`
-	Progress       float64              `json:"progress,omitempty"`
+	Project        *Project            `json:"project,omitempty"`
+	Jobs           []PrintJob          `json:"jobs,omitempty"`
+	ChecklistItems []TaskChecklistItem `json:"checklist_items,omitempty"`
+	Progress       float64             `json:"progress,omitempty"`
 }
 
 // TaskChecklistItem represents a checklist item for a task.
@@ -76,6 +76,7 @@ type TaskChecklistItem struct {
 	Completed   bool       `json:"completed"`
 	CompletedAt *time.Time `json:"completed_at,omitempty"`
 	CreatedAt   time.Time  `json:"created_at"`
+	UpdatedAt   time.Time  `json:"updated_at"`
 }
 
 // TaskFilters defines filter options for listing tasks.
@@ -97,25 +98,25 @@ type ProjectSummary struct {
 	SalesCount        int `json:"sales_count"`
 
 	// Cost breakdown
-	UnitCostCents         int `json:"unit_cost_cents"`          // cost to produce one unit
-	TotalCostCents        int `json:"total_cost_cents"`         // unit_cost × max(sales_count, 1)
-	PrinterTimeCostCents  int `json:"printer_time_cost_cents"`
-	MaterialCostCents     int `json:"material_cost_cents"`
+	UnitCostCents        int `json:"unit_cost_cents"`  // cost to produce one unit
+	TotalCostCents       int `json:"total_cost_cents"` // unit_cost × max(sales_count, 1)
+	PrinterTimeCostCents int `json:"printer_time_cost_cents"`
+	MaterialCostCents    int `json:"material_cost_cents"`
 
 	// Profit
 	GrossProfitCents   int     `json:"gross_profit_cents"`
 	GrossMarginPercent float64 `json:"gross_margin_percent"`
 
 	// Print time
-	TotalPrintSeconds    int     `json:"total_print_seconds"`
-	AvgPrintSeconds      int     `json:"avg_print_seconds"`
-	ProfitPerHourCents   int     `json:"profit_per_hour_cents"`
+	TotalPrintSeconds  int `json:"total_print_seconds"`
+	AvgPrintSeconds    int `json:"avg_print_seconds"`
+	ProfitPerHourCents int `json:"profit_per_hour_cents"`
 
 	// Performance
-	JobCount     int     `json:"job_count"`
-	CompletedCount int   `json:"completed_count"`
-	FailedCount  int     `json:"failed_count"`
-	SuccessRate  float64 `json:"success_rate"`
+	JobCount       int     `json:"job_count"`
+	CompletedCount int     `json:"completed_count"`
+	FailedCount    int     `json:"failed_count"`
+	SuccessRate    float64 `json:"success_rate"`
 
 	// Material
 	TotalMaterialGrams float64 `json:"total_material_grams"`
@@ -142,18 +143,18 @@ type ProjectSupply struct {
 
 // SliceProfileData represents parsed data from a 3MF slice profile.
 type SliceProfileData struct {
-	PrintTimeSeconds int              `json:"print_time_seconds"`
-	WeightGrams      float64          `json:"weight_grams"`
-	PrinterModel     string           `json:"printer_model,omitempty"`
-	NozzleDiameter   float64          `json:"nozzle_diameter,omitempty"`
-	Filaments        []FilamentUsage  `json:"filaments"`
+	PrintTimeSeconds int             `json:"print_time_seconds"`
+	WeightGrams      float64         `json:"weight_grams"`
+	PrinterModel     string          `json:"printer_model,omitempty"`
+	NozzleDiameter   float64         `json:"nozzle_diameter,omitempty"`
+	Filaments        []FilamentUsage `json:"filaments"`
 }
 
 // FilamentUsage represents filament usage data from a slice profile.
 type FilamentUsage struct {
-	Type      string  `json:"type"`
-	Color     string  `json:"color"`
-	UsedGrams float64 `json:"used_grams"`
+	Type       string  `json:"type"`
+	Color      string  `json:"color"`
+	UsedGrams  float64 `json:"used_grams"`
 	UsedMeters float64 `json:"used_meters"`
 }
 
@@ -199,18 +200,18 @@ type RecipeMaterial struct {
 
 // RecipeCostEstimate represents the cost breakdown for a recipe.
 type RecipeCostEstimate struct {
-	MaterialCostCents   int                           `json:"material_cost_cents"`
-	TimeCostCents       int                           `json:"time_cost_cents"`
-	LaborCostCents      int                           `json:"labor_cost_cents"`
-	SupplyCostCents     int                           `json:"supply_cost_cents"`
-	TotalCostCents      int                           `json:"total_cost_cents"`
-	EstimatedPrintTime  int                           `json:"estimated_print_time_seconds"`
-	LaborMinutes        int                           `json:"labor_minutes"`
-	MaterialBreakdown   []RecipeMaterialCostBreakdown `json:"material_breakdown"`
-	SupplyBreakdown     []RecipeSupplyCostBreakdown   `json:"supply_breakdown,omitempty"`
-	HourlyRateCents     int                           `json:"hourly_rate_cents"`
-	LaborRateCents      int                           `json:"labor_rate_cents"`
-	PrinterName         string                        `json:"printer_name,omitempty"`
+	MaterialCostCents  int                           `json:"material_cost_cents"`
+	TimeCostCents      int                           `json:"time_cost_cents"`
+	LaborCostCents     int                           `json:"labor_cost_cents"`
+	SupplyCostCents    int                           `json:"supply_cost_cents"`
+	TotalCostCents     int                           `json:"total_cost_cents"`
+	EstimatedPrintTime int                           `json:"estimated_print_time_seconds"`
+	LaborMinutes       int                           `json:"labor_minutes"`
+	MaterialBreakdown  []RecipeMaterialCostBreakdown `json:"material_breakdown"`
+	SupplyBreakdown    []RecipeSupplyCostBreakdown   `json:"supply_breakdown,omitempty"`
+	HourlyRateCents    int                           `json:"hourly_rate_cents"`
+	LaborRateCents     int                           `json:"labor_rate_cents"`
+	PrinterName        string                        `json:"printer_name,omitempty"`
 	// Margin calculation
 	SalePriceCents     int     `json:"sale_price_cents"`
 	GrossMarginCents   int     `json:"gross_margin_cents"`
@@ -264,16 +265,16 @@ type Template struct {
 	PrintProfile           PrintProfile        `json:"print_profile"`
 	EstimatedPrintSeconds  int                 `json:"estimated_print_seconds"`
 	// Pricing fields for margin calculation
-	LaborMinutes             int `json:"labor_minutes"`
-	SalePriceCents           int `json:"sale_price_cents"`
-	MaterialCostPerGramCents int `json:"material_cost_per_gram_cents"`
-	Version                int                 `json:"version"`
-	ArchivedAt             *time.Time          `json:"archived_at,omitempty"`
-	CreatedAt              time.Time           `json:"created_at"`
-	UpdatedAt              time.Time           `json:"updated_at"`
-	Designs                []TemplateDesign    `json:"designs,omitempty"`
-	Materials              []RecipeMaterial    `json:"materials,omitempty"`
-	Supplies               []RecipeSupply      `json:"supplies,omitempty"`
+	LaborMinutes             int              `json:"labor_minutes"`
+	SalePriceCents           int              `json:"sale_price_cents"`
+	MaterialCostPerGramCents int              `json:"material_cost_per_gram_cents"`
+	Version                  int              `json:"version"`
+	ArchivedAt               *time.Time       `json:"archived_at,omitempty"`
+	CreatedAt                time.Time        `json:"created_at"`
+	UpdatedAt                time.Time        `json:"updated_at"`
+	Designs                  []TemplateDesign `json:"designs,omitempty"`
+	Materials                []RecipeMaterial `json:"materials,omitempty"`
+	Supplies                 []RecipeSupply   `json:"supplies,omitempty"`
 }
 
 // TemplateAnalytics contains aggregated performance metrics from projects created from a template.
@@ -295,9 +296,9 @@ type TemplateAnalytics struct {
 	TotalSupplyCost      int `json:"total_supply_cost"`
 
 	// Profit
-	TotalGrossProfitCents  int     `json:"total_gross_profit_cents"`
-	AvgGrossMarginPercent  float64 `json:"avg_gross_margin_percent"`
-	ProfitPerHourCents     int     `json:"profit_per_hour_cents"`
+	TotalGrossProfitCents int     `json:"total_gross_profit_cents"`
+	AvgGrossMarginPercent float64 `json:"avg_gross_margin_percent"`
+	ProfitPerHourCents    int     `json:"profit_per_hour_cents"`
 
 	// Performance
 	TotalJobCount  int     `json:"total_job_count"`
@@ -357,23 +358,24 @@ const (
 
 // Part represents a discrete printable component of a project.
 type Part struct {
-	ID          uuid.UUID  `json:"id"`
-	ProjectID   uuid.UUID  `json:"project_id"`
-	Name        string     `json:"name"`
-	Description string     `json:"description"`
-	Quantity    int        `json:"quantity"`
-	Status      PartStatus `json:"status"`
-	CreatedAt   time.Time  `json:"created_at"`
-	UpdatedAt   time.Time  `json:"updated_at"`
-	Tags        []Tag      `json:"tags,omitempty"`
+	ID           uuid.UUID  `json:"id"`
+	ProjectID    uuid.UUID  `json:"project_id"`
+	Name         string     `json:"name"`
+	Description  string     `json:"description"`
+	Quantity     int        `json:"quantity"`
+	MaterialType string     `json:"material_type,omitempty"`
+	Status       PartStatus `json:"status"`
+	CreatedAt    time.Time  `json:"created_at"`
+	UpdatedAt    time.Time  `json:"updated_at"`
+	Tags         []Tag      `json:"tags,omitempty"`
 }
 
 // FileType represents supported design file types.
 type FileType string
 
 const (
-	FileTypeSTL  FileType = "stl"
-	FileType3MF  FileType = "3mf"
+	FileTypeSTL   FileType = "stl"
+	FileType3MF   FileType = "3mf"
 	FileTypeGCODE FileType = "gcode"
 )
 
@@ -397,12 +399,12 @@ type Design struct {
 type ConnectionType string
 
 const (
-	ConnectionTypeManual    ConnectionType = "manual"
-	ConnectionTypeOctoPrint ConnectionType = "octoprint"
+	ConnectionTypeManual     ConnectionType = "manual"
+	ConnectionTypeOctoPrint  ConnectionType = "octoprint"
 	ConnectionTypeBambuLAN   ConnectionType = "bambu_lan"
 	ConnectionTypeBambuCloud ConnectionType = "bambu_cloud"
 	ConnectionTypeMoonraker  ConnectionType = "moonraker"
-	ConnectionTypeChiTu     ConnectionType = "chitu"      // Elegoo, Anycubic, Phrozen resin printers
+	ConnectionTypeChiTu      ConnectionType = "chitu" // Elegoo, Anycubic, Phrozen resin printers
 )
 
 // PrinterStatus represents the current state of a printer.
@@ -425,27 +427,110 @@ type BuildVolume struct {
 
 // Printer represents a 3D printer in the farm.
 type Printer struct {
-	ID                uuid.UUID      `json:"id"`
-	Name              string         `json:"name"`
-	Model             string         `json:"model"`
-	Manufacturer      string         `json:"manufacturer"`
-	ConnectionType    ConnectionType `json:"connection_type"`
-	ConnectionURI     string         `json:"connection_uri"`
-	APIKey            string         `json:"api_key,omitempty"`
-	SerialNumber      string         `json:"serial_number,omitempty"`
-	Status            PrinterStatus  `json:"status"`
-	BuildVolume       *BuildVolume   `json:"build_volume,omitempty"`
-	NozzleDiameter    float64        `json:"nozzle_diameter"`
-	Location          string         `json:"location"`
-	Notes             string         `json:"notes"`
-	MinMaterialPercent int           `json:"min_material_percent"` // Minimum % before warning (default 10)
-	CostPerHourCents  int            `json:"cost_per_hour_cents"`  // Hourly cost in cents (e.g. 150 = $1.50/hr)
-	PurchasePriceCents int           `json:"purchase_price_cents"` // Purchase price in cents for ROI tracking
-	CreatedAt         time.Time      `json:"created_at"`
-	UpdatedAt         time.Time      `json:"updated_at"`
+	ID                 uuid.UUID      `json:"id"`
+	Name               string         `json:"name"`
+	Model              string         `json:"model"`
+	Manufacturer       string         `json:"manufacturer"`
+	ConnectionType     ConnectionType `json:"connection_type"`
+	ConnectionURI      string         `json:"connection_uri"`
+	FluiddURL          string         `json:"fluidd_url,omitempty"`
+	APIKey             string         `json:"api_key,omitempty"`
+	SerialNumber       string         `json:"serial_number,omitempty"`
+	Status             PrinterStatus  `json:"status"`
+	BuildVolume        *BuildVolume   `json:"build_volume,omitempty"`
+	NozzleDiameter     float64        `json:"nozzle_diameter"`
+	Location           string         `json:"location"`
+	Notes              string         `json:"notes"`
+	MinMaterialPercent int            `json:"min_material_percent"` // Minimum % before warning (default 10)
+	CostPerHourCents   int            `json:"cost_per_hour_cents"`  // Hourly cost in cents (e.g. 150 = $1.50/hr)
+	PurchasePriceCents int            `json:"purchase_price_cents"` // Purchase price in cents for ROI tracking
+	MaintenanceMode    bool           `json:"maintenance_mode"`     // When true, printer is out of service (no dispatch, no MQTT)
+	RestrictGCodeModel bool           `json:"restrict_gcode_model"` // When true, only runs G-code for matching printer_model
+	CreatedAt          time.Time      `json:"created_at"`
+	UpdatedAt          time.Time      `json:"updated_at"`
 }
 
-// PrinterState represents real-time state from a connected printer.
+type PrinterMacro struct {
+	ID        int64     `json:"id"`
+	Title     string    `json:"title"`
+	Command   string    `json:"command"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+type NotificationChannel struct {
+	ID          uuid.UUID      `json:"id"`
+	Name        string         `json:"name"`
+	Type        string         `json:"type"`
+	Enabled     bool           `json:"enabled"`
+	Config      map[string]any `json:"config"`
+	Events      []string       `json:"events"`
+	PrinterIDs  []uuid.UUID    `json:"printer_ids"`
+	MinSeverity string         `json:"min_severity"`
+	CreatedAt   time.Time      `json:"created_at"`
+	UpdatedAt   time.Time      `json:"updated_at"`
+}
+
+type NotificationEvent struct {
+	Type      string         `json:"type"`
+	Severity  string         `json:"severity"`
+	Title     string         `json:"title"`
+	Message   string         `json:"message"`
+	Timestamp time.Time      `json:"timestamp"`
+	PrinterID *uuid.UUID     `json:"printer_id,omitempty"`
+	Data      map[string]any `json:"data,omitempty"`
+}
+
+type NotificationDelivery struct {
+	ID        uuid.UUID  `json:"id"`
+	ChannelID uuid.UUID  `json:"channel_id"`
+	EventType string     `json:"event_type"`
+	Severity  string     `json:"severity"`
+	Status    string     `json:"status"`
+	Attempts  int        `json:"attempts"`
+	LastError string     `json:"last_error"`
+	Payload   string     `json:"payload_json"`
+	SentAt    *time.Time `json:"sent_at,omitempty"`
+	CreatedAt time.Time  `json:"created_at"`
+}
+
+type NotificationTemplate struct {
+	ID              uuid.UUID  `json:"id"`
+	ChannelID       *uuid.UUID `json:"channel_id,omitempty"`
+	EventType       string     `json:"event_type"`
+	Format          string     `json:"format"`
+	TitleTemplate   string     `json:"title_template"`
+	BodyTemplate    string     `json:"body_template"`
+	PayloadTemplate string     `json:"payload_template"`
+	Enabled         bool       `json:"enabled"`
+	CreatedAt       time.Time  `json:"created_at"`
+	UpdatedAt       time.Time  `json:"updated_at"`
+}
+
+type NotificationPreview struct {
+	Title   string         `json:"title"`
+	Body    string         `json:"body"`
+	Payload map[string]any `json:"payload,omitempty"`
+}
+
+type PrinterCapabilities struct {
+	CanStartPrint        bool `json:"can_start_print"`
+	CanPause             bool `json:"can_pause"`
+	CanResume            bool `json:"can_resume"`
+	CanCancel            bool `json:"can_cancel"`
+	CanRunGCode          bool `json:"can_run_gcode"`
+	CanSetFeedRate       bool `json:"can_set_feed_rate"`
+	CanSetSpeedProfile   bool `json:"can_set_speed_profile"`
+	CanUploadFile        bool `json:"can_upload_file"`
+	CanControlFans       bool `json:"can_control_fans"`
+	CanControlTemps      bool `json:"can_control_temps"`
+	CanControlLights     bool `json:"can_control_lights"`
+	CanSkipObjects       bool `json:"can_skip_objects"`
+	CanJog               bool `json:"can_jog"`
+	CanConfirmPlateClear bool `json:"can_confirm_plate_clear"`
+	HasAMS               bool `json:"has_ams"`
+}
+
 type PrinterState struct {
 	PrinterID   uuid.UUID     `json:"printer_id"`
 	Status      PrinterStatus `json:"status"`
@@ -467,15 +552,18 @@ type PrinterState struct {
 	TotalLayerNum int `json:"total_layer_num,omitempty"`
 
 	// Fan speeds (0-100%)
-	CoolingFanSpeed  int `json:"cooling_fan_speed,omitempty"`
-	AuxFanSpeed      int `json:"aux_fan_speed,omitempty"`
-	ChamberFanSpeed  int `json:"chamber_fan_speed,omitempty"`
+	CoolingFanSpeed   int `json:"cooling_fan_speed,omitempty"`
+	AuxFanSpeed       int `json:"aux_fan_speed,omitempty"`
+	ChamberFanSpeed   int `json:"chamber_fan_speed,omitempty"`
 	HeatbreakFanSpeed int `json:"heatbreak_fan_speed,omitempty"`
 
 	// Speed
 	SpeedPercent   int `json:"speed_percent,omitempty"`
-	SpeedLevel     int `json:"speed_level,omitempty"`     // 1=silent, 2=standard, 3=sport, 4=ludicrous
+	SpeedLevel     int `json:"speed_level,omitempty"` // 1=silent, 2=standard, 3=sport, 4=ludicrous
 	PrintRealSpeed int `json:"print_real_speed,omitempty"`
+
+	// Protocol capabilities
+	Capabilities PrinterCapabilities `json:"capabilities"`
 
 	// Network
 	WiFiSignal string `json:"wifi_signal,omitempty"`
@@ -485,7 +573,7 @@ type PrinterState struct {
 	NozzleType     string `json:"nozzle_type,omitempty"`
 
 	// Diagnostics
-	HMSErrors []HMSError  `json:"hms_errors,omitempty"`
+	HMSErrors []HMSError   `json:"hms_errors,omitempty"`
 	Lights    []LightState `json:"lights,omitempty"`
 
 	// Timing / Job
@@ -526,17 +614,17 @@ type AMSUnit struct {
 
 // AMSTray represents a single tray/slot in an AMS unit.
 type AMSTray struct {
-	ID            int     `json:"id"`
-	MaterialType  string  `json:"material_type"`
-	Color         string  `json:"color"`
-	ColorHex      string  `json:"color_hex,omitempty"`
-	Remain        int     `json:"remain"`        // Remaining percentage (0-100)
-	TagUID        string  `json:"tag_uid,omitempty"`
-	Brand         string  `json:"brand,omitempty"`
-	NozzleTempMin int     `json:"nozzle_temp_min,omitempty"`
-	NozzleTempMax int     `json:"nozzle_temp_max,omitempty"`
-	BedTemp       int     `json:"bed_temp,omitempty"`
-	Empty         bool    `json:"empty"`
+	ID            int    `json:"id"`
+	MaterialType  string `json:"material_type"`
+	Color         string `json:"color"`
+	ColorHex      string `json:"color_hex,omitempty"`
+	Remain        int    `json:"remain"` // Remaining percentage (0-100)
+	TagUID        string `json:"tag_uid,omitempty"`
+	Brand         string `json:"brand,omitempty"`
+	NozzleTempMin int    `json:"nozzle_temp_min,omitempty"`
+	NozzleTempMax int    `json:"nozzle_temp_max,omitempty"`
+	BedTemp       int    `json:"bed_temp,omitempty"`
+	Empty         bool   `json:"empty"`
 }
 
 // MaterialSnapshot captures the AMS state at job start for auditing.
@@ -561,10 +649,10 @@ type MaterialValidation struct {
 type MaterialType string
 
 const (
-	MaterialTypePLA  MaterialType = "pla"
-	MaterialTypePETG MaterialType = "petg"
-	MaterialTypeABS  MaterialType = "abs"
-	MaterialTypeASA  MaterialType = "asa"
+	MaterialTypePLA    MaterialType = "pla"
+	MaterialTypePETG   MaterialType = "petg"
+	MaterialTypeABS    MaterialType = "abs"
+	MaterialTypeASA    MaterialType = "asa"
 	MaterialTypeTPU    MaterialType = "tpu"
 	MaterialTypeSupply MaterialType = "supply"
 )
@@ -606,17 +694,18 @@ const (
 
 // MaterialSpool represents a physical spool of material (inventory).
 type MaterialSpool struct {
-	ID              uuid.UUID   `json:"id"`
-	MaterialID      uuid.UUID   `json:"material_id"`
-	InitialWeight   float64     `json:"initial_weight"`
-	RemainingWeight float64     `json:"remaining_weight"`
-	PurchaseDate    *time.Time  `json:"purchase_date,omitempty"`
-	PurchaseCost    float64     `json:"purchase_cost"`
-	Location        string      `json:"location"`
-	Status          SpoolStatus `json:"status"`
-	Notes           string      `json:"notes"`
-	CreatedAt       time.Time   `json:"created_at"`
-	UpdatedAt       time.Time   `json:"updated_at"`
+	ID                 uuid.UUID   `json:"id"`
+	MaterialID         uuid.UUID   `json:"material_id"`
+	InitialWeight      float64     `json:"initial_weight"`
+	RemainingWeight    float64     `json:"remaining_weight"`
+	PurchaseDate       *time.Time  `json:"purchase_date,omitempty"`
+	PurchaseCost       float64     `json:"purchase_cost"`
+	Location           string      `json:"location"`
+	Status             SpoolStatus `json:"status"`
+	DefaultForMaterial bool        `json:"default_for_material"`
+	Notes              string      `json:"notes"`
+	CreatedAt          time.Time   `json:"created_at"`
+	UpdatedAt          time.Time   `json:"updated_at"`
 }
 
 // PrintJobStatus represents the status of a print job.
@@ -624,8 +713,8 @@ type PrintJobStatus string
 
 const (
 	PrintJobStatusQueued    PrintJobStatus = "queued"
-	PrintJobStatusAssigned  PrintJobStatus = "assigned"  // assigned to printer
-	PrintJobStatusUploaded  PrintJobStatus = "uploaded"  // file sent to printer
+	PrintJobStatusAssigned  PrintJobStatus = "assigned" // assigned to printer
+	PrintJobStatusUploaded  PrintJobStatus = "uploaded" // file sent to printer
 	PrintJobStatusPrinting  PrintJobStatus = "printing"
 	PrintJobStatusPaused    PrintJobStatus = "paused"
 	PrintJobStatusCompleted PrintJobStatus = "completed"
@@ -664,6 +753,128 @@ type PrintOutcome struct {
 	MaterialCost  float64  `json:"material_cost"`
 }
 
+// QueueItemStatus represents the status of a G-code queue item.
+type QueueItemStatus string
+
+const (
+	QueueItemStatusDraft     QueueItemStatus = "draft"
+	QueueItemStatusQueued    QueueItemStatus = "queued"
+	QueueItemStatusReady     QueueItemStatus = "ready"
+	QueueItemStatusBlocked   QueueItemStatus = "blocked"
+	QueueItemStatusPrinting  QueueItemStatus = "printing"
+	QueueItemStatusPaused    QueueItemStatus = "paused"
+	QueueItemStatusDone      QueueItemStatus = "done"
+	QueueItemStatusFailed    QueueItemStatus = "failed"
+	QueueItemStatusCancelled QueueItemStatus = "cancelled"
+)
+
+// QueueSourceType identifies where a G-code queue item came from.
+type QueueSourceType string
+
+const (
+	QueueSourceUpload   QueueSourceType = "upload"
+	QueueSourcePrintJob QueueSourceType = "print_job"
+	QueueSourceManual   QueueSourceType = "manual"
+	QueueSourceLibrary  QueueSourceType = "library"
+	QueueSourceProject  QueueSourceType = "project"
+)
+
+// GCodeMetadata contains extracted or manually entered printable file metadata.
+type GCodeMetadata struct {
+	Slicer                  string                 `json:"slicer,omitempty"`
+	MaterialType            string                 `json:"material_type,omitempty"`
+	MaterialColor           string                 `json:"material_color,omitempty"`
+	PrintSettingsID         string                 `json:"print_settings_id,omitempty"`
+	PrinterSettingsID       string                 `json:"printer_settings_id,omitempty"`
+	FilamentSettingsID      string                 `json:"filament_settings_id,omitempty"`
+	PrinterModel            string                 `json:"printer_model,omitempty"`
+	FilamentName            string                 `json:"filament_name,omitempty"`
+	FilamentGrams           *float64               `json:"filament_grams,omitempty"`
+	EstimatedSeconds        *int                   `json:"estimated_seconds,omitempty"`
+	LayerHeight             *float64               `json:"layer_height,omitempty"`
+	NozzleDiameter          *float64               `json:"nozzle_diameter,omitempty"`
+	BedTemp                 *float64               `json:"bed_temp,omitempty"`
+	NozzleTemp              *float64               `json:"nozzle_temp,omitempty"`
+	ThumbnailFileID         *uuid.UUID             `json:"thumbnail_file_id,omitempty"`          // thumbnail original extraída do gcode
+	OriginalThumbnailFileID *uuid.UUID             `json:"original_thumbnail_file_id,omitempty"` // sempre a do gcode
+	Raw                     map[string]interface{} `json:"raw,omitempty"`
+}
+
+// QueueItem represents one independent printable G-code artifact in the queue.
+type QueueItem struct {
+	ID                uuid.UUID       `json:"id"`
+	SourceType        QueueSourceType `json:"source_type"`
+	SourceID          *uuid.UUID      `json:"source_id,omitempty"`
+	ProjectID         *uuid.UUID      `json:"project_id,omitempty"`
+	FileID            uuid.UUID       `json:"file_id"`
+	FileName          string          `json:"file_name"`
+	DisplayName       string          `json:"display_name"`
+	Status            QueueItemStatus `json:"status"`
+	Priority          int             `json:"priority"`
+	Progress          float64         `json:"progress"`
+	WastedGrams       float64         `json:"wasted_grams,omitempty"`
+	FailedAttempts    int             `json:"failed_attempts,omitempty"`
+	AssignedPrinterID *uuid.UUID      `json:"assigned_printer_id,omitempty"`
+	AssignedSpoolID   *uuid.UUID      `json:"assigned_spool_id,omitempty"`
+	MaterialType      string          `json:"material_type,omitempty"`
+	MaterialColor     string          `json:"material_color,omitempty"`
+	FilamentName      string          `json:"filament_name,omitempty"`
+	FilamentGrams     *float64        `json:"filament_grams,omitempty"`
+	EstimatedSeconds  *int            `json:"estimated_seconds,omitempty"`
+	LayerHeight       *float64        `json:"layer_height,omitempty"`
+	NozzleDiameter    *float64        `json:"nozzle_diameter,omitempty"`
+	BedTemp           *float64        `json:"bed_temp,omitempty"`
+	NozzleTemp        *float64        `json:"nozzle_temp,omitempty"`
+	ThumbnailFileID   *uuid.UUID      `json:"thumbnail_file_id,omitempty"`
+	Metadata          *GCodeMetadata  `json:"metadata,omitempty"`
+	Notes             string          `json:"notes,omitempty"`
+	CreatedAt         time.Time       `json:"created_at"`
+	UpdatedAt         time.Time       `json:"updated_at"`
+}
+
+type STLLibraryFile struct {
+	ID              uuid.UUID          `json:"id"`
+	FileID          uuid.UUID          `json:"file_id"`
+	DisplayName     string             `json:"display_name"`
+	FileName        string             `json:"file_name,omitempty"`
+	SizeBytes       int64              `json:"size_bytes"`
+	ThumbnailFileID *uuid.UUID         `json:"thumbnail_file_id,omitempty"`
+	Tags            []Tag              `json:"tags,omitempty"`
+	GCodes          []GCodeLibraryFile `json:"gcodes,omitempty"`
+	CreatedAt       time.Time          `json:"created_at"`
+	UpdatedAt       time.Time          `json:"updated_at"`
+}
+
+type FileLibraryResponse struct {
+	STLFiles       []STLLibraryFile   `json:"stl_files"`
+	RootGCodeFiles []GCodeLibraryFile `json:"root_gcode_files"`
+}
+
+// GCodeLibraryFile is a reusable stored .gcode file with extracted metadata.
+type GCodeLibraryFile struct {
+	ID               uuid.UUID      `json:"id"`
+	FileID           uuid.UUID      `json:"file_id"`
+	DisplayName      string         `json:"display_name"`
+	FileName         string         `json:"file_name,omitempty"`
+	MaterialType     string         `json:"material_type,omitempty"`
+	MaterialColor    string         `json:"material_color,omitempty"`
+	FilamentName     string         `json:"filament_name,omitempty"`
+	FilamentGrams    *float64       `json:"filament_grams,omitempty"`
+	EstimatedSeconds *int           `json:"estimated_seconds,omitempty"`
+	LayerHeight      *float64       `json:"layer_height,omitempty"`
+	NozzleDiameter   *float64       `json:"nozzle_diameter,omitempty"`
+	BedTemp          *float64       `json:"bed_temp,omitempty"`
+	NozzleTemp       *float64       `json:"nozzle_temp,omitempty"`
+	ThumbnailFileID  *uuid.UUID     `json:"thumbnail_file_id,omitempty"`
+	ParentSTLID      *uuid.UUID     `json:"parent_stl_id,omitempty"`
+	DefaultForSTL    bool           `json:"default_for_stl"`
+	Metadata         *GCodeMetadata `json:"metadata,omitempty"`
+	PrintCount       int            `json:"print_count"`
+	Tags             []Tag          `json:"tags,omitempty"`
+	CreatedAt        time.Time      `json:"created_at"`
+	UpdatedAt        time.Time      `json:"updated_at"`
+}
+
 // PrintJob represents an immutable print job instance.
 // Once created, core fields should not change. State changes are recorded as JobEvents.
 type PrintJob struct {
@@ -692,7 +903,7 @@ type PrintJob struct {
 
 	// Cost tracking
 	MaterialUsedGrams    *float64 `json:"material_used_grams,omitempty"`
-	CostCents            *int     `json:"cost_cents,omitempty"`             // Total cost (printer time + material)
+	CostCents            *int     `json:"cost_cents,omitempty"`              // Total cost (printer time + material)
 	PrinterTimeCostCents *int     `json:"printer_time_cost_cents,omitempty"` // Snapshot: printer hourly rate * actual hours
 	MaterialCostCents    *int     `json:"material_cost_cents,omitempty"`     // Snapshot: material cost at completion
 
@@ -704,12 +915,12 @@ type PrintJob struct {
 	AutoDispatchEnabled bool `json:"auto_dispatch_enabled"` // Whether this job participates in auto-dispatch
 
 	// Computed fields (derived from events, not stored in print_jobs table)
-	Status      PrintJobStatus `json:"status"`                   // computed from latest event
-	Progress    float64        `json:"progress"`                 // computed from latest event
-	StartedAt   *time.Time     `json:"started_at,omitempty"`     // computed from first printing event
-	CompletedAt *time.Time     `json:"completed_at,omitempty"`   // computed from terminal event
-	Outcome     *PrintOutcome  `json:"outcome,omitempty"`        // kept for backward compat
-	Events      []JobEvent     `json:"events,omitempty"`         // full event timeline when requested
+	Status      PrintJobStatus `json:"status"`                 // computed from latest event
+	Progress    float64        `json:"progress"`               // computed from latest event
+	StartedAt   *time.Time     `json:"started_at,omitempty"`   // computed from first printing event
+	CompletedAt *time.Time     `json:"completed_at,omitempty"` // computed from terminal event
+	Outcome     *PrintOutcome  `json:"outcome,omitempty"`      // kept for backward compat
+	Events      []JobEvent     `json:"events,omitempty"`       // full event timeline when requested
 }
 
 // NeedsAssignment returns true if the job is missing printer or spool assignment.
@@ -726,17 +937,17 @@ func (j *PrintJob) IsAssigned() bool {
 type JobEventType string
 
 const (
-	JobEventQueued    JobEventType = "queued"     // job created and waiting
-	JobEventAssigned  JobEventType = "assigned"   // assigned to a printer
-	JobEventUploaded  JobEventType = "uploaded"   // file sent to printer
-	JobEventStarted   JobEventType = "started"    // print started
-	JobEventProgress  JobEventType = "progress"   // progress update (no status change)
-	JobEventPaused    JobEventType = "paused"     // print paused
-	JobEventResumed   JobEventType = "resumed"    // print resumed
-	JobEventCompleted JobEventType = "completed"  // print finished successfully
-	JobEventFailed    JobEventType = "failed"     // print failed
-	JobEventCancelled JobEventType = "cancelled"  // print cancelled by user/system
-	JobEventRetried   JobEventType = "retried"    // new job created as retry
+	JobEventQueued    JobEventType = "queued"    // job created and waiting
+	JobEventAssigned  JobEventType = "assigned"  // assigned to a printer
+	JobEventUploaded  JobEventType = "uploaded"  // file sent to printer
+	JobEventStarted   JobEventType = "started"   // print started
+	JobEventProgress  JobEventType = "progress"  // progress update (no status change)
+	JobEventPaused    JobEventType = "paused"    // print paused
+	JobEventResumed   JobEventType = "resumed"   // print resumed
+	JobEventCompleted JobEventType = "completed" // print finished successfully
+	JobEventFailed    JobEventType = "failed"    // print failed
+	JobEventCancelled JobEventType = "cancelled" // print cancelled by user/system
+	JobEventRetried   JobEventType = "retried"   // new job created as retry
 )
 
 // ActorType identifies what triggered an event.
@@ -859,6 +1070,54 @@ type BroadcastEvent struct {
 	Data interface{} `json:"data"`
 }
 
+// Camera represents an external or printer-linked camera feed.
+type Camera struct {
+	ID             uuid.UUID  `json:"id"`
+	PrinterID      *uuid.UUID `json:"printer_id,omitempty"`
+	Name           string     `json:"name"`
+	Type           string     `json:"type"`
+	URL            string     `json:"url"`
+	Enabled        bool       `json:"enabled"`
+	Token          string     `json:"token,omitempty"`
+	TokenExpiresAt *time.Time `json:"token_expires_at,omitempty"`
+	CreatedAt      time.Time  `json:"created_at"`
+	UpdatedAt      time.Time  `json:"updated_at"`
+}
+
+// Timelapse represents a captured timelapse video for a print.
+type Timelapse struct {
+	ID          uuid.UUID  `json:"id"`
+	PrinterID   *uuid.UUID `json:"printer_id,omitempty"`
+	CameraID    *uuid.UUID `json:"camera_id,omitempty"`
+	PrintJobID  *uuid.UUID `json:"print_job_id,omitempty"`
+	Status      string     `json:"status"`
+	FramesPath  string     `json:"frames_path,omitempty"`
+	VideoPath   string     `json:"video_path,omitempty"`
+	FrameCount  int        `json:"frame_count"`
+	StartedAt   *time.Time `json:"started_at,omitempty"`
+	CompletedAt *time.Time `json:"completed_at,omitempty"`
+	CreatedAt   time.Time  `json:"created_at"`
+	UpdatedAt   time.Time  `json:"updated_at"`
+}
+
+// PrintArchive captures immutable historical print metadata.
+type PrintArchive struct {
+	ID                uuid.UUID  `json:"id"`
+	JobID             *uuid.UUID `json:"job_id,omitempty"`
+	PrinterID         *uuid.UUID `json:"printer_id,omitempty"`
+	Status            string     `json:"status"`
+	StartTime         *time.Time `json:"start_time,omitempty"`
+	EndTime           *time.Time `json:"end_time,omitempty"`
+	DurationSeconds   int        `json:"duration_seconds"`
+	FilamentUsedGrams float64    `json:"filament_used_grams"`
+	CostCents         int        `json:"cost_cents"`
+	ThumbnailFileID   *uuid.UUID `json:"thumbnail_file_id,omitempty"`
+	Notes             string     `json:"notes"`
+	Tags              []string   `json:"tags"`
+	CreatedAt         time.Time  `json:"created_at"`
+	UpdatedAt         time.Time  `json:"updated_at"`
+}
+
 // File represents a stored file.
 type File struct {
 	ID           uuid.UUID `json:"id"`
@@ -895,24 +1154,24 @@ const (
 
 // Expense represents an expense record.
 type Expense struct {
-	ID               uuid.UUID       `json:"id"`
-	OccurredAt       time.Time       `json:"occurred_at"`
-	Vendor           string          `json:"vendor"`
-	SubtotalCents    int             `json:"subtotal_cents"`
-	TaxCents         int             `json:"tax_cents"`
-	ShippingCents    int             `json:"shipping_cents"`
-	TotalCents       int             `json:"total_cents"`
-	Currency         string          `json:"currency"`
-	Category         ExpenseCategory `json:"category"`
-	Notes            string          `json:"notes"`
-	ReceiptFileID    *uuid.UUID      `json:"receipt_file_id,omitempty"`
-	ReceiptFilePath  string          `json:"receipt_file_path,omitempty"`
-	Status           ExpenseStatus   `json:"status"`
-	RawOCRText       string          `json:"raw_ocr_text,omitempty"`
-	RawAIResponse    json.RawMessage `json:"raw_ai_response,omitempty"`
-	Confidence       int             `json:"confidence"`
-	CreatedAt        time.Time       `json:"created_at"`
-	UpdatedAt        time.Time       `json:"updated_at"`
+	ID              uuid.UUID       `json:"id"`
+	OccurredAt      time.Time       `json:"occurred_at"`
+	Vendor          string          `json:"vendor"`
+	SubtotalCents   int             `json:"subtotal_cents"`
+	TaxCents        int             `json:"tax_cents"`
+	ShippingCents   int             `json:"shipping_cents"`
+	TotalCents      int             `json:"total_cents"`
+	Currency        string          `json:"currency"`
+	Category        ExpenseCategory `json:"category"`
+	Notes           string          `json:"notes"`
+	ReceiptFileID   *uuid.UUID      `json:"receipt_file_id,omitempty"`
+	ReceiptFilePath string          `json:"receipt_file_path,omitempty"`
+	Status          ExpenseStatus   `json:"status"`
+	RawOCRText      string          `json:"raw_ocr_text,omitempty"`
+	RawAIResponse   json.RawMessage `json:"raw_ai_response,omitempty"`
+	Confidence      int             `json:"confidence"`
+	CreatedAt       time.Time       `json:"created_at"`
+	UpdatedAt       time.Time       `json:"updated_at"`
 
 	// Joined data
 	Items []ExpenseItem `json:"items,omitempty"`
@@ -922,9 +1181,9 @@ type Expense struct {
 type ExpenseItemAction string
 
 const (
-	ExpenseItemActionNone         ExpenseItemAction = "none"
-	ExpenseItemActionCreatedSpool ExpenseItemAction = "created_spool"
-	ExpenseItemActionMatchedSpool ExpenseItemAction = "matched_spool"
+	ExpenseItemActionNone          ExpenseItemAction = "none"
+	ExpenseItemActionCreatedSpool  ExpenseItemAction = "created_spool"
+	ExpenseItemActionMatchedSpool  ExpenseItemAction = "matched_spool"
 	ExpenseItemActionSkipped       ExpenseItemAction = "skipped"
 	ExpenseItemActionCreatedSupply ExpenseItemAction = "created_supply"
 )
@@ -995,28 +1254,28 @@ type Sale struct {
 
 // ParsedReceipt represents the AI-extracted data from a receipt.
 type ParsedReceipt struct {
-	Vendor       string             `json:"vendor"`
-	Date         string             `json:"date"`
-	SubtotalCents int               `json:"subtotal_cents"`
-	TaxCents     int                `json:"tax_cents"`
-	ShippingCents int               `json:"shipping_cents"`
-	TotalCents   int                `json:"total_cents"`
-	Currency     string             `json:"currency"`
-	Items        []ParsedReceiptItem `json:"items"`
-	Confidence   int                `json:"confidence"`
-	RawText      string             `json:"raw_text,omitempty"`
+	Vendor        string              `json:"vendor"`
+	Date          string              `json:"date"`
+	SubtotalCents int                 `json:"subtotal_cents"`
+	TaxCents      int                 `json:"tax_cents"`
+	ShippingCents int                 `json:"shipping_cents"`
+	TotalCents    int                 `json:"total_cents"`
+	Currency      string              `json:"currency"`
+	Items         []ParsedReceiptItem `json:"items"`
+	Confidence    int                 `json:"confidence"`
+	RawText       string              `json:"raw_text,omitempty"`
 }
 
 // ParsedReceiptItem represents a parsed line item from a receipt.
 type ParsedReceiptItem struct {
-	Description    string           `json:"description"`
-	Quantity       float64          `json:"quantity"`
-	UnitPriceCents int              `json:"unit_price_cents"`
-	TotalPriceCents int             `json:"total_price_cents"`
-	Category       ExpenseCategory  `json:"category"`
-	IsFilament     bool             `json:"is_filament"`
-	Filament       *FilamentMetadata `json:"filament,omitempty"`
-	Confidence     int              `json:"confidence"`
+	Description     string            `json:"description"`
+	Quantity        float64           `json:"quantity"`
+	UnitPriceCents  int               `json:"unit_price_cents"`
+	TotalPriceCents int               `json:"total_price_cents"`
+	Category        ExpenseCategory   `json:"category"`
+	IsFilament      bool              `json:"is_filament"`
+	Filament        *FilamentMetadata `json:"filament,omitempty"`
+	Confidence      int               `json:"confidence"`
 }
 
 // BambuCloudAuth stores authentication credentials for Bambu Cloud API.
@@ -1273,31 +1532,31 @@ type ShopifyCredentials struct {
 
 // ShopifyOrder represents a synced Shopify order.
 type ShopifyOrder struct {
-	ID              uuid.UUID          `json:"id"`
-	ShopifyOrderID  string             `json:"shopify_order_id"`
-	OrderID         *uuid.UUID         `json:"order_id,omitempty"` // Link to unified Order
-	ShopDomain      string             `json:"shop_domain"`
-	OrderNumber     string             `json:"order_number"`
-	CustomerName    string             `json:"customer_name"`
-	CustomerEmail   string             `json:"customer_email"`
-	TotalCents      int                `json:"total_cents"`
-	Status          string             `json:"status"`
-	SyncedAt        time.Time          `json:"synced_at"`
-	CreatedAt       time.Time          `json:"created_at"`
-	UpdatedAt       time.Time          `json:"updated_at"`
-	Items           []ShopifyOrderItem `json:"items,omitempty"`
+	ID             uuid.UUID          `json:"id"`
+	ShopifyOrderID string             `json:"shopify_order_id"`
+	OrderID        *uuid.UUID         `json:"order_id,omitempty"` // Link to unified Order
+	ShopDomain     string             `json:"shop_domain"`
+	OrderNumber    string             `json:"order_number"`
+	CustomerName   string             `json:"customer_name"`
+	CustomerEmail  string             `json:"customer_email"`
+	TotalCents     int                `json:"total_cents"`
+	Status         string             `json:"status"`
+	SyncedAt       time.Time          `json:"synced_at"`
+	CreatedAt      time.Time          `json:"created_at"`
+	UpdatedAt      time.Time          `json:"updated_at"`
+	Items          []ShopifyOrderItem `json:"items,omitempty"`
 }
 
 // ShopifyOrderItem represents a line item in a Shopify order.
 type ShopifyOrderItem struct {
-	ID                 uuid.UUID `json:"id"`
-	ShopifyOrderID     uuid.UUID `json:"shopify_order_id"`
-	ShopifyLineItemID  string    `json:"shopify_line_item_id"`
-	SKU                string    `json:"sku"`
-	Title              string    `json:"title"`
-	Quantity           int       `json:"quantity"`
-	PriceCents         int       `json:"price_cents"`
-	CreatedAt          time.Time `json:"created_at"`
+	ID                uuid.UUID `json:"id"`
+	ShopifyOrderID    uuid.UUID `json:"shopify_order_id"`
+	ShopifyLineItemID string    `json:"shopify_line_item_id"`
+	SKU               string    `json:"sku"`
+	Title             string    `json:"title"`
+	Quantity          int       `json:"quantity"`
+	PriceCents        int       `json:"price_cents"`
+	CreatedAt         time.Time `json:"created_at"`
 }
 
 // ShopifyProductTemplate links a Shopify product to a template.
@@ -1311,10 +1570,10 @@ type ShopifyProductTemplate struct {
 
 // ShopifyIntegrationStatus represents the connection status.
 type ShopifyIntegrationStatus struct {
-	Connected   bool       `json:"connected"`
-	ShopDomain  string     `json:"shop_domain,omitempty"`
-	LastSyncAt  *time.Time `json:"last_sync_at,omitempty"`
-	OrderCount  int        `json:"order_count,omitempty"`
+	Connected  bool       `json:"connected"`
+	ShopDomain string     `json:"shop_domain,omitempty"`
+	LastSyncAt *time.Time `json:"last_sync_at,omitempty"`
+	OrderCount int        `json:"order_count,omitempty"`
 }
 
 // ============================================
@@ -1345,6 +1604,7 @@ type Tag struct {
 	Name      string    `json:"name"`
 	Color     string    `json:"color"`
 	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 // Feedback represents a beta feedback submission.
@@ -1508,4 +1768,3 @@ type QuoteFilters struct {
 	Limit      int          `json:"limit,omitempty"`
 	Offset     int          `json:"offset,omitempty"`
 }
-

@@ -16,8 +16,8 @@ import (
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 	"github.com/google/uuid"
-	"github.com/philjestin/daedalus/internal/model"
 	"github.com/jlaffaye/ftp"
+	"github.com/Brook-sys/picofarm/internal/model"
 )
 
 // BambuClient implements Client for Bambu Lab printers via LAN or Cloud MQTT.
@@ -89,7 +89,7 @@ func NewBambuCloudClient(printerID uuid.UUID, serial, mqttUsername, authToken st
 		accessCode:   authToken,
 		serialNumber: serial,
 		cloudMode:    true,
-		mqttUsername:  mqttUsername,
+		mqttUsername: mqttUsername,
 		stopChan:     make(chan struct{}),
 		lastState: &model.PrinterState{
 			PrinterID: printerID,
@@ -356,10 +356,10 @@ func (c *BambuClient) StartJob(filename string, filepath string) error {
 			FlowCali:    false,
 			Vibration:   false,
 			AMS: &BambuAMSCmd{
-				UseAMS:        true,
-				PrintSpeed:    "standard",
-				LayerInspect:  false,
-				LabelVersion:  "",
+				UseAMS:         true,
+				PrintSpeed:     "standard",
+				LayerInspect:   false,
+				LabelVersion:   "",
 				AMSMappingInfo: []int{},
 			},
 		},
@@ -783,14 +783,14 @@ type BambuMessage struct {
 // BambuPrintStatus contains print job status information.
 type BambuPrintStatus struct {
 	// Print state
-	GcodeState    string `json:"gcode_state"`
-	StgCur        int    `json:"stg_cur"`
-	PrintError    int    `json:"print_error"`
-	PrintType     string `json:"print_type"`
-	SubtaskName   string `json:"subtask_name"`
-	GcodeFile     string `json:"gcode_file"`
-	SubtaskID     string `json:"subtask_id"`
-	TaskID        string `json:"task_id"`
+	GcodeState  string `json:"gcode_state"`
+	StgCur      int    `json:"stg_cur"`
+	PrintError  int    `json:"print_error"`
+	PrintType   string `json:"print_type"`
+	SubtaskName string `json:"subtask_name"`
+	GcodeFile   string `json:"gcode_file"`
+	SubtaskID   string `json:"subtask_id"`
+	TaskID      string `json:"task_id"`
 
 	// Progress
 	MCPercent       int `json:"mc_percent"`
@@ -799,30 +799,30 @@ type BambuPrintStatus struct {
 	TotalLayerNum   int `json:"total_layer_num"`
 
 	// Temperatures
-	BedTemper         float64 `json:"bed_temper"`
-	BedTargetTemper   float64 `json:"bed_target_temper"`
-	NozzleTemper      float64 `json:"nozzle_temper"`
+	BedTemper          float64 `json:"bed_temper"`
+	BedTargetTemper    float64 `json:"bed_target_temper"`
+	NozzleTemper       float64 `json:"nozzle_temper"`
 	NozzleTargetTemper float64 `json:"nozzle_target_temper"`
-	ChamberTemper     float64 `json:"chamber_temper"`
-	NozzleDiameter    string  `json:"nozzle_diameter"`
-	NozzleType        string  `json:"nozzle_type"`
+	ChamberTemper      float64 `json:"chamber_temper"`
+	NozzleDiameter     string  `json:"nozzle_diameter"`
+	NozzleType         string  `json:"nozzle_type"`
 
 	// Fan speeds (0-15 scale typically)
-	CoolingFanSpeed    int `json:"cooling_fan_speed"`
-	BigFan1Speed       int `json:"big_fan1_speed"`
-	BigFan2Speed       int `json:"big_fan2_speed"`
-	HeatbreakFanSpeed  int `json:"heatbreak_fan_speed"`
+	CoolingFanSpeed   int `json:"cooling_fan_speed"`
+	BigFan1Speed      int `json:"big_fan1_speed"`
+	BigFan2Speed      int `json:"big_fan2_speed"`
+	HeatbreakFanSpeed int `json:"heatbreak_fan_speed"`
 
 	// Speeds and flow
-	SpeedMag       int     `json:"spd_mag"`
-	SpeedLevel     int     `json:"spd_lvl"`
-	PrintRealSpeed int     `json:"print_real_speed"`
-	FeedRateMag    int     `json:"feed_rate_mag"`
+	SpeedMag       int `json:"spd_mag"`
+	SpeedLevel     int `json:"spd_lvl"`
+	PrintRealSpeed int `json:"print_real_speed"`
+	FeedRateMag    int `json:"feed_rate_mag"`
 
 	// AMS (Automatic Material System)
-	AMSStatus int            `json:"ams_status"`
-	AMS       *BambuAMS      `json:"ams,omitempty"`
-	VTTray    *BambuVTTray   `json:"vt_tray,omitempty"`
+	AMSStatus int          `json:"ams_status"`
+	AMS       *BambuAMS    `json:"ams,omitempty"`
+	VTTray    *BambuVTTray `json:"vt_tray,omitempty"`
 
 	// Lights and misc
 	LightsReport []BambuLight `json:"lights_report,omitempty"`
@@ -833,11 +833,11 @@ type BambuPrintStatus struct {
 	HMS []BambuHMS `json:"hms,omitempty"`
 
 	// Lifecycle
-	LifecycleRelayID    string `json:"lifecycle"`
-	PrintStartTime      string `json:"gcode_start_time"`
-	PrintFinishAction   string `json:"print_finish_action"`
-	HomeFlag            int    `json:"home_flag"`
-	HWSwitch            int    `json:"hw_switch_state"`
+	LifecycleRelayID  string `json:"lifecycle"`
+	PrintStartTime    string `json:"gcode_start_time"`
+	PrintFinishAction string `json:"print_finish_action"`
+	HomeFlag          int    `json:"home_flag"`
+	HWSwitch          int    `json:"hw_switch_state"`
 }
 
 // BambuAMS represents AMS (Automatic Material System) status.
@@ -853,31 +853,31 @@ type BambuAMS struct {
 
 // BambuUnit represents a single AMS unit.
 type BambuUnit struct {
-	ID       string       `json:"id"`
-	Humidity string       `json:"humidity"`
-	Temp     string       `json:"temp"`
-	Trays    []BambuTray  `json:"tray"`
+	ID       string      `json:"id"`
+	Humidity string      `json:"humidity"`
+	Temp     string      `json:"temp"`
+	Trays    []BambuTray `json:"tray"`
 }
 
 // BambuTray represents a tray/slot in an AMS unit.
 type BambuTray struct {
-	ID            string  `json:"id"`
-	TrayIDName    string  `json:"tray_id_name"`
-	TrayType      string  `json:"tray_type"`
-	TraySubBrands string  `json:"tray_sub_brands"`
-	TrayColor     string  `json:"tray_color"`
-	TrayWeight    string  `json:"tray_weight"`
-	TrayDiameter  string  `json:"tray_diameter"`
-	TrayTemp      string  `json:"tray_temp"`
-	TrayTime      string  `json:"tray_time"`
-	BedTempType   string  `json:"bed_temp_type"`
-	BedTemp       string  `json:"bed_temp"`
-	NozzleTempMax string  `json:"nozzle_temp_max"`
-	NozzleTempMin string  `json:"nozzle_temp_min"`
-	Remain        int     `json:"remain"`
-	TagUID        string  `json:"tag_uid"`
-	TrayUUID      string  `json:"tray_uuid"`
-	TrayInfoIdx   string  `json:"tray_info_idx"`
+	ID            string   `json:"id"`
+	TrayIDName    string   `json:"tray_id_name"`
+	TrayType      string   `json:"tray_type"`
+	TraySubBrands string   `json:"tray_sub_brands"`
+	TrayColor     string   `json:"tray_color"`
+	TrayWeight    string   `json:"tray_weight"`
+	TrayDiameter  string   `json:"tray_diameter"`
+	TrayTemp      string   `json:"tray_temp"`
+	TrayTime      string   `json:"tray_time"`
+	BedTempType   string   `json:"bed_temp_type"`
+	BedTemp       string   `json:"bed_temp"`
+	NozzleTempMax string   `json:"nozzle_temp_max"`
+	NozzleTempMin string   `json:"nozzle_temp_min"`
+	Remain        int      `json:"remain"`
+	TagUID        string   `json:"tag_uid"`
+	TrayUUID      string   `json:"tray_uuid"`
+	TrayInfoIdx   string   `json:"tray_info_idx"`
 	Cols          []string `json:"cols,omitempty"`
 }
 
@@ -907,17 +907,17 @@ type BambuLight struct {
 
 // BambuOnline represents online status information.
 type BambuOnline struct {
-	Ahb       bool `json:"ahb"`
-	Rfid      bool `json:"rfid"`
-	Version   int  `json:"version"`
+	Ahb     bool `json:"ahb"`
+	Rfid    bool `json:"rfid"`
+	Version int  `json:"version"`
 }
 
 // BambuHMS represents a Health Management System error.
 type BambuHMS struct {
-	Attr     int    `json:"attr"`
-	Code     int    `json:"code"`
-	Module   int    `json:"module"`
-	Severity int    `json:"severity"`
+	Attr     int `json:"attr"`
+	Code     int `json:"code"`
+	Module   int `json:"module"`
+	Severity int `json:"severity"`
 }
 
 // BambuInfo contains printer information.
@@ -963,6 +963,8 @@ type BambuPrintCmd struct {
 	Sequence    string       `json:"sequence_id"`
 	Command     string       `json:"command"`
 	Param       string       `json:"param,omitempty"`
+	Fan         string       `json:"fan,omitempty"`
+	Speed       int          `json:"speed,omitempty"`
 	ProjectID   string       `json:"project_id,omitempty"`
 	ProfileID   string       `json:"profile_id,omitempty"`
 	TaskID      string       `json:"task_id,omitempty"`
@@ -1002,6 +1004,26 @@ type BambuPushingCmd struct {
 	PushTarget int    `json:"push_target,omitempty"`
 }
 
+func (c *BambuClient) Capabilities() model.PrinterCapabilities {
+	return model.PrinterCapabilities{
+		CanStartPrint:        true,
+		CanPause:             true,
+		CanResume:            true,
+		CanCancel:            true,
+		CanRunGCode:          true,
+		CanSetFeedRate:       true,
+		CanSetSpeedProfile:   true,
+		CanUploadFile:        !c.cloudMode,
+		CanControlFans:       true,
+		CanControlTemps:      true,
+		CanControlLights:     true,
+		CanSkipObjects:       true,
+		CanJog:               true,
+		CanConfirmPlateClear: true,
+		HasAMS:               true,
+	}
+}
+
 // SetLEDMode sets the LED light mode on the printer.
 func (c *BambuClient) SetLEDMode(mode string) error {
 	cmd := BambuCommand{
@@ -1011,6 +1033,15 @@ func (c *BambuClient) SetLEDMode(mode string) error {
 			LedMode:  mode, // "on", "off", "flashing"
 		},
 	}
+	return c.sendCommand(cmd)
+}
+
+func (c *BambuClient) SetFeedRate(percent int) error {
+	cmd := BambuCommand{Print: &BambuPrintCmd{
+		Sequence: strconv.FormatInt(time.Now().UnixMilli(), 10),
+		Command:  "gcode_line",
+		Param:    fmt.Sprintf("M220 S%d", percent),
+	}}
 	return c.sendCommand(cmd)
 }
 
@@ -1024,6 +1055,143 @@ func (c *BambuClient) SetPrintSpeed(level int) error {
 			Param:    strconv.Itoa(level),
 		},
 	}
+	return c.sendCommand(cmd)
+}
+
+// SetFanSpeed sets a fan speed in percent (0-100).
+func (c *BambuClient) SetFanSpeed(fan string, speed int) error {
+	if speed < 0 || speed > 100 {
+		return fmt.Errorf("fan speed must be between 0 and 100")
+	}
+	fanMap := map[string]string{
+		"part":      "part_fan",
+		"aux":       "aux_fan",
+		"chamber":   "chamber_fan",
+		"heatbreak": "heatbreak_fan",
+	}
+	mapped, ok := fanMap[fan]
+	if !ok {
+		return fmt.Errorf("unsupported fan: %s", fan)
+	}
+	cmd := BambuCommand{Print: &BambuPrintCmd{
+		Sequence: strconv.FormatInt(time.Now().UnixMilli(), 10),
+		Command:  "fanctrl",
+		Fan:      mapped,
+		Speed:    speed,
+	}}
+	return c.sendCommand(cmd)
+}
+
+// SkipObject excludes an object from the active print.
+func (c *BambuClient) SkipObject(objectID string) error {
+	if strings.TrimSpace(objectID) == "" {
+		return fmt.Errorf("object id is required")
+	}
+	cmd := BambuCommand{Print: &BambuPrintCmd{
+		Sequence: strconv.FormatInt(time.Now().UnixMilli(), 10),
+		Command:  "gcode_line",
+		Param:    fmt.Sprintf("M486 P%s", objectID),
+	}}
+	return c.sendCommand(cmd)
+}
+
+// Jog moves an axis by a relative distance.
+func (c *BambuClient) Jog(axis string, distance float64) error {
+	axis = strings.ToUpper(axis)
+	if axis != "X" && axis != "Y" && axis != "Z" && axis != "E" {
+		return fmt.Errorf("unsupported axis: %s", axis)
+	}
+	cmd := BambuCommand{Print: &BambuPrintCmd{
+		Sequence: strconv.FormatInt(time.Now().UnixMilli(), 10),
+		Command:  "gcode_line",
+		Param:    fmt.Sprintf("G91; G1 %s%.3f F600; G90", axis, distance),
+	}}
+	return c.sendCommand(cmd)
+}
+
+// SetTemperature sets nozzle, bed, or chamber target temperature.
+func (c *BambuClient) SetTemperature(heater string, temp float64) error {
+	if temp < 0 || temp > 350 {
+		return fmt.Errorf("temperature out of range")
+	}
+	var gcode string
+	switch heater {
+	case "nozzle":
+		gcode = fmt.Sprintf("M104 S%.0f", temp)
+	case "bed":
+		gcode = fmt.Sprintf("M140 S%.0f", temp)
+	case "chamber":
+		gcode = fmt.Sprintf("M141 S%.0f", temp)
+	default:
+		return fmt.Errorf("unsupported heater: %s", heater)
+	}
+	cmd := BambuCommand{Print: &BambuPrintCmd{
+		Sequence: strconv.FormatInt(time.Now().UnixMilli(), 10),
+		Command:  "gcode_line",
+		Param:    gcode,
+	}}
+	return c.sendCommand(cmd)
+}
+
+// PlateCleared requests fresh status after operator confirms the build plate is clear.
+func (c *BambuClient) PlateCleared() error {
+	c.requestPushAll()
+	return nil
+}
+
+// RunMacro sends a raw G-code line or predefined Bambu macro. For emergency we send M112.
+func (c *BambuClient) RunMacro(name string) error {
+	macro := strings.TrimSpace(name)
+	if macro == "" {
+		return fmt.Errorf("macro name is required")
+	}
+	if strings.EqualFold(macro, "EMERGENCY_STOP") {
+		macro = "M112"
+	}
+	cmd := BambuCommand{Print: &BambuPrintCmd{
+		Sequence: strconv.FormatInt(time.Now().UnixMilli(), 10),
+		Command:  "gcode_line",
+		Param:    macro,
+	}}
+	return c.sendCommand(cmd)
+}
+
+// AMSLoad loads filament from a specific AMS slot.
+func (c *BambuClient) AMSLoad(amsID string, slotID string) error {
+	cmd := BambuCommand{Print: &BambuPrintCmd{
+		Sequence: strconv.FormatInt(time.Now().UnixMilli(), 10),
+		Command:  "ams_change_filament",
+		Param:    fmt.Sprintf("%s:%s", amsID, slotID),
+	}}
+	return c.sendCommand(cmd)
+}
+
+// AMSUnload unloads the currently loaded filament.
+func (c *BambuClient) AMSUnload() error {
+	cmd := BambuCommand{Print: &BambuPrintCmd{
+		Sequence: strconv.FormatInt(time.Now().UnixMilli(), 10),
+		Command:  "ams_change_filament",
+		Param:    "-1",
+	}}
+	return c.sendCommand(cmd)
+}
+
+// AMSRefresh triggers RFID re-read on the AMS.
+func (c *BambuClient) AMSRefresh() error {
+	cmd := BambuCommand{Print: &BambuPrintCmd{
+		Sequence: strconv.FormatInt(time.Now().UnixMilli(), 10),
+		Command:  "ams_refresh_rfid",
+	}}
+	return c.sendCommand(cmd)
+}
+
+// SetAMSFilamentBackup enables or disables filament backup mode.
+func (c *BambuClient) SetAMSFilamentBackup(enabled bool) error {
+	cmd := BambuCommand{Print: &BambuPrintCmd{
+		Sequence: strconv.FormatInt(time.Now().UnixMilli(), 10),
+		Command:  "ams_filament_backup",
+		Param:    strconv.FormatBool(enabled),
+	}}
 	return c.sendCommand(cmd)
 }
 

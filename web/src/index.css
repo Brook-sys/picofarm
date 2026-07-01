@@ -78,6 +78,11 @@ select.input {
   cursor: pointer;
 }
 
+/* Input with leading icon */
+.input-with-icon {
+  padding-left: 2.25rem !important;
+}
+
 /* Style the dropdown options */
 select option {
   background-color: var(--color-surface-800);

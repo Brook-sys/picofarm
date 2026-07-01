@@ -19,6 +19,25 @@ export function usePrinter(id: string) {
   })
 }
 
+export function useDefaultPrinter() {
+  return useQuery({
+    queryKey: ['printers', 'default'],
+    queryFn: () => printersApi.getDefault(),
+    retry: false,
+  })
+}
+
+export function useSetDefaultPrinter() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => printersApi.setDefault(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['printers'] })
+      queryClient.invalidateQueries({ queryKey: ['printers', 'default'] })
+    },
+  })
+}
+
 // Create a new printer.
 export function useCreatePrinter() {
   const queryClient = useQueryClient()

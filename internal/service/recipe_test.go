@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-	"github.com/philjestin/daedalus/internal/model"
+	"github.com/Brook-sys/picofarm/internal/model"
 )
 
 func TestPrinterValidation(t *testing.T) {

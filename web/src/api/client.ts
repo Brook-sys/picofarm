@@ -1,4 +1,4 @@
-const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8080'
+const API_URL = import.meta.env.VITE_API_URL ?? (typeof window !== 'undefined' ? `${window.location.protocol}//${window.location.host}` : 'http://localhost:8084')
 
 // Generic fetch wrapper with error handling.
 async function fetchApi<T>(
@@ -70,6 +70,9 @@ export const projectsApi = {
     fetchApi<void>(`/projects/${id}`, { method: 'DELETE' }),
 
   // Project pipeline methods
+  clearJobs: (id: string) =>
+    fetchApi<void>(`/projects/${id}/jobs`, { method: 'DELETE' }),
+
   listJobs: (id: string) =>
     fetchApi<import('../types').PrintJob[]>(`/projects/${id}/jobs`),
 
@@ -200,7 +203,7 @@ export const partsApi = {
 
   createWithFile: async (
     projectId: string,
-    data: Partial<import('../types').Part>,
+    data: Partial<import('../types').Part> & { gcode_file_id?: string; stl_file_id?: string },
     file?: File,
     notes?: string
   ) => {
@@ -211,6 +214,7 @@ export const partsApi = {
     const formData = new FormData()
     if (data.name) formData.append('name', data.name)
     if (data.description) formData.append('description', data.description)
+    if (data.gcode_file_id) formData.append('gcode_file_id', data.gcode_file_id)
     formData.append('quantity', String(data.quantity || 1))
     formData.append('file', file)
     if (notes) formData.append('notes', notes)
@@ -252,6 +256,18 @@ export const designsApi = {
   get: (id: string) =>
     fetchApi<import('../types').Design>(`/designs/${id}`),
 
+  linkGCode: (partId: string, gcodeFileId: string, notes?: string) =>
+    fetchApi<import('../types').Design>(`/parts/${partId}/designs`, {
+      method: 'POST',
+      body: JSON.stringify({ gcode_file_id: gcodeFileId, notes: notes || '' }),
+    }),
+
+  linkRootFile: (partId: string, file: { type: 'stl' | 'gcode'; id: string }, notes?: string) =>
+    fetchApi<import('../types').Design>(`/parts/${partId}/designs`, {
+      method: 'POST',
+      body: JSON.stringify({ gcode_file_id: file.type === 'gcode' ? file.id : undefined, stl_file_id: file.type === 'stl' ? file.id : undefined, notes: notes || '' }),
+    }),
+
   upload: async (partId: string, file: File, notes?: string) => {
     const formData = new FormData()
     formData.append('file', file)
@@ -269,6 +285,8 @@ export const designsApi = {
 
     return response.json() as Promise<import('../types').Design>
   },
+
+  delete: (id: string) => fetchApi<void>(`/designs/${id}`, { method: 'DELETE' }),
 
   downloadUrl: (id: string) => `${API_URL}/api/designs/${id}/download`,
 
@@ -297,6 +315,51 @@ export interface DiscoveredPrinter {
 }
 
 // Printers API
+export const slicerApi = {
+  getConfig: () => fetchApi<{ connection_url: string }>('/slicer/config'),
+  setConfig: (connectionUrl: string) => fetchApi<{ connection_url: string }>('/slicer/config', { method: 'PUT', body: JSON.stringify({ connection_url: connectionUrl }) }),
+  health: () => fetchApi<Record<string, unknown>>('/slicer/health'),
+  status: () => fetchApi<Record<string, unknown>>('/slicer/status'),
+  profiles: (category: 'printers' | 'presets' | 'filaments') => fetchApi<Array<Record<string, unknown>>>(`/slicer/profiles/${category}`),
+  profileJSON: (category: string, name: string) => fetchApi<Record<string, unknown>>(`/slicer/profiles/${category}/${encodeURIComponent(name)}`),
+  importProfile: (data: { category: string; name: string; url: string; overwrite?: boolean }) => fetchApi<Record<string, unknown>>('/slicer/profiles/import-url', { method: 'POST', body: JSON.stringify(data) }),
+  uploadProfileJSON: (data: { category: string; name: string; json: string }) => fetchApi<Record<string, unknown>>('/slicer/profiles/upload-json', { method: 'POST', body: JSON.stringify(data) }),
+  updateProfile: (category: string, name: string) => fetchApi<Record<string, unknown>>(`/slicer/profiles/${category}/${encodeURIComponent(name)}/update-from-source`, { method: 'POST' }),
+  resolveProfiles: (data: Record<string, unknown>) => fetchApi<Record<string, unknown>>('/slicer/resolve-profiles', { method: 'POST', body: JSON.stringify(data) }),
+  sliceSTL: (data: Record<string, unknown>) => fetchApi<Record<string, unknown>>('/slicer/slice-stl', { method: 'POST', body: JSON.stringify(data) }),
+}
+
+export const notificationsApi = {
+  list: () => fetchApi<import('../types').NotificationChannel[]>('/notifications'),
+  create: (data: Partial<import('../types').NotificationChannel>) =>
+    fetchApi<import('../types').NotificationChannel>('/notifications', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  update: (id: string, data: Partial<import('../types').NotificationChannel>) =>
+    fetchApi<import('../types').NotificationChannel>(`/notifications/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+  delete: (id: string) => fetchApi<void>(`/notifications/${id}`, { method: 'DELETE' }),
+  test: (id: string) => fetchApi<void>(`/notifications/${id}/test`, { method: 'POST' }),
+  deliveries: (channelId?: string) =>
+    fetchApi<import('../types').NotificationDelivery[]>(`/notifications/deliveries${channelId ? `?channel_id=${channelId}` : ''}`),
+  templates: (channelId?: string) =>
+    fetchApi<import('../types').NotificationTemplate[]>(`/notifications/templates${channelId ? `?channel_id=${channelId}` : ''}`),
+  saveTemplate: (data: import('../types').NotificationTemplate) =>
+    fetchApi<import('../types').NotificationTemplate>('/notifications/templates', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  deleteTemplate: (id: string) => fetchApi<void>(`/notifications/templates/${id}`, { method: 'DELETE' }),
+  previewTemplate: (data: import('../types').NotificationTemplate) =>
+    fetchApi<import('../types').NotificationPreview>('/notifications/templates/preview', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+}
+
 export const printersApi = {
   list: () => 
     fetchApi<import('../types').Printer[]>('/printers'),
@@ -318,6 +381,107 @@ export const printersApi = {
   
   delete: (id: string) => 
     fetchApi<void>(`/printers/${id}`, { method: 'DELETE' }),
+
+  setMaintenanceMode: (id: string, maintenanceMode: boolean) =>
+    fetchApi<import('../types').Printer>(`/printers/${id}/maintenance`, {
+      method: 'POST',
+      body: JSON.stringify({ maintenance_mode: maintenanceMode }),
+    }),
+
+  getDefault: () => fetchApi<import('../types').Printer>('/printers/default'),
+
+  setDefault: (id: string) => fetchApi<void>(`/printers/${id}/default`, { method: 'POST' }),
+
+  emergencyStop: () =>
+    fetchApi<void>('/printers/emergency-stop', { method: 'POST' }),
+
+  runMacro: (id: string, macro: string) =>
+    fetchApi<void>(`/printers/${id}/macro`, {
+      method: 'POST',
+      body: JSON.stringify({ macro }),
+    }),
+
+  reconnect: (id: string) =>
+    fetchApi<void>(`/printers/${id}/reconnect`, { method: 'POST' }),
+
+  listMacros: () => fetchApi<import('../types').PrinterMacro[]>('/printers/macros'),
+  createMacro: (title: string, command: string) =>
+    fetchApi<import('../types').PrinterMacro>('/printers/macros', {
+      method: 'POST',
+      body: JSON.stringify({ title, command }),
+    }),
+  updateMacro: (id: number, title: string, command: string) =>
+    fetchApi<import('../types').PrinterMacro>(`/printers/macros/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify({ title, command }),
+    }),
+  deleteMacro: (id: number) => fetchApi<void>(`/printers/macros/${id}`, { method: 'DELETE' }),
+
+  setPrintSpeed: (id: string, level: number) =>
+    fetchApi<void>(`/printers/${id}/speed`, {
+      method: 'POST',
+      body: JSON.stringify({ level }),
+    }),
+
+  setFeedRate: (id: string, percent: number) =>
+    fetchApi<void>(`/printers/${id}/speed`, {
+      method: 'POST',
+      body: JSON.stringify({ percent }),
+    }),
+
+  getCapabilities: (id: string) =>
+    fetchApi<import('../types').PrinterCapabilities>(`/printers/${id}/capabilities`),
+
+  setFanSpeed: (id: string, fan: string, speed: number) =>
+    fetchApi<void>(`/printers/${id}/fan`, {
+      method: 'POST',
+      body: JSON.stringify({ fan, speed }),
+    }),
+
+  setLEDMode: (id: string, mode: string) =>
+    fetchApi<void>(`/printers/${id}/led`, {
+      method: 'POST',
+      body: JSON.stringify({ mode }),
+    }),
+
+  skipObject: (id: string, objectId: string) =>
+    fetchApi<void>(`/printers/${id}/skip-object`, {
+      method: 'POST',
+      body: JSON.stringify({ object_id: objectId }),
+    }),
+
+  jog: (id: string, axis: string, distance: number) =>
+    fetchApi<void>(`/printers/${id}/jog`, {
+      method: 'POST',
+      body: JSON.stringify({ axis, distance }),
+    }),
+
+  setTemperature: (id: string, heater: string, targetTemp: number) =>
+    fetchApi<void>(`/printers/${id}/temperature`, {
+      method: 'POST',
+      body: JSON.stringify({ heater, target_temp: targetTemp }),
+    }),
+
+  plateCleared: (id: string) =>
+    fetchApi<void>(`/printers/${id}/plate-cleared`, { method: 'POST' }),
+
+  amsLoad: (id: string, amsId: string, slotId: string) =>
+    fetchApi<void>(`/printers/${id}/ams/load`, {
+      method: 'POST',
+      body: JSON.stringify({ ams_id: amsId, slot_id: slotId }),
+    }),
+
+  amsUnload: (id: string) =>
+    fetchApi<void>(`/printers/${id}/ams/unload`, { method: 'POST' }),
+
+  amsRefresh: (id: string) =>
+    fetchApi<void>(`/printers/${id}/ams/refresh`, { method: 'POST' }),
+
+  setAMSFilamentBackup: (id: string, enabled: boolean) =>
+    fetchApi<void>(`/printers/${id}/ams/backup`, {
+      method: 'POST',
+      body: JSON.stringify({ enabled }),
+    }),
   
   getState: (id: string) =>
     fetchApi<import('../types').PrinterState>(`/printers/${id}/state`),
@@ -328,13 +492,15 @@ export const printersApi = {
   getJobs: (id: string) =>
     fetchApi<import('../types').PrintJob[]>(`/printers/${id}/jobs`),
 
+  clearJobs: (id: string) =>
+    fetchApi<void>(`/printers/${id}/jobs`, { method: 'DELETE' }),
+
   getStats: (id: string) =>
     fetchApi<import('../types').JobStats>(`/printers/${id}/stats`),
 
   getAnalytics: (id: string) =>
     fetchApi<import('../types').PrinterAnalytics>(`/printers/${id}/analytics`),
 
-  // Discover printers on local network
   discover: async () => {
     console.log('Starting printer discovery...')
     try {
@@ -346,6 +512,33 @@ export const printersApi = {
       throw err
     }
   },
+}
+
+// Cameras API
+export const camerasApi = {
+  list: () => fetchApi<import('../types').Camera[]>('/cameras'),
+  create: (data: Partial<import('../types').Camera>) =>
+    fetchApi<import('../types').Camera>('/cameras', { method: 'POST', body: JSON.stringify(data) }),
+  delete: (id: string) => fetchApi<void>(`/cameras/${id}`, { method: 'DELETE' }),
+}
+
+// Timelapses API
+export const timelapsesApi = {
+  list: (printerId?: string) =>
+    fetchApi<import('../types').Timelapse[]>(`/timelapses${printerId ? `?printer_id=${printerId}` : ''}`),
+  create: (data: Partial<import('../types').Timelapse>) =>
+    fetchApi<import('../types').Timelapse>('/timelapses', { method: 'POST', body: JSON.stringify(data) }),
+}
+
+// Print Archives API
+export const archivesApi = {
+  list: (printerId?: string, status?: string) =>
+    fetchApi<import('../types').PrintArchive[]>(`/archives${printerId ? `?printer_id=${printerId}` : ''}${status ? `${printerId ? '&' : '?'}status=${status}` : ''}`),
+  create: (data: Partial<import('../types').PrintArchive>) =>
+    fetchApi<import('../types').PrintArchive>('/archives', { method: 'POST', body: JSON.stringify(data) }),
+  compare: (a: string, b: string) =>
+    fetchApi<unknown>(`/archives/compare?a=${a}&b=${b}`),
+  exportCSV: () => `/archives/log/export`,
 }
 
 // Materials API
@@ -365,11 +558,87 @@ export const materialsApi = {
       body: JSON.stringify(data),
     }),
 
+  update: (id: string, data: Partial<import('../types').Material>) =>
+    fetchApi<import('../types').Material>(`/materials/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+
   delete: (id: string) =>
     fetchApi<void>(`/materials/${id}`, { method: 'DELETE' }),
 }
 
 // Spools API
+export const enqueueProjectParts = async (projectId: string, onProgress?: (msg: string) => void) => {
+  const parts = await partsApi.listByProject(projectId)
+  if (!parts || parts.length === 0) return { added: 0, missing: 0 }
+
+  const library = await fileLibraryApi.get()
+  const spools = await spoolsApi.list()
+  const materials = await materialsApi.list()
+  const spoolsWithMaterials = spools.map(s => ({ ...s, material: materials.find(m => m.id === s.material_id) }))
+  const availableSpools = spoolsWithMaterials.filter(s => s.status !== 'empty' && s.status !== 'archived' && s.material)
+
+  let addedCount = 0
+  let missingGCodeCount = 0
+
+  for (const part of parts) {
+    const designs = await designsApi.listByPart(part.id)
+    if (!designs || designs.length === 0) continue
+
+    const latestDesign = [...designs].sort((a, b) => b.version - a.version)[0]
+    if (!latestDesign) continue
+
+    let gcodeToPrint: import('../types').GCodeLibraryFile | undefined
+
+    if (latestDesign.file_type === 'stl') {
+      const stl = (library.stl_files || []).find(file => file.file_id === latestDesign.file_id)
+      gcodeToPrint = stl?.gcodes?.find(file => file.default_for_stl) || stl?.gcodes?.[0]
+    } else if (latestDesign.file_type === 'gcode') {
+      gcodeToPrint = [...(library.root_gcode_files || []), ...(library.stl_files || []).flatMap(file => file.gcodes || [])].find(file => file.file_id === latestDesign.file_id)
+    }
+
+    if (!gcodeToPrint) {
+      missingGCodeCount++
+      continue
+    }
+
+    let assigned_spool_id: string | undefined
+    let spoolData: (import('../types').MaterialSpool & { material?: import('../types').Material }) | undefined
+
+    if (gcodeToPrint.material_type) {
+      const materialType = gcodeToPrint.material_type.toLowerCase()
+      const spool = availableSpools.find(s => s.material?.type.toLowerCase() === materialType)
+      if (spool) {
+        assigned_spool_id = spool.id
+        spoolData = spool
+      }
+    }
+
+    for (let i = 0; i < part.quantity; i++) {
+      if (onProgress) onProgress(`Queueing ${part.name} (${i + 1}/${part.quantity})...`)
+      try {
+        await gcodeLibraryApi.addToQueue(gcodeToPrint.id, spoolData?.material ? { 
+          assigned_spool_id, 
+          project_id: part.project_id, 
+          material_type: spoolData.material.type, 
+          material_color: spoolData.material.color_hex || spoolData.material.color, 
+          filament_name: spoolData.material.name, 
+          source_type: 'project' 
+        } : { 
+          project_id: part.project_id, 
+          source_type: 'project' 
+        })
+        addedCount++
+      } catch (e) {
+        console.error(`Failed to queue ${part.name}:`, e)
+      }
+    }
+  }
+
+  return { added: addedCount, missing: missingGCodeCount }
+}
+
 export const spoolsApi = {
   list: () => 
     fetchApi<import('../types').MaterialSpool[]>('/spools'),
@@ -380,6 +649,12 @@ export const spoolsApi = {
   create: (data: Partial<import('../types').MaterialSpool>) =>
     fetchApi<import('../types').MaterialSpool>('/spools', {
       method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  update: (id: string, data: Partial<import('../types').MaterialSpool>) =>
+    fetchApi<import('../types').MaterialSpool>(`/spools/${id}`, {
+      method: 'PATCH',
       body: JSON.stringify(data),
     }),
 
@@ -410,6 +685,14 @@ export const printJobsApi = {
     fetchApi<import('../types').PrintJob>(`/print-jobs/${id}`, {
       method: 'PATCH',
       body: JSON.stringify(data),
+    }),
+
+  delete: (id: string) => fetchApi<void>(`/print-jobs/${id}`, { method: 'DELETE' }),
+
+  updatePriority: (id: string, priority: number) =>
+    fetchApi<{ status: string }>(`/print-jobs/${id}/priority`, {
+      method: 'PATCH',
+      body: JSON.stringify({ priority }),
     }),
 
   start: (id: string) =>
@@ -466,6 +749,155 @@ export const printJobsApi = {
   // Jobs by recipe
   listByRecipe: (recipeId: string) =>
     fetchApi<import('../types').PrintJob[]>(`/templates/${recipeId}/jobs`),
+}
+
+// Queue API
+export const gcodeLibraryApi = {
+  list: (params?: { q?: string; material?: string; profile?: string; nozzle?: string; layer?: string; time_bucket?: string; usage?: string; sort?: string; page?: number; page_size?: number }) => {
+    const searchParams = new URLSearchParams()
+    if (params) {
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined && value !== '') searchParams.set(key, String(value))
+      })
+    }
+    const query = searchParams.toString()
+    return fetchApi<import('../types').GCodeLibraryResponse>(`/gcode-library${query ? `?${query}` : ''}`)
+  },
+
+  upload: async (file: File, parentSTLId?: string | null) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    if (parentSTLId) formData.append('parent_stl_id', parentSTLId)
+    const response = await fetch(`${API_URL}/api/gcode-library/upload`, { method: 'POST', body: formData })
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: 'Upload failed' }))
+      throw new Error(error.error)
+    }
+    return response.json() as Promise<import('../types').GCodeLibraryFile>
+  },
+
+  update: (id: string, data: Partial<import('../types').GCodeLibraryFile>) =>
+    fetchApi<import('../types').GCodeLibraryFile>(`/gcode-library/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+
+  delete: (id: string) => fetchApi<void>(`/gcode-library/${id}`, { method: 'DELETE' }),
+
+  setParentSTL: (id: string, parentSTLId: string | null) =>
+    fetchApi<void>(`/gcode-library/${id}/parent-stl`, { method: 'PATCH', body: JSON.stringify({ parent_stl_id: parentSTLId }) }),
+
+  setDefaultForSTL: (id: string) =>
+    fetchApi<void>(`/gcode-library/${id}/default-for-stl`, { method: 'PATCH' }),
+
+  addToQueue: (id: string, data?: { assigned_spool_id?: string; project_id?: string; material_type?: string; material_color?: string; filament_name?: string; source_type?: 'library' | 'project' }) =>
+    fetchApi<import('../types').GCodeQueueItem>(`/gcode-library/${id}/add-to-queue`, { method: 'POST', body: data ? JSON.stringify(data) : undefined }),
+
+  listTags: () => fetchApi<import('../types').Tag[]>('/gcode-library/tags'),
+
+  createTag: (data: { name: string; color?: string }) =>
+    fetchApi<import('../types').Tag>('/gcode-library/tags', { method: 'POST', body: JSON.stringify(data) }),
+
+  addTag: (fileId: string, tagId: string) =>
+    fetchApi<void>(`/gcode-library/${fileId}/tags/${tagId}`, { method: 'POST' }),
+
+  removeTag: (fileId: string, tagId: string) =>
+    fetchApi<void>(`/gcode-library/${fileId}/tags/${tagId}`, { method: 'DELETE' }),
+}
+
+export const fileLibraryApi = {
+  get: () => fetchApi<import('../types').FileLibraryResponse>('/file-library'),
+}
+
+export const stlLibraryApi = {
+  list: (params?: { q?: string; sort?: string; page?: number; page_size?: number }) => {
+    const searchParams = new URLSearchParams()
+    if (params) {
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined && value !== '') searchParams.set(key, String(value))
+      })
+    }
+    const query = searchParams.toString()
+    return fetchApi<import('../types').STLLibraryResponse>(`/stl-library${query ? `?${query}` : ''}`)
+  },
+
+  upload: async (file: File, thumbnail?: Blob | null) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    if (thumbnail) formData.append('thumbnail', thumbnail, `${file.name}.png`)
+    const response = await fetch(`${API_URL}/api/stl-library/upload`, { method: 'POST', body: formData })
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: 'Upload failed' }))
+      throw new Error(error.error)
+    }
+    return response.json() as Promise<import('../types').STLLibraryFile>
+  },
+
+  update: (id: string, data: Partial<import('../types').STLLibraryFile>) =>
+    fetchApi<import('../types').STLLibraryFile>(`/stl-library/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+
+  updateThumbnail: async (id: string, thumbnail: Blob) => {
+    const formData = new FormData()
+    formData.append('thumbnail', thumbnail, `${id}.png`)
+    const response = await fetch(`${API_URL}/api/stl-library/${id}/thumbnail`, { method: 'POST', body: formData })
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: 'Thumbnail upload failed' }))
+      throw new Error(error.error)
+    }
+    return response.json() as Promise<import('../types').STLLibraryFile>
+  },
+
+  addTag: (fileId: string, tagId: string) =>
+    fetchApi<void>(`/stl-library/${fileId}/tags`, { method: 'POST', body: JSON.stringify({ tag_id: tagId }) }),
+
+  removeTag: (fileId: string, tagId: string) =>
+    fetchApi<void>(`/stl-library/${fileId}/tags/${tagId}`, { method: 'DELETE' }),
+
+  delete: (id: string) => fetchApi<void>(`/stl-library/${id}`, { method: 'DELETE' }),
+}
+
+export const queueApi = {
+  get: () => fetchApi<import('../types').QueueResponse>('/queue'),
+
+  upload: async (file: File, data: { display_name?: string; notes?: string; printer_id?: string; spool_id?: string; material_type?: string; material_color?: string }) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    Object.entries(data).forEach(([key, value]) => {
+      if (value) formData.append(key, value)
+    })
+    const response = await fetch(`${API_URL}/api/queue/upload`, { method: 'POST', body: formData })
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: 'Upload failed' }))
+      throw new Error(error.error)
+    }
+    return response.json() as Promise<import('../types').GCodeQueueItem>
+  },
+
+  fromPrintJob: (jobId: string, data: Partial<import('../types').GCodeQueueItem>) =>
+    fetchApi<import('../types').GCodeQueueItem>(`/queue/from-print-job/${jobId}`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  update: (id: string, data: Partial<import('../types').GCodeQueueItem>) =>
+    fetchApi<import('../types').GCodeQueueItem>(`/queue/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+
+  delete: (id: string) => fetchApi<void>(`/queue/${id}`, { method: 'DELETE' }),
+  preflight: (id: string) => fetchApi<import('../types').PreflightCheckResult>(`/queue/${id}/preflight`, { method: 'POST' }),
+  start: (id: string) => fetchApi<{ status: string }>(`/queue/${id}/start`, { method: 'POST' }),
+  setStatus: (id: string, status: import('../types').QueueItemStatus) =>
+    fetchApi<{ status: string }>(`/queue/${id}/status`, {
+      method: 'POST',
+      body: JSON.stringify({ status }),
+    }),
+  updatePriority: (id: string, priority: number) =>
+    fetchApi<{ status: string }>(`/queue/${id}/priority`, {
+      method: 'PATCH',
+      body: JSON.stringify({ priority }),
+    }),
 }
 
 // Expenses API
@@ -629,6 +1061,8 @@ export const statsApi = {
 
   getSalesByProject: () =>
     fetchApi<import('../types').ProjectSales[]>('/stats/sales-by-project'),
+
+  getUsage: (period?: string) => fetchApi<Record<string, number>>(`/stats/usage${period ? `?period=${period}` : ''}`),
 }
 
 // Templates (Recipes) API
@@ -1325,7 +1759,7 @@ export const quotesApi = {
 }
 
 // Public API (no auth, for shareable pages)
-const PUBLIC_API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8080'
+const PUBLIC_API_URL = import.meta.env.VITE_API_URL ?? (typeof window !== 'undefined' ? `${window.location.protocol}//${window.location.host}` : 'http://localhost:8084')
 
 async function fetchPublicApi<T>(path: string): Promise<T> {
   const url = `${PUBLIC_API_URL}/api/public${path}`

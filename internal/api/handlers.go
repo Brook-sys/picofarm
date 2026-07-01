@@ -12,10 +12,10 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
-	"github.com/philjestin/daedalus/internal/model"
-	"github.com/philjestin/daedalus/internal/printer"
-	"github.com/philjestin/daedalus/internal/service"
-	"github.com/philjestin/daedalus/internal/validation"
+	"github.com/Brook-sys/picofarm/internal/model"
+	"github.com/Brook-sys/picofarm/internal/printer"
+	"github.com/Brook-sys/picofarm/internal/service"
+	"github.com/Brook-sys/picofarm/internal/validation"
 )
 
 // respondJSON sends a JSON response.
@@ -281,15 +281,39 @@ func (h *PartHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var part model.Part
-	if err := json.NewDecoder(r.Body).Decode(&part); err != nil {
+	var req struct {
+		model.Part
+		GCodeFileID *uuid.UUID `json:"gcode_file_id"`
+		STLFileID   *uuid.UUID `json:"stl_file_id"`
+		Notes       string     `json:"notes"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		respondError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
+	part := req.Part
 	part.ProjectID = projectID
 
 	if err := h.service.Create(r.Context(), &part); err != nil {
 		respondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if req.GCodeFileID != nil && h.designService != nil {
+		design, err := h.designService.CreateFromGCodeLibrary(r.Context(), part.ID, *req.GCodeFileID, req.Notes)
+		if err != nil {
+			respondError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		respondJSON(w, http.StatusCreated, map[string]interface{}{"part": part, "design": design})
+		return
+	}
+	if req.STLFileID != nil && h.designService != nil {
+		design, err := h.designService.CreateFromSTLLibrary(r.Context(), part.ID, *req.STLFileID, req.Notes)
+		if err != nil {
+			respondError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		respondJSON(w, http.StatusCreated, map[string]interface{}{"part": part, "design": design})
 		return
 	}
 
@@ -319,6 +343,21 @@ func (h *PartHandler) createWithFile(w http.ResponseWriter, r *http.Request, pro
 
 	if err := h.service.Create(r.Context(), &part); err != nil {
 		respondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	if id := r.FormValue("gcode_file_id"); id != "" && h.designService != nil {
+		gcodeID, err := uuid.Parse(id)
+		if err != nil {
+			respondError(w, http.StatusBadRequest, "invalid gcode file ID")
+			return
+		}
+		design, err := h.designService.CreateFromGCodeLibrary(r.Context(), part.ID, gcodeID, r.FormValue("notes"))
+		if err != nil {
+			respondError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		respondJSON(w, http.StatusCreated, map[string]interface{}{"part": part, "design": design})
 		return
 	}
 
@@ -457,6 +496,37 @@ func (h *DesignHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	ct := r.Header.Get("Content-Type")
+	if !strings.HasPrefix(ct, "multipart/form-data") {
+		// JSON path: link existing G-code library file
+		var req struct {
+			GCodeFileID uuid.UUID `json:"gcode_file_id"`
+			STLFileID   uuid.UUID `json:"stl_file_id"`
+			Notes       string    `json:"notes"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			respondError(w, http.StatusBadRequest, "invalid request body")
+			return
+		}
+		if req.GCodeFileID == uuid.Nil && req.STLFileID == uuid.Nil {
+			respondError(w, http.StatusBadRequest, "gcode_file_id or stl_file_id is required")
+			return
+		}
+		var design *model.Design
+		var err error
+		if req.STLFileID != uuid.Nil {
+			design, err = h.service.CreateFromSTLLibrary(r.Context(), partID, req.STLFileID, req.Notes)
+		} else {
+			design, err = h.service.CreateFromGCodeLibrary(r.Context(), partID, req.GCodeFileID, req.Notes)
+		}
+		if err != nil {
+			respondError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		respondJSON(w, http.StatusCreated, design)
+		return
+	}
+
 	// Parse multipart form (max 100MB)
 	if err := r.ParseMultipartForm(100 << 20); err != nil {
 		respondError(w, http.StatusBadRequest, "failed to parse form")
@@ -503,6 +573,19 @@ func (h *DesignHandler) Get(w http.ResponseWriter, r *http.Request) {
 }
 
 // Download returns the design file.
+func (h *DesignHandler) Delete(w http.ResponseWriter, r *http.Request) {
+	id, err := parseUUID(r, "id")
+	if err != nil {
+		respondError(w, http.StatusBadRequest, "invalid design ID")
+		return
+	}
+	if err := h.service.Delete(r.Context(), id); err != nil {
+		respondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func (h *DesignHandler) Download(w http.ResponseWriter, r *http.Request) {
 	id, err := parseUUID(r, "id")
 	if err != nil {
@@ -667,6 +750,402 @@ func (h *PrinterHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// EmergencyStop cancels all active prints on every connected printer.
+func (h *PrinterHandler) EmergencyStop(w http.ResponseWriter, r *http.Request) {
+	errs := h.service.EmergencyStop(r.Context())
+	if len(errs) > 0 {
+		respondJSON(w, http.StatusMultiStatus, map[string]interface{}{
+			"errors": errs,
+		})
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// SetPrintSpeed sets the print speed profile or feed rate on a printer.
+func (h *PrinterHandler) SetPrintSpeed(w http.ResponseWriter, r *http.Request) {
+	id, err := parseUUID(r, "id")
+	if err != nil {
+		respondError(w, http.StatusBadRequest, "invalid printer ID")
+		return
+	}
+	var req struct {
+		Level   int `json:"level"`
+		Percent int `json:"percent"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if req.Percent > 0 {
+		if err := h.service.SetFeedRate(r.Context(), id, req.Percent); err != nil {
+			respondError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	if err := h.service.SetPrintSpeed(r.Context(), id, req.Level); err != nil {
+		respondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *PrinterHandler) GetCapabilities(w http.ResponseWriter, r *http.Request) {
+	id, err := parseUUID(r, "id")
+	if err != nil {
+		respondError(w, http.StatusBadRequest, "invalid printer ID")
+		return
+	}
+	caps, err := h.service.GetCapabilities(r.Context(), id)
+	if err != nil {
+		respondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	respondJSON(w, http.StatusOK, caps)
+}
+
+// SetFanSpeed sets a fan speed (0-100%) on a printer.
+func (h *PrinterHandler) SetFanSpeed(w http.ResponseWriter, r *http.Request) {
+	id, err := parseUUID(r, "id")
+	if err != nil {
+		respondError(w, http.StatusBadRequest, "invalid printer ID")
+		return
+	}
+	var req struct {
+		Fan   string `json:"fan"`
+		Speed int    `json:"speed"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if err := h.service.SetFanSpeed(r.Context(), id, req.Fan, req.Speed); err != nil {
+		respondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// SetLEDMode controls the chamber light.
+func (h *PrinterHandler) SetLEDMode(w http.ResponseWriter, r *http.Request) {
+	id, err := parseUUID(r, "id")
+	if err != nil {
+		respondError(w, http.StatusBadRequest, "invalid printer ID")
+		return
+	}
+	var req struct {
+		Mode string `json:"mode"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if err := h.service.SetLEDMode(r.Context(), id, req.Mode); err != nil {
+		respondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// SkipObject excludes an object from the current print.
+func (h *PrinterHandler) SkipObject(w http.ResponseWriter, r *http.Request) {
+	id, err := parseUUID(r, "id")
+	if err != nil {
+		respondError(w, http.StatusBadRequest, "invalid printer ID")
+		return
+	}
+	var req struct {
+		ObjectID string `json:"object_id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if err := h.service.SkipObject(r.Context(), id, req.ObjectID); err != nil {
+		respondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// Jog moves an axis by a relative distance.
+func (h *PrinterHandler) Jog(w http.ResponseWriter, r *http.Request) {
+	id, err := parseUUID(r, "id")
+	if err != nil {
+		respondError(w, http.StatusBadRequest, "invalid printer ID")
+		return
+	}
+	var req struct {
+		Axis     string  `json:"axis"`
+		Distance float64 `json:"distance"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if err := h.service.Jog(r.Context(), id, req.Axis, req.Distance); err != nil {
+		respondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// SetTemperature sets a heater target temperature.
+func (h *PrinterHandler) SetTemperature(w http.ResponseWriter, r *http.Request) {
+	id, err := parseUUID(r, "id")
+	if err != nil {
+		respondError(w, http.StatusBadRequest, "invalid printer ID")
+		return
+	}
+	var req struct {
+		Heater     string  `json:"heater"`
+		TargetTemp float64 `json:"target_temp"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if err := h.service.SetTemperature(r.Context(), id, req.Heater, req.TargetTemp); err != nil {
+		respondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// AMSLoad loads filament from a specific AMS slot.
+func (h *PrinterHandler) AMSLoad(w http.ResponseWriter, r *http.Request) {
+	id, err := parseUUID(r, "id")
+	if err != nil {
+		respondError(w, http.StatusBadRequest, "invalid printer ID")
+		return
+	}
+	var req struct {
+		AMSID  string `json:"ams_id"`
+		SlotID string `json:"slot_id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if err := h.service.AMSLoad(r.Context(), id, req.AMSID, req.SlotID); err != nil {
+		respondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// AMSUnload unloads the current AMS filament.
+func (h *PrinterHandler) AMSUnload(w http.ResponseWriter, r *http.Request) {
+	id, err := parseUUID(r, "id")
+	if err != nil {
+		respondError(w, http.StatusBadRequest, "invalid printer ID")
+		return
+	}
+	if err := h.service.AMSUnload(r.Context(), id); err != nil {
+		respondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// AMSRefresh triggers RFID re-read.
+func (h *PrinterHandler) AMSRefresh(w http.ResponseWriter, r *http.Request) {
+	id, err := parseUUID(r, "id")
+	if err != nil {
+		respondError(w, http.StatusBadRequest, "invalid printer ID")
+		return
+	}
+	if err := h.service.AMSRefresh(r.Context(), id); err != nil {
+		respondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// SetAMSFilamentBackup toggles AMS backup mode.
+func (h *PrinterHandler) SetAMSFilamentBackup(w http.ResponseWriter, r *http.Request) {
+	id, err := parseUUID(r, "id")
+	if err != nil {
+		respondError(w, http.StatusBadRequest, "invalid printer ID")
+		return
+	}
+	var req struct {
+		Enabled bool `json:"enabled"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if err := h.service.SetAMSFilamentBackup(r.Context(), id, req.Enabled); err != nil {
+		respondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// PlateCleared confirms the build plate is clear.
+func (h *PrinterHandler) PlateCleared(w http.ResponseWriter, r *http.Request) {
+	id, err := parseUUID(r, "id")
+	if err != nil {
+		respondError(w, http.StatusBadRequest, "invalid printer ID")
+		return
+	}
+	if err := h.service.PlateCleared(r.Context(), id); err != nil {
+		respondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// SetMaintenanceMode enables or disables maintenance mode for a printer.
+func (h *PrinterHandler) GetDefault(w http.ResponseWriter, r *http.Request) {
+	p, err := h.service.GetDefault(r.Context())
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if p == nil {
+		respondError(w, http.StatusNotFound, "no default printer set")
+		return
+	}
+	respondJSON(w, http.StatusOK, p)
+}
+
+func (h *PrinterHandler) SetDefault(w http.ResponseWriter, r *http.Request) {
+	id, err := parseUUID(r, "id")
+	if err != nil {
+		respondError(w, http.StatusBadRequest, "invalid printer ID")
+		return
+	}
+	if err := h.service.SetDefault(r.Context(), id); err != nil {
+		respondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *PrinterHandler) Reconnect(w http.ResponseWriter, r *http.Request) {
+	id, err := parseUUID(r, "id")
+	if err != nil {
+		respondError(w, http.StatusBadRequest, "invalid printer ID")
+		return
+	}
+	if err := h.service.ReconnectAsync(r.Context(), id); err != nil {
+		respondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	w.WriteHeader(http.StatusAccepted)
+}
+
+func (h *PrinterHandler) RunMacro(w http.ResponseWriter, r *http.Request) {
+	id, err := parseUUID(r, "id")
+	if err != nil {
+		respondError(w, http.StatusBadRequest, "invalid printer ID")
+		return
+	}
+	var req struct {
+		Macro string `json:"macro"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if err := h.service.RunMacro(r.Context(), id, req.Macro); err != nil {
+		respondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *PrinterHandler) ListMacros(w http.ResponseWriter, r *http.Request) {
+	macros, err := h.service.ListMacros(r.Context())
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	respondJSON(w, http.StatusOK, macros)
+}
+
+func (h *PrinterHandler) CreateMacro(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Title   string `json:"title"`
+		Command string `json:"command"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	macro, err := h.service.CreateMacro(r.Context(), req.Title, req.Command)
+	if err != nil {
+		respondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	respondJSON(w, http.StatusCreated, macro)
+}
+
+func (h *PrinterHandler) UpdateMacro(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(chi.URLParam(r, "macroID"), 10, 64)
+	if err != nil {
+		respondError(w, http.StatusBadRequest, "invalid macro ID")
+		return
+	}
+	var req model.PrinterMacro
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	req.ID = id
+	macro, err := h.service.UpdateMacro(r.Context(), &req)
+	if err != nil {
+		respondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	respondJSON(w, http.StatusOK, macro)
+}
+
+func (h *PrinterHandler) DeleteMacro(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(chi.URLParam(r, "macroID"), 10, 64)
+	if err != nil {
+		respondError(w, http.StatusBadRequest, "invalid macro ID")
+		return
+	}
+	if err := h.service.DeleteMacro(r.Context(), id); err != nil {
+		respondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *PrinterHandler) SetMaintenanceMode(w http.ResponseWriter, r *http.Request) {
+	id, err := parseUUID(r, "id")
+	if err != nil {
+		respondError(w, http.StatusBadRequest, "invalid printer ID")
+		return
+	}
+
+	var req struct {
+		MaintenanceMode bool `json:"maintenance_mode"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	printer, err := h.service.SetMaintenanceMode(r.Context(), id, req.MaintenanceMode)
+	if err != nil {
+		if err.Error() == "printer not found" {
+			respondError(w, http.StatusNotFound, err.Error())
+			return
+		}
+		respondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	respondJSON(w, http.StatusOK, printer)
+}
+
 // GetState returns the real-time state of a printer.
 func (h *PrinterHandler) GetState(w http.ResponseWriter, r *http.Request) {
 	id, err := parseUUID(r, "id")
@@ -693,7 +1172,7 @@ func (h *PrinterHandler) GetAllStates(w http.ResponseWriter, r *http.Request) {
 // Discover scans the network for printers.
 func (h *PrinterHandler) Discover(w http.ResponseWriter, r *http.Request) {
 	slog.Info("starting printer discovery")
-	
+
 	ctx := context.Background()
 	printers, err := h.service.DiscoverPrinters(ctx)
 	if err != nil {
@@ -701,13 +1180,13 @@ func (h *PrinterHandler) Discover(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	
+
 	slog.Info("discovery complete", "found", len(printers))
-	
+
 	if printers == nil {
 		printers = []printer.DiscoveredPrinter{}
 	}
-	
+
 	respondJSON(w, http.StatusOK, printers)
 }
 
@@ -845,6 +1324,26 @@ func (h *MaterialHandler) Get(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, http.StatusOK, material)
 }
 
+// Update updates a material.
+func (h *MaterialHandler) Update(w http.ResponseWriter, r *http.Request) {
+	id, err := parseUUID(r, "id")
+	if err != nil {
+		respondError(w, http.StatusBadRequest, "invalid material ID")
+		return
+	}
+	var material model.Material
+	if err := json.NewDecoder(r.Body).Decode(&material); err != nil {
+		respondError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	material.ID = id
+	if err := h.service.Update(r.Context(), &material); err != nil {
+		respondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	respondJSON(w, http.StatusOK, material)
+}
+
 // Delete removes a material by ID.
 func (h *MaterialHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	id, err := parseUUID(r, "id")
@@ -915,6 +1414,26 @@ func (h *SpoolHandler) Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	respondJSON(w, http.StatusOK, spool)
+}
+
+// Update updates a spool.
+func (h *SpoolHandler) Update(w http.ResponseWriter, r *http.Request) {
+	id, err := parseUUID(r, "id")
+	if err != nil {
+		respondError(w, http.StatusBadRequest, "invalid spool ID")
+		return
+	}
+	var spool model.MaterialSpool
+	if err := json.NewDecoder(r.Body).Decode(&spool); err != nil {
+		respondError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	spool.ID = id
+	if err := h.service.Update(r.Context(), &spool); err != nil {
+		respondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
 	respondJSON(w, http.StatusOK, spool)
 }
 
@@ -1005,6 +1524,45 @@ func (h *PrintJobHandler) Create(w http.ResponseWriter, r *http.Request) {
 }
 
 // Get returns a print job by ID.
+func (h *PrintJobHandler) Delete(w http.ResponseWriter, r *http.Request) {
+	id, err := parseUUID(r, "id")
+	if err != nil {
+		respondError(w, http.StatusBadRequest, "invalid print job ID")
+		return
+	}
+	if err := h.service.Delete(r.Context(), id); err != nil {
+		respondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *PrintJobHandler) DeleteByProject(w http.ResponseWriter, r *http.Request) {
+	projectID, err := parseUUID(r, "id")
+	if err != nil {
+		respondError(w, http.StatusBadRequest, "invalid project ID")
+		return
+	}
+	if err := h.service.DeleteByProject(r.Context(), projectID); err != nil {
+		respondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *PrintJobHandler) DeleteByPrinter(w http.ResponseWriter, r *http.Request) {
+	printerID, err := parseUUID(r, "id")
+	if err != nil {
+		respondError(w, http.StatusBadRequest, "invalid printer ID")
+		return
+	}
+	if err := h.service.DeleteByPrinter(r.Context(), printerID); err != nil {
+		respondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func (h *PrintJobHandler) Get(w http.ResponseWriter, r *http.Request) {
 	id, err := parseUUID(r, "id")
 	if err != nil {
@@ -1415,6 +1973,31 @@ func (h *FileHandler) Get(w http.ResponseWriter, r *http.Request) {
 	io.Copy(w, reader) //nolint:errcheck // best-effort streaming to HTTP client
 }
 
+// Upload saves a small image file and returns its file record.
+func (h *FileHandler) Upload(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseMultipartForm(10 << 20); err != nil {
+		respondError(w, http.StatusBadRequest, "invalid multipart form")
+		return
+	}
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		respondError(w, http.StatusBadRequest, "file is required")
+		return
+	}
+	defer file.Close()
+	contentType := header.Header.Get("Content-Type")
+	if contentType != "image/png" && contentType != "image/jpeg" {
+		respondError(w, http.StatusBadRequest, "only PNG and JPG images are supported")
+		return
+	}
+	created, err := h.service.Upload(r.Context(), header.Filename, file)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	respondJSON(w, http.StatusCreated, created)
+}
+
 // ExpenseHandler handles expense endpoints.
 type ExpenseHandler struct {
 	service *service.ExpenseService
@@ -1694,6 +2277,12 @@ func (h *SaleHandler) GetWeeklyInsights(w http.ResponseWriter, r *http.Request) 
 func parsePeriodTime(period string) time.Time {
 	now := time.Now()
 	switch period {
+	case "1d":
+		return now.AddDate(0, 0, -1)
+	case "3d":
+		return now.AddDate(0, 0, -3)
+	case "7d":
+		return now.AddDate(0, 0, -7)
 	case "60d":
 		return now.AddDate(0, 0, -60)
 	case "90d":
@@ -1761,6 +2350,21 @@ func (h *StatsHandler) GetExpensesByCategory(w http.ResponseWriter, r *http.Requ
 		data = []service.CategoryBreakdown{}
 	}
 
+	respondJSON(w, http.StatusOK, data)
+}
+
+// GetUsage returns aggregated printer and filament usage stats.
+func (h *StatsHandler) GetUsage(w http.ResponseWriter, r *http.Request) {
+	var since *time.Time
+	if period := r.URL.Query().Get("period"); period != "" {
+		t := parsePeriodTime(period)
+		since = &t
+	}
+	data, err := h.service.GetUsageStats(r.Context(), since)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
 	respondJSON(w, http.StatusOK, data)
 }
 
@@ -2711,4 +3315,3 @@ func (h *BackupHandler) UpdateConfig(w http.ResponseWriter, r *http.Request) {
 
 	respondJSON(w, http.StatusOK, config)
 }
-

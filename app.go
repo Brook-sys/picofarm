@@ -10,26 +10,26 @@ import (
 	"time"
 
 	"github.com/getsentry/sentry-go"
-	"github.com/philjestin/daedalus/internal/api"
-	"github.com/philjestin/daedalus/internal/database"
-	"github.com/philjestin/daedalus/internal/printer"
-	"github.com/philjestin/daedalus/internal/realtime"
-	"github.com/philjestin/daedalus/internal/repository"
-	"github.com/philjestin/daedalus/internal/service"
-	"github.com/philjestin/daedalus/internal/storage"
-	"github.com/philjestin/daedalus/internal/version"
 	"github.com/joho/godotenv"
+	"github.com/Brook-sys/picofarm/internal/api"
+	"github.com/Brook-sys/picofarm/internal/database"
+	"github.com/Brook-sys/picofarm/internal/printer"
+	"github.com/Brook-sys/picofarm/internal/realtime"
+	"github.com/Brook-sys/picofarm/internal/repository"
+	"github.com/Brook-sys/picofarm/internal/service"
+	"github.com/Brook-sys/picofarm/internal/storage"
+	"github.com/Brook-sys/picofarm/internal/version"
 )
 
 // App struct holds the application state
 type App struct {
-	ctx         context.Context
-	server      *http.Server
-	db          *sql.DB
-	dbPath      string
-	hub         *realtime.Hub
-	printerMgr  *printer.Manager
-	services    *service.Services
+	ctx        context.Context
+	server     *http.Server
+	db         *sql.DB
+	dbPath     string
+	hub        *realtime.Hub
+	printerMgr *printer.Manager
+	services   *service.Services
 }
 
 // NewApp creates a new App application struct
@@ -65,12 +65,12 @@ func (a *App) startup(ctx context.Context) {
 	slog.SetDefault(logger)
 
 	// Get configuration from environment
-	port := getEnv("PORT", "8080")
+	port := getEnv("PORT", "8084")
 	uploadDir := getEnv("UPLOAD_DIR", "./uploads")
 
 	// Etsy OAuth configuration (optional)
 	etsyClientID := os.Getenv("ETSY_CLIENT_ID")
-	etsyRedirectURI := getEnv("ETSY_REDIRECT_URI", "http://localhost:8080/api/integrations/etsy/callback")
+	etsyRedirectURI := getEnv("ETSY_REDIRECT_URI", "http://localhost:8084/api/integrations/etsy/callback")
 
 	// Open SQLite database
 	dbPath := os.Getenv("DATABASE_PATH")
@@ -124,8 +124,9 @@ func (a *App) startup(ctx context.Context) {
 	// Initialize PrintJobService
 	a.services.PrintJobs.Init()
 
-	// Reconnect all saved printers at startup
+	// Reconnect all saved printers at startup and keep retrying offline printers.
 	a.services.Printers.ConnectAllPrinters(context.Background())
+	a.services.Printers.StartAutoReconnect(context.Background())
 
 	if etsyClientID != "" {
 		slog.Info("Etsy integration enabled", "redirect_uri", etsyRedirectURI)
@@ -202,7 +203,7 @@ func (a *App) GetVersion() string {
 
 // GetAPIURL returns the API URL for the frontend
 func (a *App) GetAPIURL() string {
-	port := getEnv("PORT", "8080")
+	port := getEnv("PORT", "8084")
 	return fmt.Sprintf("http://localhost:%s", port)
 }
 

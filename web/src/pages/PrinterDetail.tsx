@@ -1,17 +1,30 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { ArrowLeft, Wifi, Thermometer, Fan, Gauge, Info, AlertTriangle, Lightbulb, Box, History, CheckCircle, XCircle, Printer as PrinterIcon, Clock, DollarSign, Check, X, Activity, TrendingUp, Target, Heart } from 'lucide-react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { ArrowLeft, Wifi, Thermometer, Fan, Gauge, Info, AlertTriangle, Lightbulb, Box, History, CheckCircle, XCircle, Printer as PrinterIcon, Clock, DollarSign, Check, X, Activity, TrendingUp, Target, Heart, ExternalLink, RefreshCw, Trash2 } from 'lucide-react'
 import { usePrinter, usePrinterState, usePrinterJobs, usePrinterStats, useUpdatePrinter, usePrinterAnalytics } from '../hooks/usePrinters'
+import { printJobsApi, printersApi, queueApi } from '../api/client'
 import { cn, getStatusBadge, formatDuration, formatRelativeTime } from '../lib/utils'
 import { ExpandableJobEvents } from '../components/JobEventTimeline'
 import AutoDispatchSettings from '../components/AutoDispatchSettings'
-import type { PrintJob, PrinterUtilization, PrinterROI, PrinterHealth } from '../types'
+import type { PrintJob, PrinterUtilization, PrinterROI, PrinterHealth, PrinterMacro, QueueItem } from '../types'
 
 const SPEED_LABELS: Record<number, string> = {
   1: 'Silent',
   2: 'Standard',
   3: 'Sport',
   4: 'Ludicrous',
+}
+
+const FEED_RATE_PRESETS = [50, 75, 100, 125, 150]
+
+function protocolCapabilities(connectionType: string) {
+  const canRunGCode = ['moonraker', 'octoprint', 'bambu_lan', 'bambu_cloud'].includes(connectionType)
+  return {
+    can_run_gcode: canRunGCode,
+    can_set_feed_rate: canRunGCode,
+    can_set_speed_profile: connectionType === 'bambu_lan' || connectionType === 'bambu_cloud',
+  }
 }
 
 function wifiStrength(signal: string): string {
@@ -72,9 +85,58 @@ function TempRow({ label, current, target }: { label: string; current?: number; 
 
 export default function PrinterDetail() {
   const { id } = useParams<{ id: string }>()
-  const { data: printer, isLoading: printerLoading } = usePrinter(id!)
-  const { data: state } = usePrinterState(id!)
+  const { data: printer, isLoading: printerLoading, refetch: refetchPrinter } = usePrinter(id!)
+  const { data: state, refetch: refetchState } = usePrinterState(id!)
+  const { data: capabilities } = useQuery({
+    queryKey: ['printer-capabilities', id],
+    queryFn: () => printersApi.getCapabilities(id!),
+    enabled: !!id,
+    retry: false,
+  })
   const { data: analytics } = usePrinterAnalytics(id!)
+  const updatePrinter = useUpdatePrinter()
+  const [controlError, setControlError] = useState('')
+  const [controlBusy, setControlBusy] = useState('')
+  const [editingInfo, setEditingInfo] = useState(false)
+  const [confirmEmergency, setConfirmEmergency] = useState(false)
+  const [infoForm, setInfoForm] = useState({ model: '', location: '', manufacturer: '', fluidd_url: '', restrict_gcode_model: true })
+
+  const startEditInfo = () => {
+    if (!printer) return
+    setInfoForm({ model: printer.model || '', location: printer.location || '', manufacturer: printer.manufacturer || '', fluidd_url: printer.fluidd_url || '', restrict_gcode_model: printer.restrict_gcode_model ?? true })
+    setEditingInfo(true)
+  }
+
+  const saveInfo = async () => {
+    if (!printer) return
+    setControlError('')
+    try {
+      await updatePrinter.mutateAsync({ id: printer.id, data: infoForm })
+      await refetchPrinter()
+      setEditingInfo(false)
+    } catch (err) {
+      setControlError(err instanceof Error ? err.message : 'Failed to save printer info')
+    }
+  }
+
+  const confirmEmergencyStop = async () => {
+    if (!printer) return
+    setConfirmEmergency(false)
+    await runControl('emergency', () => printersApi.runMacro(printer.id, 'M112'))
+  }
+
+  const runControl = async (name: string, action: () => Promise<unknown>) => {
+    setControlError('')
+    setControlBusy(name)
+    try {
+      await action()
+      await Promise.all([refetchState(), refetchPrinter()])
+    } catch (err) {
+      setControlError(err instanceof Error ? err.message : 'Control failed')
+    } finally {
+      setControlBusy('')
+    }
+  }
 
   if (printerLoading) {
     return (
@@ -100,12 +162,17 @@ export default function PrinterDetail() {
   const isPrinting = status === 'printing'
   const hasTemps = state && (state.bed_temp || state.nozzle_temp || state.chamber_temp)
   const hasFans = state && (state.cooling_fan_speed || state.aux_fan_speed || state.chamber_fan_speed || state.heatbreak_fan_speed)
+  const fallbackCaps = protocolCapabilities(printer.connection_type)
+  const printerCaps = { ...fallbackCaps, ...(state?.capabilities || {}), ...(capabilities || {}) }
   const hasAMS = state?.ams && state.ams.units.length > 0
   const hasHMS = state?.hms_errors && state.hms_errors.length > 0
   const hasLights = state?.lights && state.lights.length > 0
 
   return (
     <div className="p-4 sm:p-6 lg:p-8">
+      {confirmEmergency && (
+        <EmergencyStopModal printerName={printer.name} onCancel={() => setConfirmEmergency(false)} onConfirm={confirmEmergencyStop} busy={controlBusy === 'emergency'} />
+      )}
       {/* Header */}
       <div className="mb-6">
         <Link to="/printers" className="text-accent-400 hover:text-accent-300 flex items-center gap-1 mb-3 text-sm">
@@ -124,6 +191,11 @@ export default function PrinterDetail() {
               <span className="badge bg-surface-800 text-surface-400">
                 {printer.connection_type.replace('_', ' ')}
               </span>
+              {printer.maintenance_mode && (
+                <span className="badge bg-amber-500/20 text-amber-400">
+                  Maintenance
+                </span>
+              )}
             </div>
             <p className="text-surface-500 mt-1">
               {[printer.model, printer.serial_number].filter(Boolean).join(' / ')}
@@ -233,49 +305,61 @@ export default function PrinterDetail() {
 
         {/* DEVICE INFO */}
         <div className="card p-5">
-          <h2 className="text-sm font-semibold text-surface-400 uppercase tracking-wider mb-4 flex items-center gap-2">
-            <Info className="h-4 w-4" />
-            Device Info
-          </h2>
-          <div className="space-y-2 text-sm">
-            {state?.wifi_signal && (
-              <div className="flex items-center justify-between">
-                <span className="text-surface-400 flex items-center gap-1.5">
-                  <Wifi className="h-3.5 w-3.5" /> WiFi
-                </span>
-                <span className="text-surface-200">{wifiStrength(state.wifi_signal)}</span>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-sm font-semibold text-surface-400 uppercase tracking-wider flex items-center gap-2">
+              <Info className="h-4 w-4" />
+              Device Info
+            </h2>
+            {editingInfo ? (
+              <div className="flex gap-2">
+                <button onClick={() => setEditingInfo(false)} className="btn btn-ghost text-xs"><X className="h-3 w-3 mr-1" />Cancel</button>
+                <button onClick={saveInfo} disabled={updatePrinter.isPending} className="btn btn-primary text-xs"><Check className="h-3 w-3 mr-1" />Save</button>
               </div>
-            )}
-            {state?.nozzle_diameter && (
-              <div className="flex items-center justify-between">
-                <span className="text-surface-400">Nozzle</span>
-                <span className="text-surface-200">
-                  {state.nozzle_diameter}mm{state.nozzle_type ? ` ${state.nozzle_type}` : ''}
-                </span>
-              </div>
-            )}
-            {printer.serial_number && (
-              <div className="flex items-center justify-between">
-                <span className="text-surface-400">Serial</span>
-                <span className="text-surface-200 font-mono text-xs">{printer.serial_number}</span>
-              </div>
-            )}
-            {printer.location && (
-              <div className="flex items-center justify-between">
-                <span className="text-surface-400">Location</span>
-                <span className="text-surface-200">{printer.location}</span>
-              </div>
-            )}
-            {printer.model && (
-              <div className="flex items-center justify-between">
-                <span className="text-surface-400">Model</span>
-                <span className="text-surface-200">{printer.model}</span>
-              </div>
-            )}
-            {!state?.wifi_signal && !state?.nozzle_diameter && !printer.serial_number && !printer.location && !printer.model && (
-              <p className="text-surface-500">No additional info available</p>
+            ) : (
+              <button onClick={startEditInfo} className="btn btn-secondary text-xs">Edit</button>
             )}
           </div>
+
+          {editingInfo ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <label className="block"><span className="text-xs text-surface-500 mb-1 block">Model</span><input value={infoForm.model} onChange={e => setInfoForm(prev => ({ ...prev, model: e.target.value }))} className="input" placeholder="Neptune 4 Plus" /></label>
+              <label className="block"><span className="text-xs text-surface-500 mb-1 block">Manufacturer</span><input value={infoForm.manufacturer} onChange={e => setInfoForm(prev => ({ ...prev, manufacturer: e.target.value }))} className="input" placeholder="Elegoo" /></label>
+              <label className="block md:col-span-2"><span className="text-xs text-surface-500 mb-1 block">Location</span><input value={infoForm.location} onChange={e => setInfoForm(prev => ({ ...prev, location: e.target.value }))} className="input" placeholder="Workshop" /></label>
+              <label className="block md:col-span-2"><span className="text-xs text-surface-500 mb-1 block">Fluidd URL</span><input value={infoForm.fluidd_url} onChange={e => setInfoForm(prev => ({ ...prev, fluidd_url: e.target.value }))} className="input" placeholder="http://192.168.1.100" /></label>
+              <label className="md:col-span-2 flex items-start gap-3 rounded-lg border border-surface-800 bg-surface-900/50 p-3">
+                <input type="checkbox" checked={infoForm.restrict_gcode_model} onChange={e => setInfoForm(prev => ({ ...prev, restrict_gcode_model: e.target.checked }))} className="mt-1" />
+                <span>
+                  <span className="block text-sm font-medium text-surface-200">Permitir apenas G-code específico deste modelo</span>
+                  <span className="text-xs text-surface-500">Bloqueia impressão quando printer_model do G-code não corresponde ao modelo desta impressora.</span>
+                </span>
+              </label>
+            </div>
+          ) : (
+            <div className="space-y-2 text-sm">
+              {state?.wifi_signal && (
+                <div className="flex items-center justify-between">
+                  <span className="text-surface-400 flex items-center gap-1.5"><Wifi className="h-3.5 w-3.5" /> WiFi</span>
+                  <span className="text-surface-200">{wifiStrength(state.wifi_signal)}</span>
+                </div>
+              )}
+              {state?.nozzle_diameter && (
+                <div className="flex items-center justify-between">
+                  <span className="text-surface-400">Nozzle</span>
+                  <span className="text-surface-200">{state.nozzle_diameter}mm{state.nozzle_type ? ` ${state.nozzle_type}` : ''}</span>
+                </div>
+              )}
+              {printer.serial_number && <div className="flex items-center justify-between"><span className="text-surface-400">Serial</span><span className="text-surface-200 font-mono text-xs">{printer.serial_number}</span></div>}
+              <div className="flex items-center justify-between"><span className="text-surface-400">Location</span><span className="text-surface-200">{printer.location || '—'}</span></div>
+              <div className="flex items-center justify-between"><span className="text-surface-400">Manufacturer</span><span className="text-surface-200">{printer.manufacturer || '—'}</span></div>
+              <div className="flex items-center justify-between"><span className="text-surface-400">Model</span><span className="text-surface-200">{printer.model || '—'}</span></div>
+              <div className="flex items-center justify-between"><span className="text-surface-400">G-code model restriction</span><span className={cn('badge', (printer.restrict_gcode_model ?? true) ? 'bg-emerald-500/20 text-emerald-300' : 'bg-surface-800 text-surface-400')}>{(printer.restrict_gcode_model ?? true) ? 'ON' : 'OFF'}</span></div>
+              {printer.fluidd_url && (
+                <a href={printer.fluidd_url} target="_blank" rel="noreferrer" className="inline-flex w-fit cursor-pointer items-center rounded-lg border border-blue-500/50 bg-blue-500/20 px-3 py-1.5 text-xs font-semibold text-blue-300 hover:bg-blue-500/30">
+                  <ExternalLink className="h-3.5 w-3.5 mr-1" /> Fluidd
+                </a>
+              )}
+            </div>
+          )}
         </div>
 
         {/* COST SETTINGS */}
@@ -283,6 +367,51 @@ export default function PrinterDetail() {
 
         {/* AUTO-DISPATCH SETTINGS */}
         <AutoDispatchSettings printerId={printer.id} />
+
+        {/* CONTROLS */}
+        <div className="card p-5">
+          <h2 className="text-sm font-semibold text-surface-400 uppercase tracking-wider mb-4 flex items-center gap-2">
+            <Target className="h-4 w-4" />
+            Controle
+          </h2>
+          {printer.maintenance_mode ? (
+            <div className="text-amber-400 text-sm mb-3">Printer is in maintenance mode</div>
+          ) : null}
+          <div className="flex flex-wrap gap-2 mb-6">
+            {(status === 'offline' || status === 'error') && !printer.maintenance_mode && printer.connection_type !== 'manual' && (
+              <button disabled={!!controlBusy} onClick={() => runControl('reconnect', () => printersApi.reconnect(printer.id))} className="inline-flex cursor-pointer items-center rounded-lg border border-blue-500/50 bg-blue-500/20 px-4 py-2 text-sm font-semibold text-blue-300 shadow-lg transition-colors hover:bg-blue-500/30 disabled:cursor-not-allowed disabled:opacity-60">
+                <RefreshCw className={cn('h-4 w-4 mr-2', controlBusy === 'reconnect' && 'animate-spin')} />
+                Reconectar
+              </button>
+            )}
+            <button disabled={!!controlBusy} onClick={() => runControl('maintenance', () => printersApi.setMaintenanceMode(printer.id, !printer.maintenance_mode))} className={cn('inline-flex cursor-pointer items-center rounded-lg border px-4 py-2 text-sm font-semibold shadow-lg transition-colors disabled:cursor-not-allowed', printer.maintenance_mode ? 'border-emerald-500/40 bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25' : 'border-amber-500/60 bg-amber-500/20 text-amber-200 hover:bg-amber-500/30')}>
+              <AlertTriangle className="h-4 w-4 mr-2" />
+              {printer.maintenance_mode ? 'Sair da manutenção' : 'Manutenção'}
+            </button>
+            <button disabled={!!controlBusy} onClick={() => setConfirmEmergency(true)} className="inline-flex cursor-pointer items-center rounded-lg border border-red-500/70 bg-red-500/20 px-4 py-2 text-sm font-semibold text-red-300 shadow-lg transition-colors hover:bg-red-500/30 disabled:cursor-not-allowed">
+              <XCircle className="h-4 w-4 mr-2" />
+              Emergência
+            </button>
+          </div>
+
+          <SpeedControls
+            printerId={printer.id}
+            currentPercent={state?.speed_percent}
+            currentLevel={state?.speed_level}
+            canSetFeedRate={!!printerCaps?.can_set_feed_rate}
+            canSetSpeedProfile={!!printerCaps?.can_set_speed_profile}
+            runControl={runControl}
+            controlBusy={controlBusy}
+          />
+
+          <h3 className="text-sm font-semibold text-surface-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+            <Activity className="h-4 w-4" />
+            Comandos
+          </h3>
+          <MacroCommands printerId={printer.id} runControl={runControl} controlBusy={controlBusy} canRunGCode={!!printerCaps?.can_run_gcode} />
+          {controlError && <div className="text-xs text-red-400 mt-2">{controlError}</div>}
+          {controlBusy && <div className="text-xs text-surface-400 mt-1">Running {controlBusy}...</div>}
+        </div>
 
         {/* AMS STATUS */}
         {hasAMS && (
@@ -322,6 +451,13 @@ export default function PrinterDetail() {
                         </span>
                         {!tray.empty && (
                           <div className="flex items-center gap-1.5 flex-shrink-0">
+                            <button
+                              onClick={() => runControl(`ams-load-${unit.id}-${tray.id}`, () => printersApi.amsLoad(printer.id, String(unit.id), String(tray.id)))}
+                              className="text-[10px] px-1.5 py-0.5 rounded bg-surface-800 text-surface-400 hover:text-surface-100"
+                              disabled={!!controlBusy}
+                            >
+                              Load
+                            </button>
                             <div className="w-16 h-1.5 bg-surface-800 rounded-full overflow-hidden">
                               <div
                                 className={cn(
@@ -341,6 +477,12 @@ export default function PrinterDetail() {
                   </div>
                 </div>
               ))}
+              <div className="flex flex-wrap gap-2 pt-2">
+                <button disabled={!!controlBusy} onClick={() => runControl('ams-unload', () => printersApi.amsUnload(printer.id))} className="btn btn-secondary text-xs">Unload</button>
+                <button disabled={!!controlBusy} onClick={() => runControl('ams-refresh', () => printersApi.amsRefresh(printer.id))} className="btn btn-secondary text-xs">RFID Refresh</button>
+                <button disabled={!!controlBusy} onClick={() => runControl('ams-backup-on', () => printersApi.setAMSFilamentBackup(printer.id, true))} className="btn btn-secondary text-xs">Backup On</button>
+                <button disabled={!!controlBusy} onClick={() => runControl('ams-backup-off', () => printersApi.setAMSFilamentBackup(printer.id, false))} className="btn btn-secondary text-xs">Backup Off</button>
+              </div>
               {state!.ams!.external_spool && !state!.ams!.external_spool.empty && (
                 <div>
                   <div className="text-xs text-surface-500 mb-2">External Spool</div>
@@ -1007,22 +1149,39 @@ function PrinterHealthCard({ health }: { health: PrinterHealth }) {
   )
 }
 
+type PrinterHistoryItem = { type: 'job'; createdAt: string; item: PrintJob } | { type: 'queue'; createdAt: string; item: QueueItem }
+
 function PrinterHistory({ printerId }: { printerId: string }) {
+  const queryClient = useQueryClient()
   const { data: stats } = usePrinterStats(printerId)
   const { data: jobs = [], isLoading } = usePrinterJobs(printerId)
+  const { data: queue } = useQuery({ queryKey: ['queue'], queryFn: () => queueApi.get(), refetchInterval: 10000 })
+  const [confirmDeleteJob, setConfirmDeleteJob] = useState<string | null>(null)
+  const [confirmClearHistory, setConfirmClearHistory] = useState(false)
+  const [historyError, setHistoryError] = useState('')
 
-  const sortedJobs = [...jobs].sort(
-    (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+  const queueHistory = (queue?.items || []).filter(item => item.item.assigned_printer_id === printerId && item.item.source_type !== 'print_job' && ['done', 'failed', 'cancelled'].includes(item.item.status))
+  const historyItems: PrinterHistoryItem[] = [
+    ...jobs.map(job => ({ type: 'job' as const, createdAt: job.created_at, item: job })),
+    ...queueHistory.map(item => ({ type: 'queue' as const, createdAt: item.item.updated_at || item.item.created_at, item })),
+  ]
+  const sortedJobs = historyItems.sort(
+    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
   )
 
-  const totalMaterialUsed = jobs.reduce(
-    (sum, job) => sum + (job.material_used_grams || 0),
+  const totalMaterialUsed = historyItems.reduce(
+    (sum, entry) => sum + (entry.type === 'job' ? (entry.item.material_used_grams || 0) : (entry.item.item.filament_grams || 0)),
     0
   )
   const totalCost = jobs.reduce(
     (sum, job) => sum + (job.cost_cents || 0),
     0
   )
+  const completedQueue = queueHistory.filter(item => item.item.status === 'done').length
+  const failedQueue = queueHistory.filter(item => item.item.status === 'failed').length
+  const completedTotal = (stats?.completed || 0) + completedQueue
+  const failedTotal = (stats?.failed || 0) + failedQueue
+  const historyTotal = sortedJobs.length
 
   const fmtJobDuration = (startedAt?: string, completedAt?: string) => {
     if (!startedAt) return '-'
@@ -1035,27 +1194,87 @@ function PrinterHistory({ printerId }: { printerId: string }) {
     return `${mins}m`
   }
 
+  const refreshHistory = () => {
+    queryClient.invalidateQueries({ queryKey: ['printer-jobs', printerId] })
+    queryClient.invalidateQueries({ queryKey: ['printer-stats', printerId] })
+    queryClient.invalidateQueries({ queryKey: ['printer-analytics', printerId] })
+    queryClient.invalidateQueries({ queryKey: ['queue'] })
+  }
+
+  const deleteQueueItem = async (itemId: string) => {
+    if (confirmDeleteJob !== itemId) {
+      setConfirmDeleteJob(itemId)
+      return
+    }
+    setHistoryError('')
+    try {
+      await queueApi.delete(itemId)
+      setConfirmDeleteJob(null)
+      refreshHistory()
+    } catch (err) {
+      setHistoryError(err instanceof Error ? err.message : 'Failed to delete queue history record')
+    }
+  }
+
+  const deleteJob = async (jobId: string) => {
+    if (confirmDeleteJob !== jobId) {
+      setConfirmDeleteJob(jobId)
+      return
+    }
+    setHistoryError('')
+    try {
+      await printJobsApi.delete(jobId)
+      setConfirmDeleteJob(null)
+      refreshHistory()
+    } catch (err) {
+      setHistoryError(err instanceof Error ? err.message : 'Failed to delete print record')
+    }
+  }
+
+  const clearHistory = async () => {
+    if (!confirmClearHistory) {
+      setConfirmClearHistory(true)
+      return
+    }
+    setHistoryError('')
+    try {
+      await printersApi.clearJobs(printerId)
+      setConfirmClearHistory(false)
+      refreshHistory()
+    } catch (err) {
+      setHistoryError(err instanceof Error ? err.message : 'Failed to clear print history')
+    }
+  }
+
   return (
     <div className="mt-6">
-      <h2 className="text-lg font-semibold text-surface-100 flex items-center gap-2 mb-4">
-        <History className="h-5 w-5 text-surface-400" />
-        Print History
-      </h2>
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-lg font-semibold text-surface-100 flex items-center gap-2">
+          <History className="h-5 w-5 text-surface-400" />
+          Print History
+        </h2>
+        {sortedJobs.length > 0 && (
+          <button onClick={clearHistory} className="btn btn-secondary text-xs py-1 px-3">
+            {confirmClearHistory ? 'Confirm clear?' : 'Clear history'}
+          </button>
+        )}
+      </div>
+      {historyError && <div className="mb-4 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300">{historyError}</div>}
 
       {/* Stats Cards */}
-      {stats && stats.total > 0 && (
+      {historyTotal > 0 && (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
           <div className="card p-4">
             <div className="text-sm text-surface-500 mb-1">Total Prints</div>
             <div className="text-2xl font-semibold text-surface-100">
-              {stats.total}
+              {historyTotal}
             </div>
           </div>
           <div className="card p-4">
             <div className="text-sm text-surface-500 mb-1">Success Rate</div>
             <div className="text-2xl font-semibold text-emerald-400">
-              {(stats.completed + stats.failed) > 0
-                ? Math.round((stats.completed / (stats.completed + stats.failed)) * 100)
+              {(completedTotal + failedTotal) > 0
+                ? Math.round((completedTotal / (completedTotal + failedTotal)) * 100)
                 : 0}%
             </div>
           </div>
@@ -1089,8 +1308,10 @@ function PrinterHistory({ printerId }: { printerId: string }) {
         </div>
       ) : (
         <div className="space-y-3">
-          {sortedJobs.map((job) => (
-            <PrinterJobRow key={job.id} job={job} fmtJobDuration={fmtJobDuration} />
+          {sortedJobs.map((entry) => entry.type === 'job' ? (
+            <PrinterJobRow key={`job-${entry.item.id}`} job={entry.item} fmtJobDuration={fmtJobDuration} onDelete={deleteJob} confirmDelete={confirmDeleteJob === entry.item.id} />
+          ) : (
+            <QueueHistoryRow key={`queue-${entry.item.item.id}`} item={entry.item} fmtJobDuration={fmtJobDuration} onDelete={deleteQueueItem} confirmDelete={confirmDeleteJob === entry.item.item.id} />
           ))}
         </div>
       )}
@@ -1098,12 +1319,49 @@ function PrinterHistory({ printerId }: { printerId: string }) {
   )
 }
 
+function QueueHistoryRow({ item, fmtJobDuration, onDelete, confirmDelete }: { item: QueueItem; fmtJobDuration: (startedAt?: string, completedAt?: string) => string; onDelete: (itemId: string) => void; confirmDelete: boolean }) {
+  const queueItem = item.item
+  const success = queueItem.status === 'done'
+  return (
+    <div className="card p-4">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <div className={cn('w-10 h-10 rounded-lg flex items-center justify-center', success ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400')}>
+            {success ? <CheckCircle className="h-5 w-5" /> : <XCircle className="h-5 w-5" />}
+          </div>
+          <div>
+            <div className="font-medium text-surface-100">{queueItem.display_name || queueItem.file_name}</div>
+            <div className="text-sm text-surface-500 flex flex-wrap items-center gap-2">
+              <span>{formatRelativeTime(queueItem.updated_at || queueItem.created_at)}</span>
+              <span>·</span>
+              <span>{queueItem.estimated_seconds ? formatDuration(queueItem.estimated_seconds) : fmtJobDuration(queueItem.created_at, queueItem.updated_at)}</span>
+              {queueItem.filament_name && <><span>·</span><span>{queueItem.filament_name}</span></>}
+            </div>
+          </div>
+        </div>
+        <div className="flex items-center gap-3">
+          {queueItem.filament_grams != null && queueItem.filament_grams > 0 && <span className="text-sm text-surface-400">{queueItem.filament_grams.toFixed(1)}g</span>}
+          <span className={cn('badge', getStatusBadge(success ? 'completed' : 'failed'))}>{success ? 'success' : 'failed'}</span>
+          <button onClick={() => onDelete(queueItem.id)} className={cn('rounded-lg border px-2 py-1 text-xs font-semibold transition-colors flex items-center gap-1', confirmDelete ? 'border-red-500/70 bg-red-500/20 text-red-300 hover:bg-red-500/30' : 'border-surface-700 bg-surface-800/50 text-surface-400 hover:text-red-300 hover:border-red-500/40')}>
+            <Trash2 className="h-3 w-3" />
+            {confirmDelete ? 'Confirm' : 'Delete'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function PrinterJobRow({
   job,
   fmtJobDuration,
+  onDelete,
+  confirmDelete,
 }: {
   job: PrintJob
   fmtJobDuration: (startedAt?: string, completedAt?: string) => string
+  onDelete: (jobId: string) => void
+  confirmDelete: boolean
 }) {
   return (
     <div className="card p-4">
@@ -1179,12 +1437,217 @@ function PrinterJobRow({
               ? 'success'
               : job.status}
           </span>
+          <button onClick={() => onDelete(job.id)} className={cn('rounded-lg border px-2.5 py-1 text-xs font-semibold', confirmDelete ? 'border-red-500 bg-red-500/20 text-red-200' : 'border-red-500/40 bg-red-500/10 text-red-300 hover:bg-red-500/20')}>
+            {confirmDelete ? 'Confirm?' : 'Delete'}
+          </button>
         </div>
       </div>
 
       {/* Expandable event timeline */}
       <div className="mt-3 pt-3 border-t border-surface-800">
         <ExpandableJobEvents jobId={job.id} />
+      </div>
+    </div>
+  )
+}
+
+function SpeedControls({ printerId, currentPercent, currentLevel, canSetFeedRate, canSetSpeedProfile, runControl, controlBusy }: { printerId: string; currentPercent?: number; currentLevel?: number; canSetFeedRate: boolean; canSetSpeedProfile: boolean; runControl: (name: string, action: () => Promise<unknown>) => Promise<void>; controlBusy: string }) {
+  const [customPercent, setCustomPercent] = useState(String(currentPercent || 100))
+
+  return (
+    <div className="mb-6 rounded-xl border border-surface-800 bg-surface-900/40 p-4">
+      <div className="flex items-center justify-between gap-3 mb-3">
+        <div>
+          <h3 className="text-sm font-semibold text-surface-200 flex items-center gap-2">
+            <Gauge className="h-4 w-4 text-accent-400" />
+            Print speed
+          </h3>
+          <p className="text-xs text-surface-500 mt-1">Adjust active print feed rate with M220. Use 100% to return to normal speed.</p>
+        </div>
+        <span className="badge bg-surface-800 text-surface-300">
+          {currentPercent ? `${currentPercent}%` : currentLevel ? SPEED_LABELS[currentLevel] || `Level ${currentLevel}` : '—'}
+        </span>
+      </div>
+
+      {canSetFeedRate ? (
+        <div className="space-y-3">
+          <div className="grid grid-cols-5 gap-2">
+            {FEED_RATE_PRESETS.map(percent => (
+              <button key={percent} disabled={!!controlBusy} onClick={() => runControl(`speed-${percent}`, () => printersApi.setFeedRate(printerId, percent))} className={cn('rounded-lg border px-2 py-2 text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-60', currentPercent === percent ? 'border-accent-500 bg-accent-500/20 text-accent-200' : 'border-surface-700 bg-surface-800/70 text-surface-300 hover:bg-surface-700')}>
+                {percent}%
+              </button>
+            ))}
+          </div>
+          <div className="flex gap-2">
+            <input type="number" min={25} max={200} value={customPercent} onChange={e => setCustomPercent(e.target.value)} className="input h-9" placeholder="25-200" />
+            <button disabled={!!controlBusy} onClick={() => runControl(`speed-${customPercent}`, () => printersApi.setFeedRate(printerId, Number(customPercent)))} className="btn btn-primary text-xs whitespace-nowrap disabled:cursor-not-allowed">Apply M220</button>
+          </div>
+        </div>
+      ) : canSetSpeedProfile ? (
+        <div className="grid grid-cols-4 gap-2">
+          {[1, 2, 3, 4].map(level => (
+            <button key={level} disabled={!!controlBusy} onClick={() => runControl(`speed-level-${level}`, () => printersApi.setPrintSpeed(printerId, level))} className={cn('rounded-lg border px-2 py-2 text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-60', currentLevel === level ? 'border-accent-500 bg-accent-500/20 text-accent-200' : 'border-surface-700 bg-surface-800/70 text-surface-300 hover:bg-surface-700')}>
+              {SPEED_LABELS[level]}
+            </button>
+          ))}
+        </div>
+      ) : (
+        <div className="rounded-lg border border-surface-800 bg-surface-950/50 p-3 text-xs text-surface-500">Speed control unavailable for this printer protocol.</div>
+      )}
+    </div>
+  )
+}
+
+function MacroCommands({ printerId, runControl, controlBusy, canRunGCode }: { printerId: string; runControl: (name: string, action: () => Promise<unknown>) => Promise<void>; controlBusy: string; canRunGCode: boolean }) {
+  const [macros, setMacros] = useState<PrinterMacro[]>([])
+  const [form, setForm] = useState({ title: '', command: '' })
+  const [editingId, setEditingId] = useState<number | null>(null)
+  const [error, setError] = useState('')
+  const [showM112Warning, setShowM112Warning] = useState(false)
+
+  const loadMacros = async () => {
+    setMacros(await printersApi.listMacros())
+  }
+
+  useEffect(() => {
+    printersApi.listMacros()
+      .then(setMacros)
+      .catch(err => setError(err instanceof Error ? err.message : 'Failed to load commands'))
+  }, [])
+
+  const resetForm = () => {
+    setForm({ title: '', command: '' })
+    setEditingId(null)
+    setError('')
+  }
+
+  const saveMacro = async () => {
+    setError('')
+    if (form.command.trim().toUpperCase() === 'M112') {
+      setShowM112Warning(true)
+      return
+    }
+    try {
+      if (editingId) {
+        await printersApi.updateMacro(editingId, form.title, form.command)
+      } else {
+        await printersApi.createMacro(form.title, form.command)
+      }
+      resetForm()
+      await loadMacros()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save command')
+    }
+  }
+
+  const editMacro = (macro: PrinterMacro) => {
+    setEditingId(macro.id)
+    setForm({ title: macro.title, command: macro.command })
+    setError('')
+  }
+
+  const deleteMacro = async (id: number) => {
+    setError('')
+    try {
+      await printersApi.deleteMacro(id)
+      if (editingId === id) resetForm()
+      await loadMacros()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete command')
+    }
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="space-y-2">
+        {!canRunGCode && <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-300">G-code commands are unavailable for this printer protocol.</div>}
+        {macros.length === 0 ? (
+          <div className="rounded-lg border border-surface-800 bg-surface-900/40 p-3 text-sm text-surface-500">Nenhum comando cadastrado.</div>
+        ) : macros.map(macro => (
+          <div key={macro.id} className="rounded-lg border border-surface-800 bg-surface-900/40 p-3">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="font-medium text-surface-100 truncate">{macro.title}</div>
+                <div className="mt-1 font-mono text-xs text-surface-400 break-all">{macro.command}</div>
+              </div>
+              <div className="flex flex-shrink-0 gap-1.5">
+                <button disabled={!!controlBusy || !canRunGCode} onClick={() => runControl(`macro-${macro.id}`, () => printersApi.runMacro(printerId, macro.command))} className="btn btn-primary text-xs disabled:cursor-not-allowed">Executar</button>
+                <button disabled={!!controlBusy} onClick={() => editMacro(macro)} className="btn btn-secondary text-xs disabled:cursor-not-allowed">Editar</button>
+                <button disabled={!!controlBusy} onClick={() => deleteMacro(macro.id)} className="rounded-lg border border-red-500/40 bg-red-500/10 px-2.5 py-1 text-xs font-semibold text-red-300 hover:bg-red-500/20 disabled:cursor-not-allowed">Excluir</button>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="rounded-lg border border-surface-800 bg-surface-900/30 p-3 space-y-2">
+        <div className="grid grid-cols-1 gap-2">
+          <input value={form.title} onChange={e => setForm(prev => ({ ...prev, title: e.target.value }))} className="input" placeholder="Título do comando" />
+          <input value={form.command} onChange={e => setForm(prev => ({ ...prev, command: e.target.value }))} className="input font-mono" placeholder="Comando, ex: PAUSE" />
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <button onClick={saveMacro} disabled={!!controlBusy || !canRunGCode} className="btn btn-primary text-xs disabled:cursor-not-allowed">{editingId ? 'Salvar comando' : 'Adicionar comando'}</button>
+          {editingId && <button onClick={resetForm} disabled={!!controlBusy} className="btn btn-secondary text-xs disabled:cursor-not-allowed">Cancelar edição</button>}
+        </div>
+      </div>
+      {error && <div className="text-xs text-red-400">{error}</div>}
+
+      {showM112Warning && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+          <div className="w-full max-w-md rounded-2xl border border-red-500/40 bg-surface-950 shadow-2xl">
+            <div className="border-b border-red-500/20 bg-red-500/10 p-5">
+              <div className="flex items-center gap-3">
+                <div className="rounded-xl bg-red-500/20 p-3 text-red-300">
+                  <AlertTriangle className="h-7 w-7" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-semibold text-red-200">Comando reservado</h2>
+                </div>
+              </div>
+            </div>
+            <div className="space-y-3 p-5 text-sm text-surface-300">
+              <p>O comando <span className="font-mono text-red-300">M112</span> já está embutido no botão vermelho de Emergência.</p>
+              <p>Não é necessário criar um comando customizado para ele.</p>
+            </div>
+            <div className="flex justify-end gap-2 border-t border-surface-800 p-5">
+              <button onClick={() => setShowM112Warning(false)} className="btn btn-secondary cursor-pointer">Entendi</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function EmergencyStopModal({ printerName, onCancel, onConfirm, busy }: { printerName: string; onCancel: () => void; onConfirm: () => void; busy: boolean }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+      <div className="w-full max-w-lg rounded-2xl border border-red-500/40 bg-surface-950 shadow-2xl">
+        <div className="border-b border-red-500/20 bg-red-500/10 p-5">
+          <div className="flex items-center gap-3">
+            <div className="rounded-xl bg-red-500/20 p-3 text-red-300">
+              <XCircle className="h-7 w-7" />
+            </div>
+            <div>
+              <h2 className="text-xl font-semibold text-red-200">Confirmar parada de emergência</h2>
+              <p className="text-sm text-red-300/80">{printerName}</p>
+            </div>
+          </div>
+        </div>
+        <div className="space-y-3 p-5 text-sm text-surface-300">
+          <p>Tem certeza que deseja executar a parada de emergência?</p>
+          <p>Essa ação tenta interromper imediatamente a impressora. A impressão atual pode ser perdida, o estado da máquina pode exigir inspeção manual e o equipamento pode precisar ser reinicializado ou re-homed antes de voltar a operar.</p>
+          <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-amber-200">
+            Use apenas quando houver risco, falha crítica ou necessidade real de interromper a máquina imediatamente.
+          </div>
+        </div>
+        <div className="flex justify-end gap-2 border-t border-surface-800 p-5">
+          <button onClick={onCancel} disabled={busy} className="btn btn-secondary cursor-pointer">Cancelar</button>
+          <button onClick={onConfirm} disabled={busy} className="inline-flex cursor-pointer items-center rounded-lg border border-red-500/70 bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-60">
+            <XCircle className="h-4 w-4 mr-2" />
+            {busy ? 'Executando...' : 'Sim, parar agora'}
+          </button>
+        </div>
       </div>
     </div>
   )

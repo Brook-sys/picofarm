@@ -6,11 +6,13 @@ import {
   Printer,
   Play,
   AlertCircle,
+  CheckCircle,
   Clock,
   TrendingUp,
   TrendingDown,
   DollarSign,
-  Receipt
+  Receipt,
+  Package
 } from 'lucide-react'
 import {
   Chart as ChartJS,
@@ -27,7 +29,7 @@ import {
 import { Line, Bar, Doughnut } from 'react-chartjs-2'
 import { useProjects } from '../hooks/useProjects'
 import { usePrinters, usePrinterStates } from '../hooks/usePrinters'
-import { statsApi } from '../api/client'
+import { queueApi, statsApi } from '../api/client'
 import { cn, getStatusBadge } from '../lib/utils'
 
 ChartJS.register(
@@ -51,6 +53,9 @@ const CHANNEL_COLORS: Record<string, string> = {
 }
 
 const periodOptions = [
+  { label: '1 Day', value: '1d' },
+  { label: '3 Days', value: '3d' },
+  { label: '7 Days', value: '7d' },
   { label: '30 Days', value: '30d' },
   { label: '90 Days', value: '90d' },
   { label: '12 Months', value: '12m' },
@@ -97,6 +102,8 @@ export default function Dashboard() {
   const { data: printers = [], isLoading: printersLoading } = usePrinters()
   const { data: printerStates = {} } = usePrinterStates()
   const [chartPeriod, setChartPeriod] = useState('30d')
+  const [nextPrintBusy, setNextPrintBusy] = useState(false)
+  const [nextPrintError, setNextPrintError] = useState('')
 
   const { data: financials } = useQuery({
     queryKey: ['stats', 'financial', chartPeriod],
@@ -119,16 +126,59 @@ export default function Dashboard() {
     queryFn: () => statsApi.getSalesByChannel(chartPeriod),
   })
 
+  const { data: usage } = useQuery({
+    queryKey: ['stats', 'usage', chartPeriod],
+    queryFn: () => statsApi.getUsage(chartPeriod),
+    refetchInterval: 60000,
+  })
+
+  const { data: queue, refetch: refetchQueue } = useQuery({
+    queryKey: ['queue'],
+    queryFn: () => queueApi.get(),
+    refetchInterval: 10000,
+  })
+
   const activeProjects = projects // All projects are considered active (status field removed)
   const printingPrinters = printers.filter(p => printerStates[p.id]?.status === 'printing')
   const idlePrinters = printers.filter(p =>
-    printerStates[p.id]?.status === 'idle' || !printerStates[p.id]
+    !p.maintenance_mode && (printerStates[p.id]?.status === 'idle' || !printerStates[p.id])
   )
   const errorPrinters = printers.filter(p =>
     printerStates[p.id]?.status === 'error'
   )
+  const nextReadyItem = (queue?.items || [])
+    .filter(item => item.column === 'ready')
+    .sort((a, b) => {
+      const pa = a.item.priority ?? 0
+      const pb = b.item.priority ?? 0
+      if (pa !== pb) return pb - pa
+      return new Date(a.item.created_at).getTime() - new Date(b.item.created_at).getTime()
+    })[0]
+  const nextIdlePrinter = idlePrinters[0]
+
+  const sendNextPrint = async () => {
+    if (!nextReadyItem || !nextIdlePrinter) return
+    setNextPrintBusy(true)
+    setNextPrintError('')
+    try {
+      await queueApi.update(nextReadyItem.item.id, { assigned_printer_id: nextIdlePrinter.id })
+      await queueApi.start(nextReadyItem.item.id)
+      await refetchQueue()
+    } catch (err) {
+      setNextPrintError(err instanceof Error ? err.message : 'Failed to start next print')
+    } finally {
+      setNextPrintBusy(false)
+    }
+  }
 
   const formatCents = (cents: number) => `$${(cents / 100).toFixed(2)}`
+  const formatPrintHours = (hours: number) => {
+    const totalMinutes = Math.round(hours * 60)
+    if (totalMinutes < 60) return `${totalMinutes} min`
+    const h = Math.floor(totalMinutes / 60)
+    const m = totalMinutes % 60
+    return m > 0 ? `${h}h ${m} min` : `${h}h`
+  }
 
   const lineChartData = useMemo(() => {
     const points = timeSeries?.points || []
@@ -246,23 +296,55 @@ export default function Dashboard() {
         />
       </div>
 
+      {idlePrinters.length > 0 && (
+        <div className="card p-4 mb-6 lg:mb-8 border-emerald-500/20 bg-emerald-500/[0.03]">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="text-base font-semibold text-surface-100">Idle printer available</h2>
+              <p className="text-sm text-surface-500">
+                {nextReadyItem ? `Next ready print: ${nextReadyItem.item.display_name || nextReadyItem.item.file_name}` : 'No ready queue item available.'}
+              </p>
+              {nextPrintError && <p className="mt-1 text-sm text-red-400">{nextPrintError}</p>}
+            </div>
+            <button disabled={!nextReadyItem || nextPrintBusy} onClick={sendNextPrint} className="btn btn-primary whitespace-nowrap disabled:cursor-not-allowed disabled:opacity-60">
+              <Play className="h-4 w-4 mr-2" />{nextPrintBusy ? 'Sending...' : `Mandar próxima impressão${nextIdlePrinter ? ` para ${nextIdlePrinter.name}` : ''}`}
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Period Selector */}
-      <div className="flex items-center gap-2 mb-6">
-        {periodOptions.map((opt) => (
-          <button
-            key={opt.value}
-            onClick={() => setChartPeriod(opt.value)}
-            className={cn(
-              'px-3 py-1.5 rounded-lg text-sm font-medium transition-colors',
-              chartPeriod === opt.value
-                ? 'bg-accent-500/20 text-accent-400'
-                : 'text-surface-400 hover:text-surface-200 hover:bg-surface-800'
-            )}
-          >
-            {opt.label}
-          </button>
-        ))}
+      <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <div className="text-sm font-medium text-surface-200">Performance period</div>
+          <div className="text-xs text-surface-500">Applies to usage metrics and financial overview</div>
+        </div>
+        <div className="inline-flex w-full overflow-hidden rounded-xl border border-surface-800 bg-surface-950/70 p-1 shadow-inner shadow-black/20 sm:w-auto">
+          {periodOptions.map((opt) => (
+            <button
+              key={opt.value}
+              onClick={() => setChartPeriod(opt.value)}
+              className={cn(
+                'min-w-0 flex-1 rounded-lg px-3 py-1.5 text-xs font-semibold text-surface-400 transition-all hover:bg-surface-800 hover:text-surface-100 sm:flex-none sm:text-sm',
+                chartPeriod === opt.value && 'bg-accent-500 text-white shadow-sm shadow-accent-950/40 hover:bg-accent-500 hover:text-white'
+              )}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
       </div>
+
+      {/* Usage Metrics */}
+      <div className="grid grid-cols-2 lg:grid-cols-6 gap-3 lg:gap-4 mb-6 lg:mb-8">
+        <StatCard icon={Play} label="Total Prints" value={usage?.total_prints ?? 0} color="text-blue-400" />
+        <StatCard icon={CheckCircle} label="Successful Prints" value={usage?.successful_prints ?? 0} color="text-emerald-400" />
+        <StatCard icon={AlertCircle} label="Failed Prints" value={usage?.failed_prints ?? 0} color="text-red-400" />
+        <StatCard icon={Clock} label="Print Hours" value={formatPrintHours(usage?.total_print_hours ?? 0)} color="text-emerald-400" />
+        <StatCard icon={Package} label="Filament Used (g)" value={(usage?.total_filament_used_grams ?? 0).toFixed(0)} color="text-purple-400" />
+        <StatCard icon={AlertCircle} label="Wasted (g)" value={(usage?.total_filament_wasted_grams ?? 0).toFixed(0)} color="text-amber-400" />
+      </div>
+
 
       {/* Financial Summary */}
       {financials && (
@@ -529,7 +611,7 @@ function StatCard({
 }: {
   icon: React.ElementType
   label: string
-  value: number
+  value: number | string
   color: string
 }) {
   return (

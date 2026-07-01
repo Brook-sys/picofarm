@@ -1,4 +1,4 @@
-# Daedalus
+# Picofarm
 
 **Print Farm Management + Order Fulfillment Platform**
 

@@ -1,0 +1,1 @@
+ALTER TABLE printers ADD COLUMN restrict_gcode_model BOOLEAN NOT NULL DEFAULT TRUE;

@@ -1,9 +1,9 @@
 import { useState, useMemo } from 'react'
 import { Link } from 'react-router-dom'
-import { Plus, FolderKanban, Calendar, Tag, LayoutGrid, Table, ArrowUpDown } from 'lucide-react'
+import { Plus, FolderKanban, Calendar, Tag, LayoutGrid, Table, ArrowUpDown, Trash2, Play } from 'lucide-react'
 import { useQueries } from '@tanstack/react-query'
-import { useProjects, useCreateProject } from '../hooks/useProjects'
-import { projectsApi } from '../api/client'
+import { useProjects, useCreateProject, useDeleteProject } from '../hooks/useProjects'
+import { projectsApi, enqueueProjectParts } from '../api/client'
 import { cn, formatRelativeTime } from '../lib/utils'
 import type { ProjectSummary } from '../types'
 
@@ -44,6 +44,30 @@ export default function Projects() {
 
   const { data: projects = [], isLoading } = useProjects()
   const createProject = useCreateProject()
+  const deleteProject = useDeleteProject()
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
+
+  const [toastMessage, setToastMessage] = useState('')
+  const [printingId, setPrintingId] = useState<string | null>(null)
+
+  const handlePrintProject = async (projectId: string) => {
+    setPrintingId(projectId)
+    try {
+      const { added, missing } = await enqueueProjectParts(projectId)
+      if (added > 0) {
+        setToastMessage(`Adicionado ${added} item(s) do projeto na fila de impressão`)
+      } else if (missing > 0) {
+        setToastMessage(`Nenhum G-code encontrado. ${missing} part(s) sem G-code válido.`)
+      } else {
+        setToastMessage('Nenhum item adicionado à fila.')
+      }
+    } catch (err) {
+      setToastMessage('Failed to queue project: ' + (err instanceof Error ? err.message : String(err)))
+    } finally {
+      setPrintingId(null)
+      setTimeout(() => setToastMessage(''), 3500)
+    }
+  }
 
   // Fetch summaries for all projects when in table view
   const summaryQueries = useQueries({
@@ -119,6 +143,15 @@ export default function Projects() {
     setShowCreate(false)
   }
 
+  const handleDelete = async (projectId: string) => {
+    if (confirmDelete !== projectId) {
+      setConfirmDelete(projectId)
+      return
+    }
+    await deleteProject.mutateAsync(projectId)
+    setConfirmDelete(null)
+  }
+
   const formatCents = (cents: number) => {
     const negative = cents < 0
     const abs = Math.abs(cents)
@@ -135,6 +168,7 @@ export default function Projects() {
 
   return (
     <div className="p-4 sm:p-6 lg:p-8">
+      {toastMessage && <div className="fixed bottom-6 right-6 z-50 animate-pulse rounded-xl border border-emerald-400/50 bg-emerald-500 px-5 py-4 text-sm font-bold text-white shadow-2xl shadow-emerald-500/30">{toastMessage}</div>}
       {/* Header */}
       <div className="flex items-center justify-between mb-8">
         <div>
@@ -213,8 +247,9 @@ export default function Projects() {
                   <th className="text-right p-3"><SortHeader field="profit_per_hour" currentField={sortField} onSort={handleSort}>Profit/hr</SortHeader></th>
                   <th className="text-right p-3"><SortHeader field="success_rate" currentField={sortField} onSort={handleSort}>Success</SortHeader></th>
                   <th className="text-right p-3"><SortHeader field="print_time" currentField={sortField} onSort={handleSort}>Print Time</SortHeader></th>
-                  <th className="text-right p-3"><SortHeader field="updated_at" currentField={sortField} onSort={handleSort}>Updated</SortHeader></th>
-                </tr>
+              <th className="text-right p-3"><SortHeader field="updated_at" currentField={sortField} onSort={handleSort}>Updated</SortHeader></th>
+              <th className="w-8"></th>
+            </tr>
               </thead>
               <tbody>
                 {sortedProjects.map((project) => {
@@ -247,6 +282,16 @@ export default function Projects() {
                       <td className="p-3 text-right text-xs text-surface-500">
                         {formatRelativeTime(project.updated_at)}
                       </td>
+                      <td className="p-3 text-right">
+                        <div className="flex justify-end gap-1">
+                        <button onClick={() => void handlePrintProject(project.id)} disabled={printingId === project.id} className="rounded p-1 text-surface-500 hover:bg-emerald-500/10 hover:text-emerald-400" title="Print project">
+                          <Play className="h-4 w-4" />
+                        </button>
+                        <button onClick={() => handleDelete(project.id)} className="rounded p-1 text-surface-500 hover:bg-red-500/10 hover:text-red-400">
+                          {confirmDelete === project.id ? <span className="text-xs text-red-300">Confirm?</span> : <Trash2 className="h-4 w-4" />}
+                        </button>
+                        </div>
+                      </td>
                     </tr>
                   )
                 })}
@@ -263,9 +308,28 @@ export default function Projects() {
               to={`/projects/${project.id}`}
               className="card p-5 hover:border-surface-700 transition-colors group"
             >
-              <h3 className="font-semibold text-surface-100 group-hover:text-accent-400 transition-colors mb-3">
-                {project.name}
-              </h3>
+              <div className="flex items-start justify-between gap-3 mb-3">
+                <h3 className="font-semibold text-surface-100 group-hover:text-accent-400 transition-colors">
+                  {project.name}
+                </h3>
+                <div className="flex gap-1 shrink-0">
+                <button
+                  onClick={(e) => { e.preventDefault(); e.stopPropagation(); void handlePrintProject(project.id) }}
+                  disabled={printingId === project.id}
+                  className="rounded-lg p-1.5 text-surface-500 hover:bg-emerald-500/10 hover:text-emerald-400"
+                  title="Print project"
+                >
+                  <Play className="h-4 w-4" />
+                </button>
+                <button
+                  onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleDelete(project.id) }}
+                  className="rounded-lg p-1.5 text-surface-500 hover:bg-red-500/10 hover:text-red-400"
+                  title="Delete project"
+                >
+                  {confirmDelete === project.id ? <span className="text-xs text-red-300">Confirm?</span> : <Trash2 className="h-4 w-4" />}
+                </button>
+                </div>
+              </div>
 
               {project.description && (
                 <p className="text-sm text-surface-500 mb-4 line-clamp-2">

@@ -7,7 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/philjestin/daedalus/internal/model"
+	"github.com/Brook-sys/picofarm/internal/model"
 )
 
 func TestAddMaterialRequest_Validation(t *testing.T) {

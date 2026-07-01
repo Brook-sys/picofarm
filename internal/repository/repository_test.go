@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/philjestin/daedalus/internal/database"
-	"github.com/philjestin/daedalus/internal/model"
+	"github.com/Brook-sys/picofarm/internal/database"
+	"github.com/Brook-sys/picofarm/internal/model"
 )
 
 // openTestDB creates an in-memory SQLite database with schema applied.
@@ -288,12 +288,12 @@ func TestPrinterRepository_CreateAndGetByID(t *testing.T) {
 	ctx := context.Background()
 
 	printer := &model.Printer{
-		Name:            "Test Printer",
-		Model:           "P1S",
-		Manufacturer:    "Bambu Lab",
-		ConnectionType:  model.ConnectionTypeBambuLAN,
-		ConnectionURI:   "192.168.1.100",
-		NozzleDiameter:  0.4,
+		Name:             "Test Printer",
+		Model:            "P1S",
+		Manufacturer:     "Bambu Lab",
+		ConnectionType:   model.ConnectionTypeBambuLAN,
+		ConnectionURI:    "192.168.1.100",
+		NozzleDiameter:   0.4,
 		CostPerHourCents: 150,
 	}
 

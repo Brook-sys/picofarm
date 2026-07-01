@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/philjestin/daedalus/internal/model"
+	"github.com/Brook-sys/picofarm/internal/model"
 	"nhooyr.io/websocket"
 	"nhooyr.io/websocket/wsjson"
 )

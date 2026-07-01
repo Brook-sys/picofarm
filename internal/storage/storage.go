@@ -28,6 +28,10 @@ type LocalStorage struct {
 
 // NewLocalStorage creates a new local storage instance.
 func NewLocalStorage(basePath string) *LocalStorage {
+	absPath, err := filepath.Abs(basePath)
+	if err == nil {
+		basePath = absPath
+	}
 	// Ensure base directory exists
 	os.MkdirAll(basePath, 0755)
 	return &LocalStorage{basePath: basePath}
@@ -117,4 +121,3 @@ func copyFile(src, dst string) error {
 	_, err = io.Copy(destFile, sourceFile)
 	return err
 }
-

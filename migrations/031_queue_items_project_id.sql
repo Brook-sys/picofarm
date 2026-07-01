@@ -1,0 +1,1 @@
+ALTER TABLE queue_items ADD COLUMN project_id TEXT REFERENCES projects(id) ON DELETE SET NULL;

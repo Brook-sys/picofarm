@@ -1,9 +1,8 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import {
   ArrowLeft,
   Plus,
-  Upload,
   Printer,
   Play,
   FileCode,
@@ -24,17 +23,22 @@ import {
   Scale,
   Trash2,
   ShoppingCart,
+  Info,
 } from 'lucide-react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { useProject, useParts, useCreatePart } from '../hooks/useProjects'
+import { useProject, useParts, useCreatePart, useUpdateProject } from '../hooks/useProjects'
 import { usePrinters, usePrinterStates } from '../hooks/usePrinters'
 import { useSpoolsWithMaterials } from '../hooks/useMaterials'
-import { designsApi, printJobsApi, projectsApi, partsApi, suppliesApi, materialsApi } from '../api/client'
+import { designsApi, printJobsApi, projectsApi, partsApi, suppliesApi, materialsApi, queueApi, gcodeLibraryApi, fileLibraryApi, enqueueProjectParts } from '../api/client'
 import { cn, getStatusBadge, formatBytes, formatRelativeTime } from '../lib/utils'
+import AppToast, { type AppToastState } from '../components/AppToast'
 import { FailureModal } from '../components/FailureModal'
 import { ExpandableJobEvents } from '../components/JobEventTimeline'
 import { Tooltip } from '../components/Tooltip'
-import type { Design, Part, Material, PrintJob, ProjectSummary, ProjectSupply } from '../types'
+import GCodeFilePicker from '../components/GCodeFilePicker'
+import type { Design, Part, Material, PrintJob, ProjectSummary, ProjectSupply, GCodeLibraryFile, STLLibraryFile } from '../types'
+
+type RootProjectFile = { type: 'stl'; file: STLLibraryFile } | { type: 'gcode'; file: GCodeLibraryFile }
 
 export default function ProjectDetail() {
   const { id } = useParams<{ id: string }>()
@@ -46,6 +50,7 @@ export default function ProjectDetail() {
   const { data: printerStates = {} } = usePrinterStates()
   
   const createPart = useCreatePart()
+  const updateProject = useUpdateProject()
   
   const [showAddPart, setShowAddPart] = useState(false)
   const [selectedPart, setSelectedPart] = useState<Part | null>(null)
@@ -54,8 +59,14 @@ export default function ProjectDetail() {
   const [showOutcomeCapture, setShowOutcomeCapture] = useState<PrintJob | null>(null)
   const [showFailureModal, setShowFailureModal] = useState<PrintJob | null>(null)
   const [activeTab, setActiveTab] = useState<'parts' | 'history' | 'analytics'>('parts')
-  const [partFile, setPartFile] = useState<File | null>(null)
-  const [partFileNotes, setPartFileNotes] = useState('')
+  const [editingProject, setEditingProject] = useState(false)
+  const [projectForm, setProjectForm] = useState({ name: '', description: '' })
+  const [projectEditError, setProjectEditError] = useState('')
+  const [selectedRootFiles, setSelectedRootFiles] = useState<RootProjectFile[]>([])
+  const [showGCodePicker, setShowGCodePicker] = useState(false)
+  const [partDeleteError, setPartDeleteError] = useState('')
+  const [projectToast, setProjectToast] = useState<AppToastState | null>(null)
+  const [printingProject, setPrintingProject] = useState(false)
 
   const { data: projectSummary } = useQuery({
     queryKey: ['project-summary', id],
@@ -63,24 +74,45 @@ export default function ProjectDetail() {
     enabled: !!id,
   })
 
+  const handlePrintProject = async () => {
+    setPrintingProject(true)
+    try {
+      const { added, missing } = await enqueueProjectParts(id!)
+      if (added > 0) {
+        setProjectToast({ title: 'Project queued', message: `${added} item(s) added to the print queue.`, tone: 'success' })
+        queryClient.invalidateQueries({ queryKey: ['queue'] })
+      } else if (missing > 0) {
+        setProjectToast({ title: 'No G-code found', message: `${missing} part(s) do not have valid G-code.`, tone: 'info' })
+      } else {
+        setProjectToast({ title: 'Nothing queued', message: 'No items were added to the print queue.', tone: 'info' })
+      }
+    } catch (err) {
+      setProjectToast({ title: 'Failed to queue project', message: err instanceof Error ? err.message : String(err), tone: 'error' })
+    } finally {
+      setPrintingProject(false)
+      setTimeout(() => setProjectToast(null), 3500)
+    }
+  }
+
   const handleAddPart = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
-    const formData = new FormData(e.currentTarget)
+    if (selectedRootFiles.length === 0) return
 
-    await createPart.mutateAsync({
-      projectId: id!,
-      data: {
-        name: formData.get('name') as string,
-        description: formData.get('description') as string,
-        quantity: parseInt(formData.get('quantity') as string) || 1,
-      },
-      file: partFile || undefined,
-      notes: partFileNotes || undefined,
-    })
+    for (const selected of selectedRootFiles) {
+      await createPart.mutateAsync({
+        projectId: id!,
+        data: {
+          name: selected.file.display_name || selected.file.file_name,
+          description: '',
+          quantity: 1,
+          gcode_file_id: selected.type === 'gcode' ? selected.file.id : undefined,
+          stl_file_id: selected.type === 'stl' ? selected.file.id : undefined,
+        },
+      })
+    }
 
     setShowAddPart(false)
-    setPartFile(null)
-    setPartFileNotes('')
+    setSelectedRootFiles([])
   }
 
   if (projectLoading) {
@@ -99,8 +131,25 @@ export default function ProjectDetail() {
     )
   }
 
+  const startProjectEdit = () => {
+    setProjectForm({ name: project.name || '', description: project.description || '' })
+    setProjectEditError('')
+    setEditingProject(true)
+  }
+
+  const saveProjectEdit = async () => {
+    setProjectEditError('')
+    try {
+      await updateProject.mutateAsync({ id: project.id, data: projectForm })
+      setEditingProject(false)
+    } catch (err) {
+      setProjectEditError(err instanceof Error ? err.message : 'Failed to update project')
+    }
+  }
+
   return (
     <div className="p-4 sm:p-6 lg:p-8">
+      {projectToast && <AppToast toast={projectToast} onClose={() => setProjectToast(null)} />}
       {/* Header */}
       <div className="mb-8">
         <Link 
@@ -111,12 +160,41 @@ export default function ProjectDetail() {
           Back to Projects
         </Link>
         
-        <div>
-          <h1 className="text-3xl font-display font-bold text-surface-100">
-            {project.name}
-          </h1>
-          {project.description && (
-            <p className="text-surface-400 mt-1">{project.description}</p>
+          <div className="card p-5">
+          {editingProject ? (
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs text-surface-500 mb-1">Nome do projeto</label>
+                <input value={projectForm.name} onChange={e => setProjectForm(prev => ({ ...prev, name: e.target.value }))} className="input text-xl font-semibold" autoFocus />
+              </div>
+              <div>
+                <label className="block text-xs text-surface-500 mb-1">Descrição</label>
+                <textarea value={projectForm.description} onChange={e => setProjectForm(prev => ({ ...prev, description: e.target.value }))} rows={2} className="input resize-none" placeholder="Descrição opcional" />
+              </div>
+              {projectEditError && <div className="text-sm text-red-400">{projectEditError}</div>}
+              <div className="flex gap-2">
+                <button onClick={saveProjectEdit} disabled={updateProject.isPending} className="btn btn-primary text-sm">{updateProject.isPending ? 'Salvando...' : 'Salvar'}</button>
+                <button onClick={() => setEditingProject(false)} className="btn btn-secondary text-sm">Cancelar</button>
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h1 className="text-3xl font-display font-bold text-surface-100">
+                  {project.name}
+                </h1>
+                {project.description && (
+                  <p className="text-surface-400 mt-1">{project.description}</p>
+                )}
+              </div>
+              <div className="flex items-center gap-3">
+                <button onClick={handlePrintProject} disabled={printingProject} className="btn btn-primary" title="Print whole project">
+                  <Play className="h-4 w-4 mr-2" />
+                  {printingProject ? 'Queueing...' : 'Print Project'}
+                </button>
+                <button onClick={startProjectEdit} className="btn btn-secondary text-sm">Editar</button>
+              </div>
+            </div>
           )}
         </div>
       </div>
@@ -240,6 +318,7 @@ export default function ProjectDetail() {
             </button>
           </div>
 
+          {partDeleteError && <div className="mb-4 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300">{partDeleteError}</div>}
           {partsLoading ? (
             <div className="text-surface-500">Loading parts...</div>
           ) : parts.length === 0 ? (
@@ -265,18 +344,16 @@ export default function ProjectDetail() {
                 <PartCard
                   key={part.id}
                   part={part}
-                  onUpload={() => {
-                    setSelectedPart(part)
-                    setShowUpload(true)
-                  }}
                   onSendToPrinter={(design) => setShowSendToPrinter(design)}
+                  onAddDesign={() => { setSelectedPart(part); setShowUpload(true) }}
                   onDelete={async () => {
                     if (!confirm(`Delete part "${part.name}"? This cannot be undone.`)) return
                     try {
+                      setPartDeleteError('')
                       await partsApi.delete(part.id)
                       queryClient.invalidateQueries({ queryKey: ['parts', id] })
                     } catch (err) {
-                      console.error('Failed to delete part:', err)
+                      setPartDeleteError(err instanceof Error ? err.message : 'Failed to delete part')
                     }
                   }}
                 />
@@ -311,118 +388,62 @@ export default function ProjectDetail() {
           <form onSubmit={handleAddPart}>
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-surface-300 mb-1">
-                  Part Name
-                </label>
-                <input
-                  type="text"
-                  name="name"
-                  required
-                  className="input"
-                  placeholder="e.g., Top Case, Motor Mount"
-                  autoFocus
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-surface-300 mb-1">
-                  Description
-                </label>
-                <textarea
-                  name="description"
-                  rows={2}
-                  className="input resize-none"
-                  placeholder="Optional description"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-surface-300 mb-1">
-                  Quantity
-                </label>
-                <input
-                  type="number"
-                  name="quantity"
-                  min="1"
-                  defaultValue="1"
-                  className="input w-24"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-surface-300 mb-2">
-                  Design File (optional)
-                </label>
-                <div
-                  className={cn(
-                    'border-2 border-dashed rounded-lg p-6 text-center transition-colors',
-                    partFile ? 'border-accent-500 bg-accent-500/5' : 'border-surface-700 hover:border-surface-600'
-                  )}
-                >
-                  <input
-                    type="file"
-                    accept=".stl,.3mf,.gcode"
-                    onChange={(e) => setPartFile(e.target.files?.[0] || null)}
-                    className="hidden"
-                    id="part-file-upload"
-                  />
-                  <label htmlFor="part-file-upload" className="cursor-pointer">
-                    {partFile ? (
-                      <div>
-                        <FileCode className="h-8 w-8 mx-auto mb-1 text-accent-500" />
-                        <p className="text-surface-100 font-medium text-sm">{partFile.name}</p>
-                        <p className="text-surface-500 text-xs">{formatBytes(partFile.size)}</p>
+                <label className="block text-sm font-medium text-surface-300 mb-2">Arquivos da aba Files</label>
+                {selectedRootFiles.length > 0 ? (
+                  <div className="space-y-2 rounded-lg border border-accent-500/40 bg-accent-500/5 p-3">
+                    {selectedRootFiles.map(selected => (
+                      <div key={`${selected.type}-${selected.file.id}`} className="flex items-center justify-between gap-3 rounded-lg bg-surface-900/60 p-2">
+                        <div className="min-w-0">
+                          <div className="truncate font-medium text-surface-100">{selected.file.display_name}</div>
+                          <div className="text-xs uppercase text-surface-500">{selected.type}</div>
+                        </div>
+                        <button type="button" onClick={() => setSelectedRootFiles(files => files.filter(file => !(file.type === selected.type && file.file.id === selected.file.id)))} className="text-surface-400 hover:text-surface-200"><X className="h-4 w-4" /></button>
                       </div>
-                    ) : (
-                      <div>
-                        <Upload className="h-8 w-8 mx-auto mb-1 text-surface-500" />
-                        <p className="text-surface-400 text-sm">Attach a design file</p>
-                        <p className="text-surface-500 text-xs">STL, 3MF, or GCODE</p>
-                      </div>
-                    )}
-                  </label>
-                  {partFile && (
-                    <button
-                      type="button"
-                      onClick={(e) => { e.stopPropagation(); setPartFile(null); setPartFileNotes('') }}
-                      className="mt-2 text-xs text-surface-400 hover:text-surface-200 flex items-center gap-1 mx-auto"
-                    >
-                      <X className="h-3 w-3" />
-                      Remove
-                    </button>
-                  )}
-                </div>
+                    ))}
+                  </div>
+                ) : (
+                  <button type="button" onClick={() => setShowGCodePicker(true)} className="w-full rounded-lg border border-surface-700 bg-surface-900/40 px-4 py-6 text-sm text-surface-300 hover:border-accent-500 hover:text-accent-400">
+                    Selecionar STL/G-code da aba Files
+                  </button>
+                )}
+                {selectedRootFiles.length > 0 && <button type="button" onClick={() => setShowGCodePicker(true)} className="mt-2 text-xs text-accent-400 hover:text-accent-300">Alterar seleção</button>}
               </div>
-              {partFile && (
-                <div>
-                  <label className="block text-sm font-medium text-surface-300 mb-1">
-                    File Notes
-                  </label>
-                  <textarea
-                    value={partFileNotes}
-                    onChange={(e) => setPartFileNotes(e.target.value)}
-                    rows={2}
-                    className="input resize-none"
-                    placeholder="Optional notes about this design"
-                  />
-                </div>
-              )}
             </div>
             <div className="flex justify-end gap-3 mt-6">
               <button
                 type="button"
-                onClick={() => { setShowAddPart(false); setPartFile(null); setPartFileNotes('') }}
+                onClick={() => { setShowAddPart(false); setSelectedRootFiles([]) }}
                 className="btn btn-ghost"
               >
                 Cancel
               </button>
               <button
                 type="submit"
-                disabled={createPart.isPending}
+                disabled={createPart.isPending || selectedRootFiles.length === 0}
                 className="btn btn-primary"
               >
-                {createPart.isPending ? 'Adding...' : 'Add Part'}
+                {createPart.isPending ? 'Adding...' : selectedRootFiles.length > 1 ? 'Add Parts' : 'Add Part'}
               </button>
             </div>
           </form>
         </Modal>
+      )}
+
+      {/* GCode File Picker */}
+      {showGCodePicker && (
+        <GCodeFilePicker
+          multiple
+          stlWithGCodeOnly
+          onSelect={(item) => {
+            setSelectedRootFiles([item])
+            setShowGCodePicker(false)
+          }}
+          onSelectMany={(items) => {
+            setSelectedRootFiles(items)
+            setShowGCodePicker(false)
+          }}
+          onClose={() => setShowGCodePicker(false)}
+        />
       )}
 
       {/* Upload Design Modal */}
@@ -491,34 +512,164 @@ function formatPrintTime(seconds: number): string {
   return `${m}m`
 }
 
+function InfoRow({ label, value }: { label: string; value: string }) {
+  return <div className="flex justify-between gap-4 border-b border-surface-800 pb-2"><span className="text-surface-500">{label}</span><span className="text-right text-surface-200">{value}</span></div>
+}
+
 // Part Card Component
 function PartCard({
   part,
-  onUpload,
   onSendToPrinter,
+  onAddDesign,
   onDelete,
 }: {
   part: Part
-  onUpload: () => void
   onSendToPrinter: (design: Design) => void
+  onAddDesign: () => void
   onDelete: () => void
 }) {
+  const queryClient = useQueryClient()
+  const [partBusy, setPartBusy] = useState('')
+  const [editingPartName, setEditingPartName] = useState(false)
+  const [partName, setPartName] = useState(part.name)
+  const [partQuantity, setPartQuantity] = useState(part.quantity)
+  const [selectedGCodeMaterials, setSelectedGCodeMaterials] = useState<Record<string, string>>({})
+  const [partError, setPartError] = useState('')
+  const [toast, setToast] = useState<AppToastState | null>(null)
+  const [viewingSTL, setViewingSTL] = useState<STLLibraryFile | null>(null)
+  const [viewingGCode, setViewingGCode] = useState<GCodeLibraryFile | null>(null)
   const { data: designs = [] } = useQuery({
     queryKey: ['designs', part.id],
     queryFn: () => designsApi.listByPart(part.id),
   })
+  const { data: library } = useQuery({ queryKey: ['file-library'], queryFn: () => fileLibraryApi.get() })
+  const { data: spools = [] } = useSpoolsWithMaterials()
+  const availableSpools = spools.filter(spool => spool.status !== 'empty' && spool.status !== 'archived' && spool.material)
+
+  useEffect(() => {
+    setPartName(part.name)
+    setPartQuantity(part.quantity)
+  }, [part.name, part.quantity])
+
+  const savePartName = async () => {
+    setEditingPartName(false)
+    const next = partName.trim()
+    if (!next || next === part.name) return
+    await partsApi.update(part.id, { name: next })
+    queryClient.invalidateQueries({ queryKey: ['parts', part.project_id] })
+  }
+
+  const savePartQuantity = async (quantity: number) => {
+    const next = Math.max(1, quantity)
+    setPartQuantity(next)
+    if (next === part.quantity) return
+    await partsApi.update(part.id, { quantity: next })
+    queryClient.invalidateQueries({ queryKey: ['parts', part.project_id] })
+  }
+
+  const getDesignSTL = (design: Design) => (library?.stl_files || []).find(file => file.file_id === design.file_id)
+  const getDesignGCode = (design: Design) => [...(library?.root_gcode_files || []), ...(library?.stl_files || []).flatMap(file => file.gcodes || [])].find(file => file.file_id === design.file_id)
+  const getGCodeProfile = (gcode: GCodeLibraryFile) => gcode.metadata?.print_settings_id || 'No profile'
+
+  const makeDefaultGCode = async (gcode: GCodeLibraryFile) => {
+    await gcodeLibraryApi.setDefaultForSTL(gcode.id)
+    queryClient.invalidateQueries({ queryKey: ['file-library'] })
+    queryClient.invalidateQueries({ queryKey: ['designs', part.id] })
+  }
+
+  const printGCode = async (gcode: GCodeLibraryFile) => {
+    setPartError('')
+    setPartBusy(gcode.id)
+    try {
+      const gcodeMaterialType = (gcode.material_type || '').toLowerCase()
+      const spool = availableSpools.find(item => item.id === selectedGCodeMaterials[gcode.id]) || availableSpools.find(item => item.default_for_material && item.material?.type.toLowerCase() === gcodeMaterialType)
+      await gcodeLibraryApi.addToQueue(gcode.id, spool?.material ? { assigned_spool_id: spool.id, project_id: part.project_id, material_type: spool.material.type, material_color: spool.material.color_hex || spool.material.color, filament_name: spool.material.name, source_type: 'project' } : { project_id: part.project_id, source_type: 'project' })
+      setToast({ title: 'Print added to queue', message: gcode.display_name || gcode.file_name, tone: 'success' })
+      setTimeout(() => setToast(null), 3500)
+    } catch (err) {
+      setPartError(err instanceof Error ? err.message : 'Failed to add print to queue')
+    } finally {
+      setPartBusy('')
+    }
+  }
+
+  const printDesign = async (design: Design) => {
+    if (design.file_type === 'stl') {
+      const stl = getDesignSTL(design)
+      const gcode = stl?.gcodes?.find(file => file.default_for_stl) || stl?.gcodes?.[0]
+      if (!gcode) {
+        setPartError('STL has no linked G-code')
+        return
+      }
+      await printGCode(gcode)
+      return
+    }
+    if (design.file_type === 'gcode') {
+      const gcode = getDesignGCode(design)
+      if (!gcode) {
+        setPartError('G-code not found in library')
+        return
+      }
+      await printGCode(gcode)
+      return
+    }
+    onSendToPrinter(design)
+  }
+
+  const renderGCodeRow = (gcode: GCodeLibraryFile) => {
+    const gcodeMaterialType = (gcode.material_type || '').toLowerCase()
+    const matchingSpools = gcodeMaterialType ? availableSpools.filter(spool => spool.material?.type.toLowerCase() === gcodeMaterialType) : []
+    const defaultSpool = matchingSpools.find(spool => spool.default_for_material)
+    const selectedSpoolID = selectedGCodeMaterials[gcode.id] || defaultSpool?.id || ''
+    return (
+    <div key={gcode.id} className="ml-12 mt-2 flex items-center justify-between rounded-lg border border-surface-700/60 bg-surface-900/60 p-2">
+      <div className="min-w-0">
+        <div className="flex items-center gap-2 text-sm font-medium text-orange-200">
+          <FileCode className="h-4 w-4 text-orange-400" />
+          <span className="truncate">{gcode.display_name || gcode.file_name}</span>
+          {gcode.default_for_stl && <span className="rounded-full border border-emerald-500/40 bg-emerald-500/15 px-2 py-0.5 text-[10px] font-bold uppercase text-emerald-300">Default</span>}
+        </div>
+        <div className="mt-1 flex flex-wrap gap-1.5 text-xs text-surface-500">
+          <span>Perfil: {getGCodeProfile(gcode)}</span>
+          {gcode.material_type && <span>{gcode.material_type.toUpperCase()}</span>}
+          {gcode.layer_height && <span>{gcode.layer_height}mm</span>}
+          {gcode.estimated_seconds && <span>{formatPrintTime(gcode.estimated_seconds)}</span>}
+          {gcode.filament_grams && <span>{Math.round(gcode.filament_grams)}g</span>}
+        </div>
+      </div>
+      <div className="flex shrink-0 items-center gap-2">
+        <select value={selectedSpoolID} onChange={e => setSelectedGCodeMaterials(current => ({ ...current, [gcode.id]: e.target.value }))} className="input w-56 py-1 text-xs" disabled={matchingSpools.length === 0}>
+          <option value="">{gcodeMaterialType ? `Spool ${gcodeMaterialType.toUpperCase()}` : 'Tipo não detectado'}</option>
+          {matchingSpools.map(spool => <option key={spool.id} value={spool.id}>{spool.material ? `${spool.material.name} · ${spool.material.type.toUpperCase()}` : 'Unknown'} · {Math.round(spool.remaining_weight)}g{spool.default_for_material ? ' · Default' : ''}</option>)}
+        </select>
+        {!gcode.default_for_stl && gcode.parent_stl_id && <button onClick={() => void makeDefaultGCode(gcode)} className="btn btn-ghost text-xs py-1.5 px-2">Make default</button>}
+        <button onClick={() => setViewingGCode(gcode)} className="btn btn-ghost text-xs py-1.5 px-2" title="G-code info"><Info className="h-3.5 w-3.5" /></button>
+        <button onClick={() => void printGCode(gcode)} className="btn btn-primary text-xs py-1.5 px-3">
+          <Play className="h-3.5 w-3.5 mr-1" />
+          {partBusy === gcode.id ? 'Adding...' : 'Queue'}
+        </button>
+      </div>
+    </div>
+    )
+  }
 
   return (
-    <div className="card p-5">
+    <div className="card p-5 relative">
+      {toast && <AppToast toast={toast} onClose={() => setToast(null)} />}
       <div className="flex items-start justify-between mb-4">
         <div>
           <div className="flex items-center gap-2">
-            <h3 className="font-semibold text-surface-100">{part.name}</h3>
-            <span className="text-sm text-surface-500">×{part.quantity}</span>
+            {editingPartName ? <input value={partName} autoFocus onChange={e => setPartName(e.target.value)} onBlur={savePartName} onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); if (e.key === 'Escape') { setPartName(part.name); setEditingPartName(false) } }} className="input py-1 text-sm" /> : <button type="button" onClick={() => setEditingPartName(true)} className="font-semibold text-surface-100 hover:text-accent-300">{part.name}</button>}
+            <div className="ml-2 inline-flex items-center rounded-lg border border-surface-700 bg-surface-900/70">
+              <button type="button" onClick={() => void savePartQuantity(partQuantity - 1)} className="px-2 py-1 text-surface-400 hover:text-surface-100">−</button>
+              <input value={partQuantity} onChange={e => setPartQuantity(parseInt(e.target.value) || 1)} onBlur={() => void savePartQuantity(partQuantity)} onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur() }} className="w-10 bg-transparent text-center text-sm text-surface-200 outline-none" />
+              <button type="button" onClick={() => void savePartQuantity(partQuantity + 1)} className="px-2 py-1 text-surface-400 hover:text-surface-100">+</button>
+            </div>
           </div>
           {part.description && (
             <p className="text-sm text-surface-500 mt-1">{part.description}</p>
           )}
+
         </div>
         <div className="flex items-center gap-2">
           <span className={cn('badge', getStatusBadge(part.status))}>
@@ -540,89 +691,103 @@ function PartCard({
           <span className="text-sm font-medium text-surface-400">
             Designs ({designs.length} version{designs.length !== 1 ? 's' : ''})
           </span>
-          <button 
-            onClick={onUpload}
-            className="btn btn-ghost text-xs py-1 px-2"
-          >
-            <Upload className="h-3.5 w-3.5 mr-1" />
-            Upload
-          </button>
+          <button onClick={onAddDesign} className="btn btn-secondary text-xs py-1.5 px-3"><Plus className="h-3.5 w-3.5 mr-1" />Add Design</button>
         </div>
 
+        {partError && <div className="mb-3 rounded-lg border border-red-500/30 bg-red-500/10 p-2 text-sm text-red-300">{partError}</div>}
         {designs.length === 0 ? (
           <div className="text-center py-4 text-surface-500 text-sm">
             No designs uploaded yet
           </div>
         ) : (
           <div className="space-y-2">
-            {designs.slice(0, 3).map((design) => (
-              <div 
-                key={design.id}
-                className="flex items-center justify-between p-3 rounded-lg bg-surface-800/50"
-              >
-                <div className="flex items-center gap-3">
-                  <FileCode className="h-5 w-5 text-surface-500" />
-                  <div>
-                    <div className="text-sm font-medium text-surface-200">
-                      v{design.version} — {design.file_name}
-                    </div>
-                    <div className="text-xs text-surface-500">
-                      {formatBytes(design.file_size_bytes)} • {formatRelativeTime(design.created_at)}
-                    </div>
-                    {design.slice_profile && (
-                      <div className="flex items-center gap-2 mt-1 flex-wrap">
-                        <span className="inline-flex items-center gap-1 text-xs bg-surface-700/60 text-surface-300 rounded px-1.5 py-0.5">
-                          <Scale className="h-3 w-3" />
-                          {Math.round(design.slice_profile.weight_grams)}g
-                        </span>
-                        <span className="inline-flex items-center gap-1 text-xs bg-surface-700/60 text-surface-300 rounded px-1.5 py-0.5">
-                          <Timer className="h-3 w-3" />
-                          {formatPrintTime(design.slice_profile.print_time_seconds)}
-                        </span>
-                        {design.slice_profile.filaments.map((f, i) => (
-                          <span
-                            key={i}
-                            className="inline-flex items-center gap-1.5 text-xs bg-surface-700/60 text-surface-300 rounded px-1.5 py-0.5"
-                          >
-                            <span
-                              className="inline-block h-2.5 w-2.5 rounded-full border border-surface-600"
-                              style={{ backgroundColor: f.color }}
-                            />
-                            {f.type} · {Math.round(f.used_meters)}m · {Math.round(f.used_grams)}g
-                          </span>
-                        ))}
+            {designs.slice(0, 3).map((design) => {
+              const stl = design.file_type === 'stl' ? getDesignSTL(design) : undefined
+              const gcode = design.file_type === 'gcode' ? getDesignGCode(design) : undefined
+              return (
+                <div key={design.id} className="rounded-lg bg-surface-800/50 p-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="h-10 w-10 rounded-lg bg-surface-900 overflow-hidden flex items-center justify-center">
+                        {stl?.thumbnail_file_id ? <img src={`/api/files/${stl.thumbnail_file_id}`} className="h-full w-full object-contain" /> : <FileCode className="h-5 w-5 text-surface-500" />}
                       </div>
-                    )}
+                      <div className="min-w-0">
+                        <div className="text-sm font-medium text-surface-200 truncate">
+                          v{design.version} — {stl?.display_name || gcode?.display_name || design.file_name}
+                        </div>
+                        <div className="text-xs text-surface-500 truncate">
+                          {design.file_name} • {formatBytes(design.file_size_bytes)} • {formatRelativeTime(design.created_at)}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {design.file_type === '3mf' && (
+                        <button
+                          onClick={() => {
+                            designsApi.openExternal(design.id, 'BambuStudio').catch((err) => {
+                              alert('Failed to open Bambu Studio: ' + err.message)
+                            })
+                          }}
+                          className="btn btn-ghost text-xs py-1.5 px-3"
+                          title="Open in Bambu Studio"
+                        >
+                          <ExternalLink className="h-3.5 w-3.5 mr-1" />
+                          Bambu Studio
+                        </button>
+                      )}
+                      {stl && <button onClick={() => setViewingSTL(stl)} className="btn btn-ghost text-xs py-1.5 px-2" title="STL info"><Info className="h-3.5 w-3.5" /></button>}
+                      {design.file_type !== 'stl' && (
+                        <button onClick={() => void printDesign(design)} className="btn btn-primary text-xs py-1.5 px-3">
+                          <Play className="h-3.5 w-3.5 mr-1" />
+                          {partBusy === design.id || partBusy === gcode?.id ? 'Adding...' : 'Queue'}
+                        </button>
+                      )}
+                      <button
+                        onClick={async () => { if (!confirm(`Delete design ${design.file_name}?`)) return; await designsApi.delete(design.id); queryClient.invalidateQueries({ queryKey: ['designs', part.id] }) }}
+                        className="btn btn-ghost text-xs py-1.5 px-2 text-red-400"
+                        title="Delete design"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
                   </div>
+                  {stl?.gcodes?.map(renderGCodeRow)}
+                  {gcode && <div className="mt-2">{renderGCodeRow(gcode)}</div>}
                 </div>
-                <div className="flex items-center gap-2">
-                  {design.file_type === '3mf' && (
-                    <button
-                      onClick={() => {
-                        designsApi.openExternal(design.id, 'BambuStudio').catch((err) => {
-                          alert('Failed to open Bambu Studio: ' + err.message)
-                        })
-                      }}
-                      className="btn btn-ghost text-xs py-1.5 px-3"
-                      title="Open in Bambu Studio"
-                    >
-                      <ExternalLink className="h-3.5 w-3.5 mr-1" />
-                      Bambu Studio
-                    </button>
-                  )}
-                  <button
-                    onClick={() => onSendToPrinter(design)}
-                    className="btn btn-primary text-xs py-1.5 px-3"
-                  >
-                    <Play className="h-3.5 w-3.5 mr-1" />
-                    Print
-                  </button>
-                </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
         )}
       </div>
+      {viewingSTL && (
+        <Modal title="STL info" onClose={() => setViewingSTL(null)}>
+          <div className="space-y-3 text-sm">
+            {viewingSTL.thumbnail_file_id && <img src={`/api/files/${viewingSTL.thumbnail_file_id}`} className="h-48 w-full rounded-lg bg-surface-900 object-contain" />}
+            <InfoRow label="Title" value={viewingSTL.display_name || viewingSTL.file_name} />
+            <InfoRow label="File" value={viewingSTL.file_name} />
+            <InfoRow label="Size" value={formatBytes(viewingSTL.size_bytes)} />
+            <InfoRow label="Linked G-codes" value={`${viewingSTL.gcodes?.length || 0}`} />
+          </div>
+        </Modal>
+      )}
+      {viewingGCode && (
+        <Modal title="G-code info" onClose={() => setViewingGCode(null)}>
+          <div className="space-y-3 text-sm">
+            {viewingGCode.thumbnail_file_id && <img src={`/api/files/${viewingGCode.thumbnail_file_id}`} className="h-48 w-full rounded-lg bg-surface-900 object-contain" />}
+            <InfoRow label="Title" value={viewingGCode.display_name || viewingGCode.file_name} />
+            <InfoRow label="File" value={viewingGCode.file_name} />
+            <InfoRow label="Perfil de Impressão" value={viewingGCode.metadata?.print_settings_id || '-'} />
+            <InfoRow label="Perfil de Impressora" value={viewingGCode.metadata?.printer_settings_id || '-'} />
+            <InfoRow label="Perfil de Filamento" value={viewingGCode.metadata?.filament_settings_id || viewingGCode.filament_name || '-'} />
+            <InfoRow label="Impressora" value={viewingGCode.metadata?.printer_model || '-'} />
+            <InfoRow label="Material" value={viewingGCode.material_type?.toUpperCase() || '-'} />
+            <InfoRow label="Weight" value={viewingGCode.filament_grams ? `${Math.round(viewingGCode.filament_grams)}g` : '-'} />
+            <InfoRow label="Time" value={viewingGCode.estimated_seconds ? formatPrintTime(viewingGCode.estimated_seconds) : '-'} />
+            <InfoRow label="Layer" value={viewingGCode.layer_height ? `${viewingGCode.layer_height}mm` : '-'} />
+            <InfoRow label="Nozzle" value={viewingGCode.nozzle_diameter ? `${viewingGCode.nozzle_diameter}mm` : '-'} />
+          </div>
+        </Modal>
+      )}
     </div>
   )
 }
@@ -942,6 +1107,46 @@ function PrintHistoryTab({
   onRecordOutcome: (job: PrintJob) => void
   onHandleFailure: (job: PrintJob) => void
 }) {
+  const queryClient = useQueryClient()
+  const [confirmDeleteJob, setConfirmDeleteJob] = useState<string | null>(null)
+  const [confirmClearHistory, setConfirmClearHistory] = useState(false)
+  const [historyError, setHistoryError] = useState('')
+
+  const refreshHistory = () => {
+    queryClient.invalidateQueries({ queryKey: ['project-job-stats', projectId] })
+    queryClient.invalidateQueries({ queryKey: ['design-jobs'] })
+  }
+
+  const deleteJob = async (jobId: string) => {
+    if (confirmDeleteJob !== jobId) {
+      setConfirmDeleteJob(jobId)
+      return
+    }
+    setHistoryError('')
+    try {
+      await printJobsApi.delete(jobId)
+      setConfirmDeleteJob(null)
+      refreshHistory()
+    } catch (err) {
+      setHistoryError(err instanceof Error ? err.message : 'Failed to delete print record')
+    }
+  }
+
+  const clearHistory = async () => {
+    if (!confirmClearHistory) {
+      setConfirmClearHistory(true)
+      return
+    }
+    setHistoryError('')
+    try {
+      await projectsApi.clearJobs(projectId)
+      setConfirmClearHistory(false)
+      refreshHistory()
+    } catch (err) {
+      setHistoryError(err instanceof Error ? err.message : 'Failed to clear print history')
+    }
+  }
+
   // Server-side job stats
   const { data: jobStats } = useQuery({
     queryKey: ['project-job-stats', projectId],
@@ -973,6 +1178,13 @@ function PrintHistoryTab({
 
   const allJobs = jobQueries.flatMap((q) => q.data || [])
   const isLoadingJobs = jobQueries.some((q) => q.isLoading)
+  const { data: queueData, isLoading: isLoadingQueue } = useQuery({
+    queryKey: ['queue', 'project-history', projectId],
+    queryFn: () => queueApi.get(),
+  })
+  const projectQueueItems = (queueData?.items || [])
+    .map(item => item.item)
+    .filter(item => item.project_id === projectId && ['done', 'failed', 'cancelled', 'printing', 'paused', 'ready', 'queued'].includes(item.status))
 
   // Create lookup maps
   const designMap = Object.fromEntries(allDesigns.map((d) => [d.id, d]))
@@ -994,11 +1206,11 @@ function PrintHistoryTab({
     return `${mins}m`
   }
 
-  if (isLoadingDesigns || isLoadingJobs) {
+  if (isLoadingDesigns || isLoadingJobs || isLoadingQueue) {
     return <div className="text-surface-500">Loading print history...</div>
   }
 
-  if (allJobs.length === 0) {
+  if (allJobs.length === 0 && projectQueueItems.length === 0) {
     return (
       <div className="card p-8 text-center">
         <History className="h-12 w-12 mx-auto mb-3 text-surface-600" />
@@ -1016,20 +1228,34 @@ function PrintHistoryTab({
   const totalMaterialUsed = allJobs.reduce(
     (sum, job) => sum + (job.outcome?.material_used || 0),
     0
-  )
+  ) + projectQueueItems.filter(item => item.status === 'done').reduce((sum, item) => sum + (item.filament_grams || 0), 0)
+  const totalPrintSeconds = projectQueueItems.filter(item => item.status === 'done').reduce((sum, item) => sum + (item.estimated_seconds || 0), 0)
   const totalCost = allJobs.reduce(
     (sum, job) => sum + (job.outcome?.material_cost || 0),
     0
   )
 
-  const statsTotal = jobStats?.total ?? allJobs.length
-  const statsCompleted = jobStats?.completed ?? allJobs.filter((j) => j.outcome?.success === true).length
-  const statsFailed = jobStats?.failed ?? allJobs.filter((j) => j.outcome?.success === false || j.status === 'failed').length
-  const statsPrinting = jobStats?.printing ?? allJobs.filter((j) => j.status === 'printing').length
-  const statsQueued = jobStats?.queued ?? 0
+  const projectQueueCompleted = projectQueueItems.filter(item => item.status === 'done').length
+  const projectQueueFailed = projectQueueItems.filter(item => item.status === 'failed' || item.status === 'cancelled').length
+  const projectQueuePrinting = projectQueueItems.filter(item => item.status === 'printing' || item.status === 'paused').length
+  const projectQueueQueued = projectQueueItems.filter(item => item.status === 'queued' || item.status === 'ready').length
+  const statsTotal = (jobStats?.total ?? allJobs.length) + projectQueueItems.length
+  const statsCompleted = (jobStats?.completed ?? allJobs.filter((j) => j.outcome?.success === true).length) + projectQueueCompleted
+  const statsFailed = (jobStats?.failed ?? allJobs.filter((j) => j.outcome?.success === false || j.status === 'failed').length) + projectQueueFailed
+  const statsPrinting = (jobStats?.printing ?? allJobs.filter((j) => j.status === 'printing').length) + projectQueuePrinting
+  const statsQueued = (jobStats?.queued ?? 0) + projectQueueQueued
 
   return (
     <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div className="text-sm text-surface-500">Print History</div>
+        <div className="flex gap-2">
+          <button onClick={clearHistory} className="btn btn-secondary text-xs py-1 px-3 flex items-center gap-1">
+            <Trash2 className="h-3.5 w-3.5" /> {confirmClearHistory ? 'Confirmar limpar?' : 'Limpar histórico'}
+          </button>
+        </div>
+      </div>
+      {historyError && <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300">{historyError}</div>}
       {/* Stats Summary */}
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
         <div className="card p-4">
@@ -1057,6 +1283,7 @@ function PrintHistoryTab({
           <div className="text-2xl font-semibold text-surface-100">
             {totalMaterialUsed.toFixed(0)}g
           </div>
+          <div className="mt-1 text-xs text-surface-500">{formatPrintTime(totalPrintSeconds)} print time</div>
         </div>
         <div className="card p-4">
           <div className="text-sm text-surface-500 mb-1">Total Cost</div>
@@ -1068,6 +1295,33 @@ function PrintHistoryTab({
 
       {/* Job List */}
       <div className="space-y-3">
+      {projectQueueItems.map((item) => (
+        <div key={item.id} className="card p-4 border-blue-500/20">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <div className={cn('w-10 h-10 rounded-lg flex items-center justify-center', item.status === 'done' ? 'bg-emerald-500/20 text-emerald-400' : item.status === 'failed' ? 'bg-red-500/20 text-red-400' : 'bg-blue-500/20 text-blue-400')}>
+                {item.status === 'done' ? <CheckCircle className="h-5 w-5" /> : item.status === 'failed' ? <XCircle className="h-5 w-5" /> : <Clock className="h-5 w-5" />}
+              </div>
+              <div>
+                <div className="font-medium text-surface-100">{item.display_name || item.file_name}</div>
+                <div className="text-sm text-surface-500 flex items-center gap-2">
+                  <span>Queue from Projects</span>
+                  <span>·</span>
+                  <span>{formatRelativeTime(item.created_at)}</span>
+                  {item.estimated_seconds && <><span>·</span><span>{formatPrintTime(item.estimated_seconds)}</span></>}
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="text-right text-sm text-surface-300">
+                {item.filament_grams ? `${Math.round(item.filament_grams)}g` : 'No grams'}
+                {item.material_type && <span className="ml-2 text-surface-500">{item.material_type.toUpperCase()}</span>}
+              </div>
+              <span className={cn('badge', getStatusBadge(item.status))}>{item.status}</span>
+            </div>
+          </div>
+        </div>
+      ))}
       {sortedJobs.map((job) => {
         const design = designMap[job.design_id]
         const printer = job.printer_id ? printerMap[job.printer_id] : undefined
@@ -1182,6 +1436,19 @@ function PrintHistoryTab({
                     Record Outcome
                   </button>
                 )}
+
+                <button
+                  onClick={() => deleteJob(job.id)}
+                  className={cn(
+                    'rounded-lg border px-2 py-1 text-xs font-semibold transition-colors flex items-center gap-1',
+                    confirmDeleteJob === job.id
+                      ? 'border-red-500/70 bg-red-500/20 text-red-300 hover:bg-red-500/30'
+                      : 'border-surface-700 bg-surface-800/50 text-surface-400 hover:text-red-300 hover:border-red-500/40'
+                  )}
+                >
+                  <Trash2 className="h-3 w-3" />
+                  {confirmDeleteJob === job.id ? 'Confirmar' : 'Apagar'}
+                </button>
               </div>
             </div>
 
@@ -1515,60 +1782,58 @@ function UploadDesignModal({
   onClose: () => void
   onSuccess: () => void
 }) {
-  const [file, setFile] = useState<File | null>(null)
+  const [selectedGCodeFile, setSelectedGCodeFile] = useState<RootProjectFile | null>(null)
   const [notes, setNotes] = useState('')
   const [uploading, setUploading] = useState(false)
+  const [showPicker, setShowPicker] = useState(false)
+  const [error, setError] = useState('')
 
   const handleUpload = async () => {
-    if (!file) return
-    
+    if (!selectedGCodeFile) return
+
     setUploading(true)
+    setError('')
     try {
-      await designsApi.upload(part.id, file, notes)
+      await designsApi.linkRootFile(part.id, { type: selectedGCodeFile.type, id: selectedGCodeFile.file.id }, notes)
       onSuccess()
     } catch (err) {
-      console.error('Upload failed:', err)
+      setError(err instanceof Error ? err.message : 'Failed to add design')
     } finally {
       setUploading(false)
     }
   }
 
   return (
-    <Modal title={`Upload Design for ${part.name}`} onClose={onClose}>
+    <Modal title={`Add Design for ${part.name}`} onClose={onClose}>
       <div className="space-y-4">
         <div>
           <label className="block text-sm font-medium text-surface-300 mb-2">
-            Design File
+            Design File (G-code)
           </label>
-          <div 
-            className={cn(
-              'border-2 border-dashed rounded-lg p-8 text-center transition-colors',
-              file ? 'border-accent-500 bg-accent-500/5' : 'border-surface-700 hover:border-surface-600'
-            )}
-          >
-            <input
-              type="file"
-              accept=".stl,.3mf,.gcode"
-              onChange={(e) => setFile(e.target.files?.[0] || null)}
-              className="hidden"
-              id="file-upload"
-            />
-            <label htmlFor="file-upload" className="cursor-pointer">
-              {file ? (
-                <div>
-                  <FileCode className="h-10 w-10 mx-auto mb-2 text-accent-500" />
-                  <p className="text-surface-100 font-medium">{file.name}</p>
-                  <p className="text-surface-500 text-sm">{formatBytes(file.size)}</p>
+          {selectedGCodeFile ? (
+            <div className="rounded-lg border border-accent-500/40 bg-accent-500/5 p-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded bg-surface-800 overflow-hidden">
+                    {selectedGCodeFile.file.thumbnail_file_id ? (
+                      <img src={`/api/files/${selectedGCodeFile.file.thumbnail_file_id}`} className="w-full h-full object-cover" />
+                    ) : (
+                      <FileCode className="h-5 w-5 m-2.5 text-surface-500" />
+                    )}
+                  </div>
+                  <div>
+                    <div className="font-medium text-surface-100">{selectedGCodeFile.file.display_name}</div>
+                    <div className="text-xs text-surface-500 uppercase">{selectedGCodeFile.type}</div>
+                  </div>
                 </div>
-              ) : (
-                <div>
-                  <Upload className="h-10 w-10 mx-auto mb-2 text-surface-500" />
-                  <p className="text-surface-300">Click to upload or drag & drop</p>
-                  <p className="text-surface-500 text-sm">STL, 3MF, or GCODE</p>
-                </div>
-              )}
-            </label>
-          </div>
+                <button onClick={() => setSelectedGCodeFile(null)} className="text-surface-400 hover:text-surface-200"><X className="h-4 w-4" /></button>
+              </div>
+            </div>
+          ) : (
+            <button type="button" onClick={() => setShowPicker(true)} className="w-full rounded-lg border border-surface-700 bg-surface-900/40 px-4 py-4 text-sm text-surface-300 hover:border-accent-500 hover:text-accent-400">
+              Selecionar arquivo da aba Files
+            </button>
+          )}
         </div>
         <div>
           <label className="block text-sm font-medium text-surface-300 mb-1">
@@ -1582,17 +1847,28 @@ function UploadDesignModal({
             placeholder="Optional notes about this version"
           />
         </div>
+        {error && <div className="text-sm text-red-400">{error}</div>}
       </div>
+      {showPicker && (
+        <GCodeFilePicker
+          stlWithGCodeOnly
+          onSelect={(item) => {
+            setSelectedGCodeFile(item)
+            setShowPicker(false)
+          }}
+          onClose={() => setShowPicker(false)}
+        />
+      )}
       <div className="flex justify-end gap-3 mt-6">
         <button onClick={onClose} className="btn btn-ghost">
           Cancel
         </button>
         <button
           onClick={handleUpload}
-          disabled={!file || uploading}
+          disabled={!selectedGCodeFile || uploading}
           className="btn btn-primary"
         >
-          {uploading ? 'Uploading...' : 'Upload Design'}
+          {uploading ? 'Adicionando...' : 'Adicionar design'}
         </button>
       </div>
     </Modal>
@@ -1624,6 +1900,7 @@ function SendToPrinterModal({
   const [selectedPrinter, setSelectedPrinter] = useState('')
   const [selectedSpool, setSelectedSpool] = useState('')
   const [sending, setSending] = useState(false)
+  const [sendError, setSendError] = useState('')
   const queryClient = useQueryClient()
 
   const { data: spoolsWithMaterials = [] } = useSpoolsWithMaterials()
@@ -1641,21 +1918,21 @@ function SendToPrinterModal({
     if (!selectedPrinter || !selectedSpool) return
 
     setSending(true)
+    setSendError('')
     try {
-      // Create print job
       const job = await printJobsApi.create({
         design_id: design.id,
         printer_id: selectedPrinter,
         material_spool_id: selectedSpool,
       })
 
-      // Start the job
-      await printJobsApi.start(job.id)
+      await queueApi.fromPrintJob(job.id, {})
 
       queryClient.invalidateQueries({ queryKey: ['print-jobs'] })
+      queryClient.invalidateQueries({ queryKey: ['queue'] })
       onClose()
     } catch (err) {
-      console.error('Failed to send to printer:', err)
+      setSendError(err instanceof Error ? err.message : 'Failed to add to queue')
     } finally {
       setSending(false)
     }
@@ -1666,7 +1943,7 @@ function SendToPrinterModal({
   )
 
   return (
-    <Modal title="Send to Printer" onClose={onClose}>
+    <Modal title="Adicionar à fila" onClose={onClose}>
       <div className="space-y-4">
         <div>
           <label className="block text-sm font-medium text-surface-300 mb-2">
@@ -1799,6 +2076,8 @@ function SendToPrinterModal({
         </div>
       </div>
 
+      {sendError && <div className="mt-4 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300">{sendError}</div>}
+
       <div className="flex justify-end gap-3 mt-6">
         <button onClick={onClose} className="btn btn-ghost">
           Cancel
@@ -1809,7 +2088,7 @@ function SendToPrinterModal({
           className="btn btn-primary"
         >
           <Play className="h-4 w-4 mr-2" />
-          {sending ? 'Sending...' : 'Start Print'}
+          {sending ? 'Adicionando...' : 'Adicionar à fila'}
         </button>
       </div>
     </Modal>

@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/philjestin/daedalus/internal/model"
+	"github.com/Brook-sys/picofarm/internal/model"
 )
 
 // createTestCustomer is a helper that creates a customer for quote FK requirements.
@@ -651,17 +651,17 @@ func TestQuoteRepository_FinancialFields(t *testing.T) {
 	}
 
 	quote := &model.Quote{
-		QuoteNumber:    "Q-0001",
-		CustomerID:     customer.ID,
-		Title:          "Financial Test",
-		DiscountType:   model.DiscountTypePercent,
-		DiscountValue:  750, // 7.5%
-		RushFeeCents:   5000,
-		TaxRate:        825, // 8.25%
-		Terms:          "Net 30. Payment due upon receipt.",
-		BillingAddress: billing,
+		QuoteNumber:     "Q-0001",
+		CustomerID:      customer.ID,
+		Title:           "Financial Test",
+		DiscountType:    model.DiscountTypePercent,
+		DiscountValue:   750, // 7.5%
+		RushFeeCents:    5000,
+		TaxRate:         825, // 8.25%
+		Terms:           "Net 30. Payment due upon receipt.",
+		BillingAddress:  billing,
 		ShippingAddress: shipping,
-		ShareToken:     "abc123def456",
+		ShareToken:      "abc123def456",
 	}
 
 	requestedDue := time.Now().Add(14 * 24 * time.Hour)

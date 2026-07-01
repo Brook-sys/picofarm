@@ -9,10 +9,11 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/philjestin/daedalus/internal/model"
+	"github.com/Brook-sys/picofarm/internal/model"
 )
 
 // OctoPrintClient implements Client for OctoPrint API.
@@ -121,6 +122,37 @@ func (c *OctoPrintClient) CancelJob() error {
 	req := map[string]string{"command": "cancel"}
 	body, _ := json.Marshal(req)
 	_, err := c.doRequest("POST", "/api/job", body)
+	return err
+}
+
+func (c *OctoPrintClient) Capabilities() model.PrinterCapabilities {
+	return model.PrinterCapabilities{
+		CanStartPrint:   true,
+		CanPause:        true,
+		CanResume:       true,
+		CanCancel:       true,
+		CanRunGCode:     true,
+		CanSetFeedRate:  true,
+		CanUploadFile:   true,
+		CanControlTemps: true,
+	}
+}
+
+func (c *OctoPrintClient) SetFeedRate(percent int) error {
+	req := map[string][]string{"commands": []string{fmt.Sprintf("M220 S%d", percent)}}
+	body, _ := json.Marshal(req)
+	_, err := c.doRequest("POST", "/api/printer/command", body)
+	return err
+}
+
+func (c *OctoPrintClient) RunMacro(name string) error {
+	macro := strings.TrimSpace(name)
+	if macro == "" {
+		return fmt.Errorf("macro name is required")
+	}
+	req := map[string][]string{"commands": []string{macro}}
+	body, _ := json.Marshal(req)
+	_, err := c.doRequest("POST", "/api/printer/command", body)
 	return err
 }
 
@@ -272,8 +304,8 @@ func (c *OctoPrintClient) parseState(printerResp []byte, jobResp []byte) *model.
 			} `json:"file"`
 		} `json:"job"`
 		Progress struct {
-			Completion   float64 `json:"completion"`
-			PrintTimeLeft int    `json:"printTimeLeft"`
+			Completion    float64 `json:"completion"`
+			PrintTimeLeft int     `json:"printTimeLeft"`
 		} `json:"progress"`
 	}
 
@@ -285,4 +317,3 @@ func (c *OctoPrintClient) parseState(printerResp []byte, jobResp []byte) *model.
 
 	return state
 }
-

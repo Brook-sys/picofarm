@@ -2,10 +2,16 @@ import { useEffect, useRef, useCallback, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import type { PrinterState, DispatchRequest } from '../types'
 
-// Build WebSocket URL - use relative path in production
+// Build WebSocket URL - use relative path or configurable host
 function getWsUrl(): string {
+  // Allow override via env (for external access)
+  const envUrl = import.meta.env.VITE_WS_URL
+  if (envUrl) return envUrl
   if (import.meta.env.DEV) {
-    return 'ws://localhost:8080/ws'
+    // In dev, use the current host so external machines can connect
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+    const host = window.location.host || 'localhost:5174'
+    return `${protocol}//${host}/ws`
   }
   // In production, use current host with appropriate protocol
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'

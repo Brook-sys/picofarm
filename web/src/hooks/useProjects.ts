@@ -71,7 +71,7 @@ export function useCreatePart() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: ({ projectId, data, file, notes }: { projectId: string; data: Partial<Part>; file?: File; notes?: string }) =>
+    mutationFn: ({ projectId, data, file, notes }: { projectId: string; data: Partial<Part> & { gcode_file_id?: string; stl_file_id?: string }; file?: File; notes?: string }) =>
       partsApi.createWithFile(projectId, data, file, notes),
     onSuccess: (_, { projectId }) => {
       queryClient.invalidateQueries({ queryKey: ['parts', projectId] })

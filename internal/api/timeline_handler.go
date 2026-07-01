@@ -4,8 +4,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/philjestin/daedalus/internal/model"
-	"github.com/philjestin/daedalus/internal/service"
+	"github.com/Brook-sys/picofarm/internal/model"
+	"github.com/Brook-sys/picofarm/internal/service"
 )
 
 // TimelineHandler handles timeline-related HTTP requests.

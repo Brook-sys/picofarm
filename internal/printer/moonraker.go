@@ -6,13 +6,16 @@ import (
 	"fmt"
 	"io"
 	"mime/multipart"
+	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/philjestin/daedalus/internal/model"
+	"github.com/Brook-sys/picofarm/internal/model"
 )
 
 // MoonrakerClient implements Client for Moonraker API (Klipper).
@@ -26,6 +29,17 @@ type MoonrakerClient struct {
 
 // NewMoonrakerClient creates a new Moonraker client.
 func NewMoonrakerClient(printerID uuid.UUID, baseURL string) *MoonrakerClient {
+	// Ensure no trailing slash to avoid double slashes in requests
+	baseURL = strings.TrimRight(baseURL, "/")
+	// If no port specified, default to Moonraker port 7125
+	if u, err := url.Parse(baseURL); err == nil && u.Host != "" {
+		if _, _, perr := net.SplitHostPort(u.Host); perr != nil {
+			if u.Port() == "" {
+				u.Host = net.JoinHostPort(u.Hostname(), "7125")
+				baseURL = u.String()
+			}
+		}
+	}
 	return &MoonrakerClient{
 		printerID: printerID,
 		baseURL:   baseURL,
@@ -57,7 +71,7 @@ func (c *MoonrakerClient) Disconnect() error {
 // GetStatus retrieves current printer status.
 func (c *MoonrakerClient) GetStatus() (*model.PrinterState, error) {
 	// Get printer status
-	resp, err := c.doRequest("GET", "/printer/objects/query?print_stats&extruder&heater_bed", nil)
+	resp, err := c.doRequest("GET", "/printer/objects/query?print_stats&display_status&extruder&heater_bed", nil)
 	if err != nil {
 		// Connection failure means the printer is offline, not an application error
 		offlineState := &model.PrinterState{PrinterID: c.printerID, Status: model.PrinterStatusOffline, UpdatedAt: time.Now()}
@@ -70,13 +84,15 @@ func (c *MoonrakerClient) GetStatus() (*model.PrinterState, error) {
 
 // StartJob uploads and starts printing a file.
 func (c *MoonrakerClient) StartJob(filename string, filePath string) error {
-	// Upload file
-	if err := c.uploadFile(filePath); err != nil {
+	remoteName, err := c.uploadFile(filePath)
+	if err != nil {
 		return fmt.Errorf("failed to upload file: %w", err)
 	}
+	if remoteName == "" {
+		remoteName = filename
+	}
 
-	// Start print
-	_, err := c.doRequest("POST", "/printer/print/start?filename="+filename, nil)
+	_, err = c.doRequest("POST", "/printer/print/start?filename="+url.QueryEscape(remoteName), nil)
 	if err != nil {
 		return fmt.Errorf("failed to start print: %w", err)
 	}
@@ -99,6 +115,34 @@ func (c *MoonrakerClient) ResumeJob() error {
 // CancelJob cancels the current print.
 func (c *MoonrakerClient) CancelJob() error {
 	_, err := c.doRequest("POST", "/printer/print/cancel", nil)
+	return err
+}
+
+func (c *MoonrakerClient) Capabilities() model.PrinterCapabilities {
+	return model.PrinterCapabilities{
+		CanStartPrint:        true,
+		CanPause:             true,
+		CanResume:            true,
+		CanCancel:            true,
+		CanRunGCode:          true,
+		CanSetFeedRate:       true,
+		CanUploadFile:        true,
+		CanControlTemps:      true,
+		CanConfirmPlateClear: true,
+	}
+}
+
+func (c *MoonrakerClient) SetFeedRate(percent int) error {
+	return c.RunMacro(fmt.Sprintf("M220 S%d", percent))
+}
+
+// RunMacro executes a Klipper macro or raw G-code script through Moonraker.
+func (c *MoonrakerClient) RunMacro(name string) error {
+	macro := strings.TrimSpace(name)
+	if macro == "" {
+		return fmt.Errorf("macro name is required")
+	}
+	_, err := c.doRequest("POST", "/printer/gcode/script?script="+url.QueryEscape(macro), nil)
 	return err
 }
 
@@ -130,17 +174,18 @@ func (c *MoonrakerClient) doRequest(method string, path string, body []byte) ([]
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 400 {
-		return nil, fmt.Errorf("API error: %d", resp.StatusCode)
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("API error: %d %s", resp.StatusCode, strings.TrimSpace(string(body)))
 	}
 
 	return io.ReadAll(resp.Body)
 }
 
-// uploadFile uploads a file to Moonraker.
-func (c *MoonrakerClient) uploadFile(filePath string) error {
+// uploadFile uploads a file to Moonraker. Returns remote filename on success.
+func (c *MoonrakerClient) uploadFile(filePath string) (string, error) {
 	file, err := os.Open(filePath)
 	if err != nil {
-		return err
+		return "", err
 	}
 	defer file.Close()
 
@@ -149,33 +194,47 @@ func (c *MoonrakerClient) uploadFile(filePath string) error {
 
 	part, err := writer.CreateFormFile("file", filepath.Base(filePath))
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	if _, err := io.Copy(part, file); err != nil {
-		return err
+		return "", err
 	}
 
 	writer.Close()
 
 	req, err := http.NewRequest("POST", c.baseURL+"/server/files/upload", body)
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	req.Header.Set("Content-Type", writer.FormDataContentType())
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return err
+		return "", err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 400 {
-		return fmt.Errorf("upload failed: %d", resp.StatusCode)
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		return "", fmt.Errorf("upload failed: %d %s", resp.StatusCode, strings.TrimSpace(string(bodyBytes)))
 	}
 
-	return nil
+	// Moonraker returns JSON {result: {item: {path, ...}}}
+	var uploadResp struct {
+		Result struct {
+			Item struct {
+				Path string `json:"path"`
+			} `json:"item"`
+		} `json:"result"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&uploadResp); err == nil {
+		if uploadResp.Result.Item.Path != "" {
+			return uploadResp.Result.Item.Path, nil
+		}
+	}
+	return filepath.Base(filePath), nil
 }
 
 // pollStatus periodically polls for status updates.
@@ -208,8 +267,8 @@ func (c *MoonrakerClient) parseState(resp []byte) *model.PrinterState {
 		Result struct {
 			Status struct {
 				PrintStats struct {
-					State      string  `json:"state"`
-					Filename   string  `json:"filename"`
+					State         string  `json:"state"`
+					Filename      string  `json:"filename"`
 					TotalDuration float64 `json:"total_duration"`
 					PrintDuration float64 `json:"print_duration"`
 				} `json:"print_stats"`
@@ -219,6 +278,9 @@ func (c *MoonrakerClient) parseState(resp []byte) *model.PrinterState {
 				HeaterBed struct {
 					Temperature float64 `json:"temperature"`
 				} `json:"heater_bed"`
+				DisplayStatus struct {
+					Progress float64 `json:"progress"`
+				} `json:"display_status"`
 			} `json:"status"`
 		} `json:"result"`
 	}
@@ -226,6 +288,7 @@ func (c *MoonrakerClient) parseState(resp []byte) *model.PrinterState {
 	if err := json.Unmarshal(resp, &data); err == nil {
 		state.NozzleTemp = data.Result.Status.Extruder.Temperature
 		state.BedTemp = data.Result.Status.HeaterBed.Temperature
+		state.Progress = data.Result.Status.DisplayStatus.Progress * 100
 		state.CurrentFile = data.Result.Status.PrintStats.Filename
 
 		switch data.Result.Status.PrintStats.State {
@@ -242,4 +305,3 @@ func (c *MoonrakerClient) parseState(resp []byte) *model.PrinterState {
 
 	return state
 }
-

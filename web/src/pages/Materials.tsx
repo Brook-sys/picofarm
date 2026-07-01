@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, Package, Droplet, ShoppingCart, Trash2 } from 'lucide-react'
+import { Plus, Package, Droplet, ShoppingCart, Trash2, Edit2, Check, X } from 'lucide-react'
 import { materialsApi, spoolsApi } from '../api/client'
+import AppToast, { type AppToastState } from '../components/AppToast'
 import { cn, getStatusBadge } from '../lib/utils'
 import type { Material, MaterialSpool, MaterialType } from '../types'
 
@@ -32,6 +33,19 @@ export default function Materials() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['spools'] }),
   })
 
+  const updateMaterial = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: Partial<Material> }) => materialsApi.update(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['materials'] })
+      queryClient.invalidateQueries({ queryKey: ['spools'] })
+    },
+  })
+
+  const updateSpool = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: Partial<MaterialSpool> }) => spoolsApi.update(id, data),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['spools'] }),
+  })
+
   const deleteMaterial = useMutation({
     mutationFn: (id: string) => materialsApi.delete(id),
     onSuccess: () => {
@@ -46,20 +60,39 @@ export default function Materials() {
   })
 
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
+  const [materialError, setMaterialError] = useState('')
+  const [toast, setToast] = useState<AppToastState | null>(null)
 
-  const handleDeleteMaterial = (material: Material) => {
+  const showToast = (next: AppToastState) => {
+    setToast(next)
+    window.setTimeout(() => setToast(null), 3500)
+  }
+
+  const handleDeleteMaterial = async (material: Material) => {
     if (confirmDeleteId === material.id) {
-      deleteMaterial.mutate(material.id)
-      setConfirmDeleteId(null)
+      setMaterialError('')
+      try {
+        await deleteMaterial.mutateAsync(material.id)
+        setConfirmDeleteId(null)
+        showToast({ title: 'Material deleted', message: material.name, tone: 'success' })
+      } catch (err) {
+        setMaterialError(err instanceof Error ? err.message : 'Failed to delete material')
+      }
     } else {
       setConfirmDeleteId(material.id)
     }
   }
 
-  const handleDeleteSpool = (spool: MaterialSpool) => {
+  const handleDeleteSpool = async (spool: MaterialSpool) => {
     if (confirmDeleteId === spool.id) {
-      deleteSpool.mutate(spool.id)
-      setConfirmDeleteId(null)
+      setMaterialError('')
+      try {
+        await deleteSpool.mutateAsync(spool.id)
+        setConfirmDeleteId(null)
+        showToast({ title: 'Spool deleted', message: 'Inventory references were updated.', tone: 'success' })
+      } catch (err) {
+        setMaterialError(err instanceof Error ? err.message : 'Failed to delete spool')
+      }
     } else {
       setConfirmDeleteId(spool.id)
     }
@@ -68,6 +101,11 @@ export default function Materials() {
   const [showAddMaterial, setShowAddMaterial] = useState(false)
   const [showAddSpool, setShowAddSpool] = useState(false)
   const [tab, setTab] = useState<'spools' | 'catalog' | 'supplies'>('spools')
+  const [editingSpoolId, setEditingSpoolId] = useState<string | null>(null)
+  const [spoolWeight, setSpoolWeight] = useState('')
+  const [spoolForm, setSpoolForm] = useState({ location: '', notes: '' })
+  const [editingMaterialId, setEditingMaterialId] = useState<string | null>(null)
+  const [materialForm, setMaterialForm] = useState({ name: '', manufacturer: '', color: '', color_hex: '', cost_per_kg: '' })
 
   const handleCreateMaterial = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
@@ -83,6 +121,7 @@ export default function Materials() {
     })
     
     setShowAddMaterial(false)
+    showToast({ title: 'Material added', message: formData.get('name') as string, tone: 'success' })
   }
 
   const handleCreateSpool = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -93,14 +132,70 @@ export default function Materials() {
       material_id: formData.get('material_id') as string,
       initial_weight: parseFloat(formData.get('initial_weight') as string) || 1000,
       remaining_weight: parseFloat(formData.get('initial_weight') as string) || 1000,
-      purchase_cost: parseFloat(formData.get('purchase_cost') as string) || 0,
+      purchase_cost: 0,
       location: formData.get('location') as string,
     })
     
     setShowAddSpool(false)
+    showToast({ title: 'Spool added', message: 'Filament inventory updated.', tone: 'success' })
   }
 
   const getMaterialById = (id: string) => materials.find(m => m.id === id)
+
+  const setClampedSpoolWeight = (value: string) => {
+    const n = Math.max(0, Math.min(1000, parseFloat(value) || 0))
+    setSpoolWeight(String(Math.round(n)))
+  }
+
+  const startEditMaterial = (material: Material) => {
+    setEditingMaterialId(material.id)
+    setMaterialForm({
+      name: material.name || '',
+      manufacturer: material.manufacturer || '',
+      color: material.color || '',
+      color_hex: material.color_hex || '',
+      cost_per_kg: String(material.cost_per_kg || 0),
+    })
+  }
+
+  const saveMaterial = async (material: Material) => {
+    await updateMaterial.mutateAsync({
+      id: material.id,
+      data: {
+        ...material,
+        name: materialForm.name,
+        manufacturer: materialForm.manufacturer,
+        color: materialForm.color,
+        color_hex: materialForm.color_hex.toUpperCase(),
+        cost_per_kg: parseFloat(materialForm.cost_per_kg) || 0,
+      },
+    })
+    setEditingMaterialId(null)
+  }
+
+  const startEditSpool = (spool: MaterialSpool) => {
+    setEditingSpoolId(spool.id)
+    setSpoolWeight(String(spool.remaining_weight.toFixed(0)))
+    setSpoolForm({
+      location: spool.location || '',
+      notes: spool.notes || '',
+    })
+  }
+
+  const saveSpoolWeight = async (spool: MaterialSpool) => {
+    const remaining = Math.max(0, Math.min(1000, parseFloat(spoolWeight)))
+    if (Number.isNaN(remaining)) return
+    await updateSpool.mutateAsync({
+      id: spool.id,
+      data: {
+        ...spool,
+        remaining_weight: Math.min(remaining, 1000),
+        location: spoolForm.location,
+        notes: spoolForm.notes,
+      },
+    })
+    setEditingSpoolId(null)
+  }
 
   return (
     <div className="p-4 sm:p-6 lg:p-8">
@@ -172,6 +267,9 @@ export default function Materials() {
         </button>
       </div>
 
+      {materialError && <div className="mb-4 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-200">{materialError}</div>}
+      {toast && <AppToast toast={toast} onClose={() => setToast(null)} />}
+
       {/* Spools Tab */}
       {tab === 'spools' && (
         spoolsLoading ? (
@@ -235,33 +333,115 @@ export default function Materials() {
                   </div>
                   
                   <div className="space-y-2">
-                    <div className="flex items-center justify-between text-sm">
+                    <div className="flex items-center justify-between text-sm gap-2">
                       <span className="text-surface-500">Remaining</span>
-                      <span className="text-surface-300">
-                        {spool.remaining_weight.toFixed(0)}g / {spool.initial_weight.toFixed(0)}g
-                      </span>
+                      {editingSpoolId === spool.id ? (
+                        <div className="flex items-center gap-1">
+                          <div className="relative">
+                            <input
+                              value={spoolWeight}
+                              onChange={e => setClampedSpoolWeight(e.target.value)}
+                              className="input w-24 h-8 pr-7 text-xs text-right"
+                              type="number"
+                              min="0"
+                              max="1000"
+                            />
+                            <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-surface-500">g</span>
+                          </div>
+                          <button onClick={() => saveSpoolWeight(spool)} className="p-1 text-emerald-400 hover:bg-emerald-500/10 rounded"><Check className="h-3.5 w-3.5" /></button>
+                          <button onClick={() => setEditingSpoolId(null)} className="p-1 text-surface-400 hover:bg-surface-800 rounded"><X className="h-3.5 w-3.5" /></button>
+                        </div>
+                      ) : (
+                        <button onClick={() => startEditSpool(spool)} className="text-surface-300 hover:text-accent-400 inline-flex items-center gap-1">
+                          {spool.remaining_weight.toFixed(0)}g / {spool.initial_weight.toFixed(0)}g <Edit2 className="h-3 w-3" />
+                        </button>
+                      )}
                     </div>
-                    <div className="h-2 bg-surface-800 rounded-full overflow-hidden">
-                      <div 
-                        className={cn(
-                          'h-full transition-all',
-                          percentRemaining > 30 ? 'bg-emerald-500' :
-                          percentRemaining > 10 ? 'bg-amber-500' :
-                          'bg-red-500'
+                    {editingSpoolId === spool.id ? (
+                      <div className="space-y-2" title={`${spoolWeight || 0}g remaining`}>
+                        <div className="relative h-7 flex items-center">
+                          <div className="absolute left-0 right-0 h-2 rounded-full bg-surface-800 overflow-hidden">
+                            <div
+                              className={cn(
+                                'h-full transition-all',
+                                (parseFloat(spoolWeight) || 0) / spool.initial_weight * 100 > 30 ? 'bg-emerald-500' :
+                                (parseFloat(spoolWeight) || 0) / spool.initial_weight * 100 > 10 ? 'bg-amber-500' :
+                                'bg-red-500'
+                              )}
+                              style={{ width: `${Math.min(((parseFloat(spoolWeight) || 0) / spool.initial_weight) * 100, 100)}%` }}
+                            />
+                          </div>
+                          <input
+                            type="range"
+                            min="0"
+                            max="1000"
+                            step="1"
+                            value={spoolWeight || '0'}
+                            onChange={e => setClampedSpoolWeight(e.target.value)}
+                            className="relative z-10 w-full cursor-pointer bg-transparent accent-accent-500"
+                          />
+                        </div>
+                        <div className="flex justify-between text-[10px] text-surface-500">
+                          <span>0g</span>
+                          <span>{spoolWeight || 0}g</span>
+                          <span>1000g</span>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="h-2 bg-surface-800 rounded-full overflow-hidden" title={`${spool.remaining_weight.toFixed(0)}g remaining`}>
+                        <div
+                          className={cn(
+                            'h-full transition-all',
+                            percentRemaining > 30 ? 'bg-emerald-500' :
+                            percentRemaining > 10 ? 'bg-amber-500' :
+                            'bg-red-500'
+                          )}
+                          style={{ width: `${percentRemaining}%` }}
+                        />
+                      </div>
+                    )}
+                    {editingSpoolId === spool.id && (
+                      <div className="space-y-2 rounded-lg border border-surface-800 bg-surface-900/40 p-2">
+                        <label className="text-[10px] text-surface-500 block">
+                          Location
+                          <input
+                            value={spoolForm.location}
+                            onChange={e => setSpoolForm(prev => ({ ...prev, location: e.target.value }))}
+                            className="input mt-1 h-8 text-xs"
+                            placeholder="Dry Box A, Shelf 3"
+                          />
+                        </label>
+                        <label className="text-[10px] text-surface-500 block">
+                          Notes
+                          <textarea
+                            value={spoolForm.notes}
+                            onChange={e => setSpoolForm(prev => ({ ...prev, notes: e.target.value }))}
+                            className="input mt-1 min-h-16 resize-none text-xs"
+                            placeholder="Optional notes"
+                          />
+                        </label>
+                      </div>
+                    )}
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <span className={cn('badge', getStatusBadge(spool.status))}>
+                          {spool.status}
+                        </span>
+                        {spool.default_for_material ? (
+                          <span className="badge border border-emerald-500/40 bg-emerald-500/15 text-emerald-300">Default</span>
+                        ) : (
+                          <button onClick={async () => { await updateSpool.mutateAsync({ id: spool.id, data: { ...spool, default_for_material: true } }); showToast({ title: 'Default filament updated', message: `${material?.type?.toUpperCase() || 'Material'} will use this spool by default.`, tone: 'success' }) }} className="text-[11px] text-surface-500 hover:text-emerald-300">Set default</button>
                         )}
-                        style={{ width: `${percentRemaining}%` }}
-                      />
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className={cn('badge', getStatusBadge(spool.status))}>
-                        {spool.status}
-                      </span>
+                      </div>
                       {spool.location && (
                         <span className="text-xs text-surface-500">
                           📍 {spool.location}
                         </span>
                       )}
                     </div>
+                    {spool.notes && editingSpoolId !== spool.id && (
+                      <p className="text-xs text-surface-500 line-clamp-2">{spool.notes}</p>
+                    )}
                   </div>
                 </div>
               )
@@ -308,6 +488,15 @@ export default function Materials() {
                       {material.manufacturer || material.type.toUpperCase()}
                     </p>
                   </div>
+                  {editingMaterialId !== material.id && (
+                    <button
+                      onClick={() => startEditMaterial(material)}
+                      className="p-1.5 rounded-lg text-surface-500 hover:text-accent-400 hover:bg-accent-500/10 transition-colors"
+                      title="Edit material"
+                    >
+                      <Edit2 className="h-4 w-4" />
+                    </button>
+                  )}
                   {confirmDeleteId === material.id ? (
                     <button
                       onClick={() => handleDeleteMaterial(material)}
@@ -327,20 +516,54 @@ export default function Materials() {
                     </button>
                   )}
                 </div>
-                <div className="space-y-1 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-surface-500">Type</span>
-                    <span className="text-surface-300">{material.type.toUpperCase()}</span>
+                {editingMaterialId === material.id ? (
+                  <div className="space-y-2">
+                    <input value={materialForm.name} onChange={e => setMaterialForm(prev => ({ ...prev, name: e.target.value }))} className="input h-8 text-xs" placeholder="Name" />
+                    <input value={materialForm.manufacturer} onChange={e => setMaterialForm(prev => ({ ...prev, manufacturer: e.target.value }))} className="input h-8 text-xs" placeholder="Manufacturer" />
+                    <div className="space-y-2 rounded-lg border border-surface-800 bg-surface-900/40 p-2">
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="color"
+                          value={materialForm.color_hex && /^#[0-9a-fA-F]{6}$/.test(materialForm.color_hex) ? materialForm.color_hex : '#ffffff'}
+                          onChange={e => setMaterialForm(prev => ({ ...prev, color_hex: e.target.value }))}
+                          className="h-8 w-10 cursor-pointer rounded border border-surface-700 bg-surface-900 p-0.5"
+                          title="Pick color"
+                        />
+                        <div className="flex-1">
+                          <label className="block text-[10px] text-surface-500 mb-1">HEX color</label>
+                          <input
+                            value={materialForm.color_hex}
+                            onChange={e => setMaterialForm(prev => ({ ...prev, color_hex: e.target.value.startsWith('#') ? e.target.value : `#${e.target.value}` }))}
+                            className="input h-8 text-xs font-mono uppercase"
+                            placeholder="#FFFFFF"
+                            maxLength={7}
+                          />
+                        </div>
+                      </div>
+                      <input value={materialForm.color} onChange={e => setMaterialForm(prev => ({ ...prev, color: e.target.value }))} className="input h-8 text-xs" placeholder="Color name, ex: Black" />
+                    </div>
+                    <input value={materialForm.cost_per_kg} onChange={e => setMaterialForm(prev => ({ ...prev, cost_per_kg: e.target.value }))} className="input h-8 text-xs" type="number" min="0" step="0.01" placeholder="Cost/kg" />
+                    <div className="flex gap-2 pt-1">
+                      <button onClick={() => saveMaterial(material)} className="btn btn-primary text-xs py-1 px-2">Salvar</button>
+                      <button onClick={() => setEditingMaterialId(null)} className="btn btn-secondary text-xs py-1 px-2">Cancelar</button>
+                    </div>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-surface-500">Color</span>
-                    <span className="text-surface-300">{material.color || '—'}</span>
+                ) : (
+                  <div className="space-y-1 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-surface-500">Type</span>
+                      <span className="text-surface-300">{material.type.toUpperCase()}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-surface-500">Color</span>
+                      <span className="text-surface-300">{material.color || '—'}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-surface-500">Cost</span>
+                      <span className="text-surface-300">${material.cost_per_kg.toFixed(2)}/kg</span>
+                    </div>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-surface-500">Cost</span>
-                    <span className="text-surface-300">${material.cost_per_kg.toFixed(2)}/kg</span>
-                  </div>
-                </div>
+                )}
               </div>
             ))}
           </div>
@@ -550,30 +773,18 @@ export default function Materials() {
                       ))}
                     </select>
                   </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-surface-300 mb-1">
-                        Initial Weight (g)
-                      </label>
-                      <input
-                        type="number"
-                        name="initial_weight"
-                        defaultValue="1000"
-                        className="input"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-surface-300 mb-1">
-                        Purchase Cost ($)
-                      </label>
-                      <input
-                        type="number"
-                        name="purchase_cost"
-                        step="0.01"
-                        className="input"
-                        placeholder="25.00"
-                      />
-                    </div>
+                  <div>
+                    <label className="block text-sm font-medium text-surface-300 mb-1">
+                      Initial Weight (g)
+                    </label>
+                    <input
+                      type="number"
+                      name="initial_weight"
+                      defaultValue="1000"
+                      max="1000"
+                      className="input"
+                    />
+                    <p className="text-xs text-surface-500 mt-1">Cost comes from the selected catalog material.</p>
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-surface-300 mb-1">

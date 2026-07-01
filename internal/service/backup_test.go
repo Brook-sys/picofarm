@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/philjestin/daedalus/internal/database"
-	"github.com/philjestin/daedalus/internal/repository"
+	"github.com/Brook-sys/picofarm/internal/database"
+	"github.com/Brook-sys/picofarm/internal/repository"
 )
 
 // openFileTestDB opens a file-based SQLite database in a temp directory.

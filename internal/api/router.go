@@ -10,9 +10,9 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
-	"github.com/philjestin/daedalus/internal/realtime"
-	"github.com/philjestin/daedalus/internal/service"
-	"github.com/philjestin/daedalus/internal/version"
+	"github.com/Brook-sys/picofarm/internal/realtime"
+	"github.com/Brook-sys/picofarm/internal/service"
+	"github.com/Brook-sys/picofarm/internal/version"
 )
 
 // NewRouter creates the HTTP router with all routes.
@@ -77,6 +77,7 @@ func NewRouter(services *service.Services, hub *realtime.Hub) http.Handler {
 	r.Route("/api", func(r chi.Router) {
 		// Projects (Product Catalog)
 		projectHandler := &ProjectHandler{service: services.Projects}
+		projectPrintJobHandler := &PrintJobHandler{service: services.PrintJobs}
 		r.Route("/projects", func(r chi.Router) {
 			r.Get("/", projectHandler.List)
 			r.Post("/", projectHandler.Create)
@@ -87,6 +88,7 @@ func NewRouter(services *service.Services, hub *realtime.Hub) http.Handler {
 
 				// Project pipeline endpoints
 				r.Get("/jobs", projectHandler.ListJobs)
+				r.Delete("/jobs", projectPrintJobHandler.DeleteByProject)
 				r.Get("/job-stats", projectHandler.GetJobStats)
 				r.Get("/summary", projectHandler.GetProjectSummary)
 				r.Post("/start-production", projectHandler.StartProduction)
@@ -127,7 +129,7 @@ func NewRouter(services *service.Services, hub *realtime.Hub) http.Handler {
 					r.Get("/checklist", taskHandler.GetChecklist)
 					r.Post("/checklist/regenerate", taskHandler.RegenerateChecklist)
 					r.Post("/checklist/{itemId}/print", taskHandler.PrintFromChecklist)
-				r.Patch("/checklist/{itemId}", taskHandler.ToggleChecklistItem)
+					r.Patch("/checklist/{itemId}", taskHandler.ToggleChecklistItem)
 				})
 			})
 		}
@@ -154,6 +156,7 @@ func NewRouter(services *service.Services, hub *realtime.Hub) http.Handler {
 		printJobByDesignHandler := &PrintJobHandler{service: services.PrintJobs}
 		r.Route("/designs/{id}", func(r chi.Router) {
 			r.Get("/", designHandler.Get)
+			r.Delete("/", designHandler.Delete)
 			r.Get("/download", designHandler.Download)
 			r.Get("/print-jobs", printJobByDesignHandler.ListByDesign)
 			r.Post("/open-external", designHandler.OpenExternal)
@@ -161,24 +164,94 @@ func NewRouter(services *service.Services, hub *realtime.Hub) http.Handler {
 
 		// Printers
 		printerHandler := &PrinterHandler{service: services.Printers}
-		dispatchHandler := NewDispatchHandler(services.Dispatcher)
+		printerPrintJobHandler := &PrintJobHandler{service: services.PrintJobs}
+		dispatchHandler := &DispatchHandler{service: services.Dispatcher}
 		r.Route("/printers", func(r chi.Router) {
 			r.Get("/", printerHandler.List)
 			r.Post("/", printerHandler.Create)
 			r.Get("/states", printerHandler.GetAllStates)
 			r.Post("/discover", printerHandler.Discover) // Network discovery
+			r.Get("/default", printerHandler.GetDefault)
+			r.Post("/emergency-stop", printerHandler.EmergencyStop)
+			r.Get("/macros", printerHandler.ListMacros)
+			r.Post("/macros", printerHandler.CreateMacro)
+			r.Put("/macros/{macroID}", printerHandler.UpdateMacro)
+			r.Delete("/macros/{macroID}", printerHandler.DeleteMacro)
 			r.Route("/{id}", func(r chi.Router) {
 				r.Get("/", printerHandler.Get)
 				r.Patch("/", printerHandler.Update)
 				r.Delete("/", printerHandler.Delete)
 				r.Get("/state", printerHandler.GetState)
+				r.Get("/capabilities", printerHandler.GetCapabilities)
 				r.Get("/jobs", printerHandler.ListJobs)
+				r.Delete("/jobs", printerPrintJobHandler.DeleteByPrinter)
 				r.Get("/stats", printerHandler.GetJobStats)
 				r.Get("/analytics", printerHandler.GetPrinterAnalytics)
+				r.Post("/reconnect", printerHandler.Reconnect)
 				// Auto-dispatch settings
 				r.Get("/dispatch-settings", dispatchHandler.GetPrinterSettings)
 				r.Put("/dispatch-settings", dispatchHandler.UpdatePrinterSettings)
+				// Maintenance mode
+				r.Post("/maintenance", printerHandler.SetMaintenanceMode)
+				r.Post("/default", printerHandler.SetDefault)
+				r.Post("/macro", printerHandler.RunMacro)
+				// Advanced controls
+				r.Post("/emergency-stop", printerHandler.EmergencyStop)
+				r.Post("/speed", printerHandler.SetPrintSpeed)
+				r.Post("/fan", printerHandler.SetFanSpeed)
+				r.Post("/led", printerHandler.SetLEDMode)
+				r.Post("/skip-object", printerHandler.SkipObject)
+				r.Post("/jog", printerHandler.Jog)
+				r.Post("/temperature", printerHandler.SetTemperature)
+				r.Post("/plate-cleared", printerHandler.PlateCleared)
+				r.Post("/ams/load", printerHandler.AMSLoad)
+				r.Post("/ams/unload", printerHandler.AMSUnload)
+				r.Post("/ams/refresh", printerHandler.AMSRefresh)
+				r.Post("/ams/backup", printerHandler.SetAMSFilamentBackup)
 			})
+		})
+
+		// Notifications
+		if services.Notifications != nil {
+			notificationHandler := NewNotificationHandler(services.Notifications)
+			r.Route("/notifications", func(r chi.Router) {
+				r.Get("/", notificationHandler.ListChannels)
+				r.Post("/", notificationHandler.CreateChannel)
+				r.Get("/deliveries", notificationHandler.ListDeliveries)
+				r.Get("/templates", notificationHandler.ListTemplates)
+				r.Post("/templates", notificationHandler.UpsertTemplate)
+				r.Post("/templates/preview", notificationHandler.PreviewTemplate)
+				r.Delete("/templates/{id}", notificationHandler.DeleteTemplate)
+				r.Route("/{id}", func(r chi.Router) {
+					r.Patch("/", notificationHandler.UpdateChannel)
+					r.Delete("/", notificationHandler.DeleteChannel)
+					r.Post("/test", notificationHandler.SendTest)
+				})
+			})
+		}
+
+		// Cameras
+		cameraHandler := &CameraHandler{service: services.Cameras}
+		r.Route("/cameras", func(r chi.Router) {
+			r.Get("/", cameraHandler.List)
+			r.Post("/", cameraHandler.Create)
+			r.Delete("/{id}", cameraHandler.Delete)
+		})
+
+		// Timelapses
+		timelapseHandler := &TimelapseHandler{service: services.Timelapses}
+		r.Route("/timelapses", func(r chi.Router) {
+			r.Get("/", timelapseHandler.List)
+			r.Post("/", timelapseHandler.Create)
+		})
+
+		// Print Archives
+		archiveHandler := &PrintArchiveHandler{service: services.PrintArchives}
+		r.Route("/archives", func(r chi.Router) {
+			r.Get("/", archiveHandler.List)
+			r.Post("/", archiveHandler.Create)
+			r.Get("/compare", archiveHandler.Compare)
+			r.Get("/log/export", archiveHandler.ExportCSV)
 		})
 
 		// Materials
@@ -187,6 +260,7 @@ func NewRouter(services *service.Services, hub *realtime.Hub) http.Handler {
 			r.Get("/", materialHandler.List)
 			r.Post("/", materialHandler.Create)
 			r.Get("/{id}", materialHandler.Get)
+			r.Patch("/{id}", materialHandler.Update)
 			r.Delete("/{id}", materialHandler.Delete)
 		})
 
@@ -196,6 +270,7 @@ func NewRouter(services *service.Services, hub *realtime.Hub) http.Handler {
 			r.Get("/", spoolHandler.List)
 			r.Post("/", spoolHandler.Create)
 			r.Get("/{id}", spoolHandler.Get)
+			r.Patch("/{id}", spoolHandler.Update)
 			r.Delete("/{id}", spoolHandler.Delete)
 		})
 
@@ -209,6 +284,7 @@ func NewRouter(services *service.Services, hub *realtime.Hub) http.Handler {
 				r.Patch("/", printJobHandler.Update)
 				r.Get("/preflight", printJobHandler.PreflightCheck)
 				r.Post("/start", printJobHandler.Start)
+				r.Delete("/", printJobHandler.Delete)
 				r.Post("/pause", printJobHandler.Pause)
 				r.Post("/resume", printJobHandler.Resume)
 				r.Post("/cancel", printJobHandler.Cancel)
@@ -229,9 +305,78 @@ func NewRouter(services *service.Services, hub *realtime.Hub) http.Handler {
 		// Jobs by recipe (for recipe detail page)
 		r.Get("/templates/{id}/jobs", printJobHandler.ListByRecipe)
 
+		// Slicer API proxy
+		if services.Slicer != nil {
+			slicerHandler := NewSlicerHandler(services.Slicer)
+			r.Route("/slicer", func(r chi.Router) {
+				r.Get("/config", slicerHandler.GetConfig)
+				r.Put("/config", slicerHandler.SetConfig)
+				r.Get("/health", slicerHandler.Health)
+				r.Get("/status", slicerHandler.Status)
+				r.Get("/profiles/{category}", slicerHandler.ListProfiles)
+				r.Get("/profiles/{category}/{name}", slicerHandler.GetProfileJSON)
+				r.Post("/profiles/import-url", slicerHandler.ImportProfile)
+				r.Post("/profiles/upload-json", slicerHandler.UploadProfileJSON)
+				r.Post("/profiles/{category}/{name}/update-from-source", slicerHandler.UpdateProfileFromSource)
+				r.Post("/resolve-profiles", slicerHandler.ResolveProfiles)
+				r.Post("/slice-stl", slicerHandler.SliceSTL)
+			})
+		}
+
+		// Print Queue Board
+		queueHandler := &QueueHandler{service: services.Queue}
+		r.Route("/queue", func(r chi.Router) {
+			r.Get("/", queueHandler.List)
+			r.Post("/upload", queueHandler.Upload)
+			r.Post("/from-print-job/{id}", queueHandler.FromPrintJob)
+			r.Route("/{id}", func(r chi.Router) {
+				r.Patch("/", queueHandler.Update)
+				r.Delete("/", queueHandler.Delete)
+				r.Post("/preflight", queueHandler.Preflight)
+				r.Post("/start", queueHandler.Start)
+				r.Post("/status", queueHandler.SetStatus)
+				r.Patch("/priority", queueHandler.UpdatePriority)
+			})
+		})
+
+		// G-code Library
+		libHandler := &GCodeLibraryHandler{service: services.GCodeLibrary}
+		r.Route("/gcode-library", func(r chi.Router) {
+			r.Get("/", libHandler.List)
+			r.Post("/upload", libHandler.Upload)
+			r.Get("/tags", libHandler.ListTags)
+			r.Post("/tags", libHandler.CreateTag)
+			r.Route("/{id}", func(r chi.Router) {
+				r.Patch("/", libHandler.Update)
+				r.Patch("/parent-stl", libHandler.SetParentSTL)
+				r.Patch("/default-for-stl", libHandler.SetDefaultForSTL)
+				r.Delete("/", libHandler.Delete)
+				r.Post("/add-to-queue", libHandler.AddToQueue)
+				r.Post("/tags/{tagID}", libHandler.AddTag)
+				r.Delete("/tags/{tagID}", libHandler.RemoveTag)
+			})
+			r.Delete("/tags/{tagID}", libHandler.DeleteTag)
+		})
+
+		// STL Library
+		stlHandler := &STLLibraryHandler{service: services.STLLibrary}
+		r.Get("/file-library", stlHandler.Library)
+		r.Route("/stl-library", func(r chi.Router) {
+			r.Get("/", stlHandler.List)
+			r.Post("/upload", stlHandler.Upload)
+			r.Route("/{id}", func(r chi.Router) {
+				r.Patch("/", stlHandler.Update)
+				r.Post("/thumbnail", stlHandler.UpdateThumbnail)
+				r.Post("/tags", stlHandler.AddTag)
+				r.Delete("/tags/{tagID}", stlHandler.RemoveTag)
+				r.Delete("/", stlHandler.Delete)
+			})
+		})
+
 		// Files
 		fileHandler := &FileHandler{service: services.Files}
 		r.Get("/files/{id}", fileHandler.Get)
+		r.Post("/files", fileHandler.Upload)
 
 		// Expenses
 		expenseHandler := &ExpenseHandler{service: services.Expenses}
@@ -306,6 +451,7 @@ func NewRouter(services *service.Services, hub *realtime.Hub) http.Handler {
 		r.Get("/stats/financial", statsHandler.GetFinancialSummary)
 		r.Get("/stats/time-series", statsHandler.GetTimeSeries)
 		r.Get("/stats/expenses-by-category", statsHandler.GetExpensesByCategory)
+		r.Get("/stats/usage", statsHandler.GetUsage)
 		r.Get("/stats/sales-by-channel", statsHandler.GetSalesByChannel)
 		r.Get("/stats/sales-by-project", statsHandler.GetSalesByProject)
 

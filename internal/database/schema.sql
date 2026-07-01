@@ -41,6 +41,7 @@ CREATE TABLE IF NOT EXISTS printers (
     manufacturer TEXT DEFAULT '',
     connection_type TEXT NOT NULL DEFAULT 'manual',
     connection_uri TEXT DEFAULT '',
+    fluidd_url TEXT DEFAULT '',
     api_key TEXT DEFAULT '',
     serial_number TEXT DEFAULT '',
     status TEXT NOT NULL DEFAULT 'offline',
@@ -50,11 +51,63 @@ CREATE TABLE IF NOT EXISTS printers (
     notes TEXT DEFAULT '',
     min_material_percent INTEGER DEFAULT 10,
     cost_per_hour_cents INTEGER DEFAULT 0,
+    purchase_price_cents INTEGER DEFAULT 0,
+    maintenance_mode BOOLEAN DEFAULT FALSE,
+    restrict_gcode_model BOOLEAN NOT NULL DEFAULT TRUE,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE INDEX IF NOT EXISTS idx_printers_status ON printers(status);
+
+CREATE TABLE IF NOT EXISTS notification_channels (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    type TEXT NOT NULL,
+    enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    config_json TEXT NOT NULL DEFAULT '{}',
+    events_json TEXT NOT NULL DEFAULT '[]',
+    printer_ids_json TEXT NOT NULL DEFAULT '[]',
+    min_severity TEXT NOT NULL DEFAULT 'info',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_notification_channels_type ON notification_channels(type);
+CREATE INDEX IF NOT EXISTS idx_notification_channels_enabled ON notification_channels(enabled);
+
+CREATE TABLE IF NOT EXISTS notification_deliveries (
+    id TEXT PRIMARY KEY,
+    channel_id TEXT NOT NULL REFERENCES notification_channels(id) ON DELETE CASCADE,
+    event_type TEXT NOT NULL,
+    severity TEXT NOT NULL,
+    status TEXT NOT NULL,
+    attempts INTEGER NOT NULL DEFAULT 0,
+    last_error TEXT DEFAULT '',
+    payload_json TEXT NOT NULL DEFAULT '{}',
+    sent_at TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_notification_deliveries_channel ON notification_deliveries(channel_id);
+CREATE INDEX IF NOT EXISTS idx_notification_deliveries_created ON notification_deliveries(created_at DESC);
+
+CREATE TABLE IF NOT EXISTS notification_templates (
+    id TEXT PRIMARY KEY,
+    channel_id TEXT REFERENCES notification_channels(id) ON DELETE CASCADE,
+    event_type TEXT NOT NULL,
+    format TEXT NOT NULL DEFAULT 'text',
+    title_template TEXT NOT NULL DEFAULT '',
+    body_template TEXT NOT NULL DEFAULT '',
+    payload_template TEXT NOT NULL DEFAULT '',
+    enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(channel_id, event_type)
+);
+
+CREATE INDEX IF NOT EXISTS idx_notification_templates_channel ON notification_templates(channel_id);
+CREATE INDEX IF NOT EXISTS idx_notification_templates_event ON notification_templates(event_type);
 
 -- Templates/Recipes table
 CREATE TABLE IF NOT EXISTS templates (
@@ -153,6 +206,7 @@ CREATE TABLE IF NOT EXISTS parts (
     name TEXT NOT NULL,
     description TEXT DEFAULT '',
     quantity INTEGER NOT NULL DEFAULT 1,
+    material_type TEXT DEFAULT '',
     status TEXT NOT NULL DEFAULT 'design',
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -203,6 +257,7 @@ CREATE TABLE IF NOT EXISTS material_spools (
     purchase_cost REAL DEFAULT 0,
     location TEXT DEFAULT '',
     status TEXT NOT NULL DEFAULT 'new',
+    default_for_material BOOLEAN NOT NULL DEFAULT FALSE,
     notes TEXT DEFAULT '',
     expense_item_id TEXT,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -252,6 +307,106 @@ CREATE INDEX IF NOT EXISTS idx_print_jobs_recipe ON print_jobs(recipe_id);
 CREATE INDEX IF NOT EXISTS idx_print_jobs_project ON print_jobs(project_id);
 CREATE INDEX IF NOT EXISTS idx_print_jobs_task ON print_jobs(task_id);
 CREATE INDEX IF NOT EXISTS idx_print_jobs_material_spool ON print_jobs(material_spool_id);
+
+-- Queue items table (G-code based manual queue)
+CREATE TABLE IF NOT EXISTS queue_items (
+    id TEXT PRIMARY KEY,
+    source_type TEXT NOT NULL DEFAULT 'upload',
+    source_id TEXT,
+    project_id TEXT REFERENCES projects(id) ON DELETE SET NULL,
+    file_id TEXT NOT NULL REFERENCES files(id),
+    file_name TEXT NOT NULL,
+    display_name TEXT,
+    status TEXT NOT NULL DEFAULT 'queued',
+    priority INTEGER NOT NULL DEFAULT 0,
+    progress REAL NOT NULL DEFAULT 0,
+    wasted_grams REAL NOT NULL DEFAULT 0,
+    failed_attempts INTEGER NOT NULL DEFAULT 0,
+    assigned_printer_id TEXT REFERENCES printers(id),
+    assigned_spool_id TEXT REFERENCES material_spools(id),
+    material_type TEXT,
+    material_color TEXT,
+    filament_name TEXT,
+    filament_grams REAL,
+    estimated_seconds INTEGER,
+    layer_height REAL,
+    nozzle_diameter REAL,
+    bed_temp REAL,
+    nozzle_temp REAL,
+    thumbnail_file_id TEXT REFERENCES files(id),
+    metadata_json TEXT,
+    notes TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_queue_items_status ON queue_items(status);
+CREATE INDEX IF NOT EXISTS idx_queue_items_priority ON queue_items(priority DESC);
+CREATE INDEX IF NOT EXISTS idx_queue_items_printer ON queue_items(assigned_printer_id);
+CREATE INDEX IF NOT EXISTS idx_queue_items_spool ON queue_items(assigned_spool_id);
+CREATE INDEX IF NOT EXISTS idx_queue_items_source ON queue_items(source_type, source_id);
+
+CREATE TABLE IF NOT EXISTS gcode_files (
+    id TEXT PRIMARY KEY,
+    file_id TEXT NOT NULL REFERENCES files(id),
+    display_name TEXT,
+    material_type TEXT,
+    material_color TEXT,
+    filament_name TEXT,
+    filament_grams REAL,
+    estimated_seconds INTEGER,
+    layer_height REAL,
+    nozzle_diameter REAL,
+    bed_temp REAL,
+    nozzle_temp REAL,
+    thumbnail_file_id TEXT REFERENCES files(id),
+    parent_stl_id TEXT REFERENCES stl_files(id) ON DELETE SET NULL,
+    default_for_stl BOOLEAN NOT NULL DEFAULT FALSE,
+    metadata_json TEXT,
+    print_count INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_gcode_files_material ON gcode_files(material_type);
+CREATE INDEX IF NOT EXISTS idx_gcode_files_created ON gcode_files(created_at DESC);
+
+CREATE TABLE IF NOT EXISTS stl_files (
+    id TEXT PRIMARY KEY,
+    file_id TEXT NOT NULL REFERENCES files(id),
+    display_name TEXT,
+    thumbnail_file_id TEXT REFERENCES files(id),
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_stl_files_created ON stl_files(created_at DESC);
+
+CREATE TABLE IF NOT EXISTS tags (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL UNIQUE,
+    color TEXT NOT NULL DEFAULT '#64748b',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS gcode_file_tags (
+    gcode_file_id TEXT NOT NULL REFERENCES gcode_files(id) ON DELETE CASCADE,
+    tag_id TEXT NOT NULL REFERENCES tags(id) ON DELETE CASCADE,
+    PRIMARY KEY (gcode_file_id, tag_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_gcode_file_tags_file ON gcode_file_tags(gcode_file_id);
+CREATE INDEX IF NOT EXISTS idx_gcode_file_tags_tag ON gcode_file_tags(tag_id);
+
+CREATE TABLE IF NOT EXISTS stl_file_tags (
+    stl_file_id TEXT NOT NULL REFERENCES stl_files(id) ON DELETE CASCADE,
+    tag_id TEXT NOT NULL REFERENCES tags(id) ON DELETE CASCADE,
+    PRIMARY KEY (stl_file_id, tag_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_stl_file_tags_file ON stl_file_tags(stl_file_id);
+CREATE INDEX IF NOT EXISTS idx_stl_file_tags_tag ON stl_file_tags(tag_id);
 
 -- Dispatch requests table (for auto-dispatch confirmation)
 CREATE TABLE IF NOT EXISTS dispatch_requests (
@@ -677,6 +832,16 @@ CREATE TABLE IF NOT EXISTS settings (
     value TEXT NOT NULL,
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE IF NOT EXISTS printer_macros (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    title TEXT NOT NULL,
+    command TEXT NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_printer_macros_title ON printer_macros(title);
 
 -- Bambu Cloud authentication storage
 CREATE TABLE IF NOT EXISTS bambu_cloud_auth (

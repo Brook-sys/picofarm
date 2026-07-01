@@ -16,23 +16,43 @@ import {
   PanelLeftOpen,
   FileText,
   Users,
+  Camera,
+  Archive,
+  ListChecks,
+  FileCode,
+  Bell,
 } from 'lucide-react'
 import { cn } from '../lib/utils'
 import DispatchNotificationProvider from './DispatchNotificationProvider'
 import FeedbackButton from './FeedbackButton'
 
 const navigation = [
-  { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-  { name: 'Quotes', href: '/quotes', icon: FileText },
-  { name: 'Customers', href: '/customers', icon: Users },
-  { name: 'Projects', href: '/projects', icon: FolderKanban },
-  { name: 'Tasks', href: '/tasks', icon: ListTodo },
-  { name: 'Printers', href: '/printers', icon: Printer },
-  { name: 'Materials', href: '/materials', icon: Package },
-  { name: 'Expenses', href: '/expenses', icon: Receipt },
-  { name: 'Sales', href: '/sales', icon: DollarSign },
-  { name: 'Channels', href: '/channels', icon: ShoppingBag },
-  { name: 'Timeline', href: '/timeline', icon: GanttChart },
+  {
+    label: 'Funcional',
+    items: [
+      { name: 'Queue', href: '/queue', icon: ListChecks },
+      { name: 'Files', href: '/files', icon: FileCode },
+      { name: 'Slicer', href: '/slicer', icon: Settings },
+      { name: 'Notifications', href: '/notifications', icon: Bell },
+      { name: 'Cameras', href: '/cameras', icon: Camera },
+      { name: 'Printers', href: '/printers', icon: Printer },
+      { name: 'Materials', href: '/materials', icon: Package },
+    ],
+  },
+  {
+    label: 'Comercial',
+    items: [
+      { name: 'Quotes', href: '/quotes', icon: FileText },
+      { name: 'Customers', href: '/customers', icon: Users },
+      { name: 'Projects', href: '/projects', icon: FolderKanban },
+      { name: 'Tasks', href: '/tasks', icon: ListTodo },
+      { name: 'Archives', href: '/archives', icon: Archive },
+      { name: 'Expenses', href: '/expenses', icon: Receipt },
+      { name: 'Sales', href: '/sales', icon: DollarSign },
+      { name: 'Channels', href: '/channels', icon: ShoppingBag },
+      { name: 'Timeline', href: '/timeline', icon: GanttChart },
+    ],
+  },
 ]
 
 export default function Layout() {
@@ -77,25 +97,46 @@ export default function Layout() {
         </div>
 
         {/* Navigation */}
-        <nav className={cn('flex-1 py-4 space-y-1', collapsed ? 'px-2' : 'px-3')}>
-          {navigation.map((item) => (
-            <NavLink
-              key={item.name}
-              to={item.href}
-              title={collapsed ? item.name : undefined}
-              className={({ isActive }) =>
-                cn(
-                  'flex items-center rounded-lg text-sm font-medium transition-colors',
-                  collapsed ? 'justify-center px-0 py-2.5' : 'px-3 py-2.5',
-                  isActive
-                    ? 'bg-accent-500/10 text-accent-400'
-                    : 'text-surface-400 hover:text-surface-100 hover:bg-surface-800'
-                )
-              }
-            >
-              <item.icon className={cn('h-5 w-5 shrink-0', !collapsed && 'mr-3')} />
-              {!collapsed && item.name}
-            </NavLink>
+        <nav className={cn('flex-1 py-4 space-y-1 overflow-y-auto', collapsed ? 'px-2' : 'px-3')}>
+          <NavLink
+            to="/dashboard"
+            title={collapsed ? 'Dashboard' : undefined}
+            className={({ isActive }) =>
+              cn(
+                'flex items-center rounded-lg text-sm font-medium transition-colors mb-4',
+                collapsed ? 'justify-center px-0 py-2' : 'px-3 py-2',
+                isActive
+                  ? 'bg-accent-500/10 text-accent-400'
+                  : 'text-surface-400 hover:text-surface-100 hover:bg-surface-800'
+              )
+            }
+          >
+            <LayoutDashboard className={cn('h-4 w-4 shrink-0', !collapsed && 'mr-3')} />
+            {!collapsed && 'Dashboard'}
+          </NavLink>
+          {navigation.map((section) => (
+            <div key={section.label} className="mb-3">
+              {!collapsed && <div className="px-3 mb-1 text-[10px] font-semibold tracking-widest text-surface-600">{section.label}</div>}
+              {section.items.map((item) => (
+                <NavLink
+                  key={item.name}
+                  to={item.href}
+                  title={collapsed ? item.name : undefined}
+                  className={({ isActive }) =>
+                    cn(
+                      'flex items-center rounded-lg text-sm font-medium transition-colors',
+                      collapsed ? 'justify-center px-0 py-2' : 'px-3 py-2',
+                      isActive
+                        ? 'bg-accent-500/10 text-accent-400'
+                        : 'text-surface-400 hover:text-surface-100 hover:bg-surface-800'
+                    )
+                  }
+                >
+                  <item.icon className={cn('h-4 w-4 shrink-0', !collapsed && 'mr-3')} />
+                  {!collapsed && item.name}
+                </NavLink>
+              ))}
+            </div>
           ))}
         </nav>
 

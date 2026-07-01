@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/philjestin/daedalus/internal/model"
-	"github.com/philjestin/daedalus/internal/service"
+	"github.com/Brook-sys/picofarm/internal/model"
+	"github.com/Brook-sys/picofarm/internal/service"
 )
 
 func TestGetWeeklyInsights_Empty(t *testing.T) {

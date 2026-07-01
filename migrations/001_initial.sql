@@ -76,6 +76,10 @@ CREATE TABLE IF NOT EXISTS printers (
     nozzle_diameter DECIMAL(3,2) DEFAULT 0.4,
     location VARCHAR(255) DEFAULT '',
     notes TEXT DEFAULT '',
+    min_material_percent INTEGER DEFAULT 10,
+    cost_per_hour_cents INTEGER DEFAULT 0,
+    purchase_price_cents INTEGER DEFAULT 0,
+    maintenance_mode BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
