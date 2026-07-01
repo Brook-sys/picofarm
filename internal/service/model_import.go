@@ -183,6 +183,9 @@ func (s *ModelImportService) fetchText(ctx context.Context, rawURL string) (stri
 	if err != nil {
 		return "", err
 	}
+	req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; Picofarm/1.0; +https://github.com/Brook-sys/picofarm)")
+	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
 	resp, err := s.client.Do(req)
 	if err != nil {
 		return "", err
