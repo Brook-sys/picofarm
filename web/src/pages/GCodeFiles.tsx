@@ -538,9 +538,10 @@ function SliceSTLModal({ file, onClose, onDone }: { file: STLLibraryFile; onClos
   const [previewResult, setPreviewResult] = useState<{ usesSupport: boolean; printTime: number; filamentUsedG: number; filamentUsedMm: number; thumbnail: string } | null>(null)
 
   useEffect(() => {
-    Promise.all([slicerApi.profiles('printers'), slicerApi.profiles('presets'), slicerApi.profiles('filaments')]).then(([printers, presets, filaments]) => {
+    Promise.all([slicerApi.getConfig(), slicerApi.profiles('printers'), slicerApi.profiles('presets'), slicerApi.profiles('filaments')]).then(([config, printers, presets, filaments]) => {
       setProfiles({ printers, presets, filaments })
-      setForm(current => ({ ...current, printer: String(printers[0]?.name || ''), preset: String(presets[0]?.name || ''), filament: String(filaments[0]?.name || '') }))
+      const defaults = config.default_profiles || {}
+      setForm(current => ({ ...current, printer: defaults.printers || String(printers.find(p => p.default)?.name || printers[0]?.name || ''), preset: defaults.presets || String(presets.find(p => p.default)?.name || presets[0]?.name || ''), filament: defaults.filaments || String(filaments.find(p => p.default)?.name || filaments[0]?.name || '') }))
     }).catch(err => setMessage(err instanceof Error ? err.message : 'Failed to load slicer profiles'))
   }, [])
 

@@ -30,7 +30,13 @@ type SlicerService struct {
 }
 
 type SlicerConfig struct {
-	ConnectionURL string `json:"connection_url"`
+	ConnectionURL   string            `json:"connection_url"`
+	DefaultProfiles map[string]string `json:"default_profiles"`
+}
+
+type SlicerDefaultProfileRequest struct {
+	Category string `json:"category"`
+	Name     string `json:"name"`
 }
 
 type SlicerHealth map[string]any
@@ -104,10 +110,20 @@ func NewSlicerService(settings *SettingsService, repos *repository.Repositories,
 
 func (s *SlicerService) GetConfig(ctx context.Context) (SlicerConfig, error) {
 	setting, err := s.settings.Get(ctx, "slicer_connection_url")
-	if err != nil || setting == nil {
+	if err != nil {
 		return SlicerConfig{}, err
 	}
-	return SlicerConfig{ConnectionURL: setting.Value}, nil
+	cfg := SlicerConfig{DefaultProfiles: map[string]string{}}
+	if setting != nil {
+		cfg.ConnectionURL = setting.Value
+	}
+	for _, category := range []string{"printers", "presets", "filaments"} {
+		defaultSetting, err := s.settings.Get(ctx, slicerDefaultProfileKey(category))
+		if err == nil && defaultSetting != nil {
+			cfg.DefaultProfiles[category] = defaultSetting.Value
+		}
+	}
+	return cfg, nil
 }
 
 func (s *SlicerService) SetConfig(ctx context.Context, cfg SlicerConfig) error {
@@ -155,7 +171,32 @@ func (s *SlicerService) ListProfiles(ctx context.Context, category string) ([]Sl
 	if err := json.Unmarshal(body, &profiles); err != nil {
 		return nil, err
 	}
+	defaultName := ""
+	setting, err := s.settings.Get(ctx, slicerDefaultProfileKey(category))
+	if err == nil && setting != nil {
+		defaultName = setting.Value
+	}
+	if defaultName == "" && len(profiles) == 1 {
+		if name, ok := profiles[0]["name"].(string); ok && strings.TrimSpace(name) != "" {
+			defaultName = name
+			_ = s.settings.Set(ctx, slicerDefaultProfileKey(category), defaultName)
+		}
+	}
+	for _, profile := range profiles {
+		if name, ok := profile["name"].(string); ok && name == defaultName {
+			profile["default"] = true
+		}
+	}
 	return profiles, nil
+}
+
+func (s *SlicerService) SetDefaultProfile(ctx context.Context, req SlicerDefaultProfileRequest) error {
+	category := normalizeSlicerCategory(req.Category)
+	name := strings.TrimSpace(req.Name)
+	if name == "" {
+		return fmt.Errorf("profile name is required")
+	}
+	return s.settings.Set(ctx, slicerDefaultProfileKey(category), name)
 }
 
 func (s *SlicerService) GetProfileJSON(ctx context.Context, category, name string) (json.RawMessage, error) {
@@ -434,6 +475,10 @@ func (s *SlicerService) doRaw(ctx context.Context, method, path string, body io.
 		req.Header.Set("Content-Type", contentType)
 	}
 	return s.client.Do(req)
+}
+
+func slicerDefaultProfileKey(category string) string {
+	return "slicer_default_" + normalizeSlicerCategory(category)
 }
 
 func normalizeSlicerProfileName(name string) string {

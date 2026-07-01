@@ -316,7 +316,7 @@ export interface DiscoveredPrinter {
 
 // Printers API
 export const slicerApi = {
-  getConfig: () => fetchApi<{ connection_url: string }>('/slicer/config'),
+  getConfig: () => fetchApi<{ connection_url: string; default_profiles?: Record<string, string> }>('/slicer/config'),
   setConfig: (connectionUrl: string) => fetchApi<{ connection_url: string }>('/slicer/config', { method: 'PUT', body: JSON.stringify({ connection_url: connectionUrl }) }),
   health: () => fetchApi<Record<string, unknown>>('/slicer/health'),
   status: () => fetchApi<Record<string, unknown>>('/slicer/status'),
@@ -324,6 +324,7 @@ export const slicerApi = {
   profileJSON: (category: string, name: string) => fetchApi<Record<string, unknown>>(`/slicer/profiles/${category}/${encodeURIComponent(name)}`),
   importProfile: (data: { category: string; name: string; url: string; overwrite?: boolean }) => fetchApi<Record<string, unknown>>('/slicer/profiles/import-url', { method: 'POST', body: JSON.stringify(data) }),
   uploadProfileJSON: (data: { category: string; name: string; json: string }) => fetchApi<Record<string, unknown>>('/slicer/profiles/upload-json', { method: 'POST', body: JSON.stringify(data) }),
+  setDefaultProfile: (data: { category: string; name: string }) => fetchApi<Record<string, unknown>>('/slicer/profiles/default', { method: 'POST', body: JSON.stringify(data) }),
   updateProfile: (category: string, name: string) => fetchApi<Record<string, unknown>>(`/slicer/profiles/${category}/${encodeURIComponent(name)}/update-from-source`, { method: 'POST' }),
   resolveProfiles: (data: Record<string, unknown>) => fetchApi<Record<string, unknown>>('/slicer/resolve-profiles', { method: 'POST', body: JSON.stringify(data) }),
   preview: (data: Record<string, unknown>) => fetchApi<{ usesSupport: boolean; printTime: number; filamentUsedG: number; filamentUsedMm: number; thumbnail: string }>('/slicer/preview', { method: 'POST', body: JSON.stringify(data) }),

@@ -65,6 +65,19 @@ func (h *SlicerHandler) ListProfiles(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, http.StatusOK, profiles)
 }
 
+func (h *SlicerHandler) SetDefaultProfile(w http.ResponseWriter, r *http.Request) {
+	var req service.SlicerDefaultProfileRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if err := h.service.SetDefaultProfile(r.Context(), req); err != nil {
+		respondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	respondJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
 func (h *SlicerHandler) GetProfileJSON(w http.ResponseWriter, r *http.Request) {
 	profile, err := h.service.GetProfileJSON(r.Context(), chi.URLParam(r, "category"), chi.URLParam(r, "name"))
 	if err != nil {
