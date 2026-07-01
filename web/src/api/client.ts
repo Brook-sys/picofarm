@@ -397,6 +397,10 @@ export const printersApi = {
 
   getDefault: () => fetchApi<import('../types').Printer>('/printers/default'),
 
+  // Thingiverse token
+  getThingiverseToken: () => fetchApi<{ token: string }>('/settings/thingiverse_token'),
+  setThingiverseToken: (token: string) => fetchApi<{ ok: boolean }>('/settings/thingiverse_token', { method: 'PUT', body: JSON.stringify({ token }) }),
+
   setDefault: (id: string) => fetchApi<void>(`/printers/${id}/default`, { method: 'POST' }),
 
   emergencyStop: () =>

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Store, ShoppingBag, ExternalLink, RefreshCw, Unplug, AlertCircle, CheckCircle2, Key, Eye, EyeOff, Save, Database, Download, Trash2, RotateCcw, Plus, Zap, Settings as SettingsIcon, Building } from 'lucide-react'
+import { Store, ShoppingBag, ExternalLink, RefreshCw, Unplug, AlertCircle, CheckCircle2, Key, Eye, EyeOff, Save, Database, Download, Trash2, RotateCcw, Plus, Zap, Settings as SettingsIcon, Building, Globe } from 'lucide-react'
 import { etsyApi, squarespaceApi, settingsApi, backupsApi, dispatchApi } from '../api/client'
 import { cn } from '../lib/utils'
 import type { EtsyIntegration, SquarespaceIntegration, BackupInfo, BackupConfig } from '../types'
@@ -41,6 +41,12 @@ export default function Settings() {
   const [etsyClientId, setEtsyClientId] = useState('')
   const [configuringEtsy, setConfiguringEtsy] = useState(false)
 
+  // Thingiverse API token
+  const [thingiverseToken, setThingiverseToken] = useState('')
+  const [thingiverseTokenMasked, setThingiverseTokenMasked] = useState('')
+  const [showThingiverseToken, setShowThingiverseToken] = useState(false)
+  const [savingThingiverseToken, setSavingThingiverseToken] = useState(false)
+
   // Backup settings
   const [backups, setBackups] = useState<BackupInfo[]>([])
   const [backupsLoading, setBackupsLoading] = useState(true)
@@ -70,6 +76,7 @@ export default function Settings() {
     loadSquarespaceStatus()
     loadApiKeys()
     loadBackups()
+    loadThingiverseToken()
   }, [])
 
   const loadEtsyStatus = async () => {
@@ -158,6 +165,17 @@ export default function Settings() {
     }
   }
 
+  const loadThingiverseToken = async () => {
+    try {
+      const res = await settingsApi.get('thingiverse_api_token')
+      if (res.value) {
+        setThingiverseTokenMasked('********')
+      }
+    } catch {
+      // not set yet
+    }
+  }
+
   const handleSaveAnthropicKey = async () => {
     if (!anthropicKey.trim()) return
 
@@ -177,6 +195,24 @@ export default function Settings() {
       setError(err instanceof Error ? err.message : 'Failed to save API key')
     } finally {
       setSavingKey(false)
+    }
+  }
+
+  const handleSaveThingiverseToken = async () => {
+    if (!thingiverseToken.trim()) return
+
+    try {
+      setSavingThingiverseToken(true)
+      setError(null)
+      await settingsApi.set('thingiverse_api_token', thingiverseToken.trim())
+      setSuccessMessage('Thingiverse API token saved')
+      setThingiverseTokenMasked('********')
+      setThingiverseToken('')
+      setShowThingiverseToken(false)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save Thingiverse token')
+    } finally {
+      setSavingThingiverseToken(false)
     }
   }
 
@@ -494,12 +530,73 @@ export default function Settings() {
                   )}
                   Save
                 </button>
-              </div>
-            </div>
-          </div>
-        </div>
+               </div>
+             </div>
+           </div>
+         </div>
 
-        {/* Etsy Integration Card */}
+         {/* Thingiverse API Token */}
+         <div className="bg-surface-900/50 border border-surface-800 rounded-xl p-6">
+           <div className="flex items-center gap-3 mb-4">
+             <div className="p-2 bg-blue-500/10 rounded-lg">
+               <Globe className="h-6 w-6 text-blue-400" />
+             </div>
+             <div>
+               <h2 className="text-lg font-semibold text-surface-100">Thingiverse Integration</h2>
+               <p className="text-sm text-surface-400">
+                 Import models from Thingiverse using your Personal Access Token
+               </p>
+             </div>
+           </div>
+
+           <div className="space-y-4">
+             <div>
+               <label className="block text-sm font-medium text-surface-300 mb-2">
+                 Thingiverse API Token
+               </label>
+               <div className="flex gap-2">
+                 <div className="relative flex-1">
+                   <input
+                     type={showThingiverseToken ? 'text' : 'password'}
+                     value={thingiverseToken}
+                     onChange={(e) => setThingiverseToken(e.target.value)}
+                     placeholder={thingiverseTokenMasked ? 'Enter new token to update...' : 'Paste your Thingiverse token'}
+                     className="input pr-10 w-full"
+                   />
+                   <button
+                     type="button"
+                     onClick={() => setShowThingiverseToken(!showThingiverseToken)}
+                     className="absolute right-3 top-1/2 -translate-y-1/2 text-surface-400 hover:text-surface-200"
+                   >
+                     {showThingiverseToken ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                   </button>
+                 </div>
+                 <button
+                   onClick={handleSaveThingiverseToken}
+                   disabled={!thingiverseToken.trim() || savingThingiverseToken}
+                   className="flex items-center gap-2 px-4 py-2 bg-accent-600 hover:bg-accent-700 text-white font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                 >
+                   {savingThingiverseToken ? (
+                     <RefreshCw className="h-4 w-4 animate-spin" />
+                   ) : (
+                     <Save className="h-4 w-4" />
+                   )}
+                   Save
+                 </button>
+               </div>
+               {thingiverseTokenMasked && !thingiverseToken && (
+                 <div className="mt-2">
+                   <span className="text-sm text-green-300">Token configured: {thingiverseTokenMasked}</span>
+                 </div>
+               )}
+               <p className="mt-2 text-xs text-surface-500">
+                 Get your token at <a href="https://www.thingiverse.com/settings/personal-access-tokens" target="_blank" rel="noreferrer" className="text-accent-400 hover:underline">Thingiverse Settings → Personal Access Tokens</a>
+               </p>
+             </div>
+           </div>
+         </div>
+
+         {/* Etsy Integration Card */}
         <div className="bg-surface-900/50 border border-surface-800 rounded-xl p-6">
           <div className="flex items-center gap-3 mb-4">
             <div className="p-2 bg-orange-500/10 rounded-lg">

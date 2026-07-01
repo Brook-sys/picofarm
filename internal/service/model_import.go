@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -91,6 +92,13 @@ func (s *ModelImportService) Preview(ctx context.Context, rawURL string) (*Model
 		stlFiles[i].URL = resolveURL(rawURL, stlFiles[i].URL)
 	}
 
+	// Enrich Printables files with real download URLs via GraphQL
+	if provider == "Printables" {
+		if enriched := s.enrichPrintablesFiles(ctx, rawURL, stlFiles); len(enriched) > 0 {
+			stlFiles = enriched
+		}
+	}
+
 	preview := &ModelImportPreview{
 		Provider:    provider,
 		SourceURL:   rawURL,
@@ -152,16 +160,30 @@ func (s *ModelImportService) Import(ctx context.Context, req ModelImportRequest)
 
 func (s *ModelImportService) downloadSTL(ctx context.Context, file ModelImportFile) (*model.STLLibraryFile, error) {
 	target := file.URL
-	// if it's just a filename, try common Printables direct download pattern
+
+	// Printables fallback: if we only have the filename, try the model's download endpoint
+	if !strings.HasPrefix(target, "http") && strings.Contains(file.Name, ".stl") {
+		// Try the direct download page for the model (works for many public files)
+		// We don't have the exact fileId, so we attempt the model's download endpoint
+		// which often serves the first/only STL when accessed this way.
+		if strings.Contains(file.URL, "printables.com/model/") {
+			// keep as-is, will fail → handled below
+		} else {
+			// construct a best-effort Printables download URL using the model page
+			// This is a heuristic; real solution uses GraphQL downloadUrl
+			target = "https://www.printables.com" + strings.TrimLeft(file.URL, "/")
+		}
+	}
+
 	if !strings.HasPrefix(target, "http") {
-		// we cannot reliably guess the download URL without the fileId
-		// so we skip for now
 		return nil, fmt.Errorf("relative STL without full URL not supported yet: %s", target)
 	}
+
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
 	if err != nil {
 		return nil, err
 	}
+	req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; Picofarm/1.0)")
 	resp, err := s.client.Do(req)
 	if err != nil {
 		return nil, err
@@ -322,4 +344,63 @@ func resolveURL(base, ref string) string {
 
 func htmlUnescape(value string) string {
 	return strings.NewReplacer("&amp;", "&", "&quot;", "\"", "&#39;", "'", "&lt;", "<", "&gt;", ">").Replace(value)
+}
+
+func (s *ModelImportService) enrichPrintablesFiles(ctx context.Context, pageURL string, files []ModelImportFile) []ModelImportFile {
+	reID := regexp.MustCompile(`/model/(\d+)`)
+	m := reID.FindStringSubmatch(pageURL)
+	if len(m) != 2 {
+		return files
+	}
+	modelID := m[1]
+
+	query := `{"query":"query ModelFiles($id:ID!){model(id:$id){files{id,name,downloadUrl}}}","variables":{"id":"` + modelID + `"}}`
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://api.printables.com/graphql", strings.NewReader(query))
+	if err != nil {
+		return files
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; Picofarm/1.0)")
+
+	resp, err := s.client.Do(req)
+	if err != nil {
+		return files
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 400 {
+		return files
+	}
+
+	var gql struct {
+		Data struct {
+			Model struct {
+				Files []struct {
+					ID          string `json:"id"`
+					Name        string `json:"name"`
+					DownloadURL string `json:"downloadUrl"`
+				} `json:"files"`
+			} `json:"model"`
+		} `json:"data"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&gql); err != nil {
+		return files
+	}
+
+	nameToURL := map[string]string{}
+	for _, f := range gql.Data.Model.Files {
+		if f.DownloadURL != "" {
+			nameToURL[f.Name] = f.DownloadURL
+		}
+	}
+
+	result := make([]ModelImportFile, 0, len(files))
+	for _, f := range files {
+		if dl, ok := nameToURL[f.Name]; ok {
+			result = append(result, ModelImportFile{Name: f.Name, URL: dl})
+		} else {
+			result = append(result, f)
+		}
+	}
+	return result
 }

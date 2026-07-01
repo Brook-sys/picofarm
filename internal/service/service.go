@@ -66,8 +66,9 @@ type Services struct {
 	GCodeLibrary  *GCodeLibraryService
 	STLLibrary    *STLLibraryService
 	Notifications *NotificationService
-	Slicer        *SlicerService
-	ModelImport   *ModelImportService
+	Slicer          *SlicerService
+	ModelImport     *ModelImportService
+	Thingiverse     *ThingiverseImportService
 }
 
 // EtsyConfig holds Etsy OAuth configuration.
@@ -144,6 +145,7 @@ func NewServices(repos *repository.Repositories, store storage.Storage, printerM
 	services.Queue.SetNotificationService(services.Notifications)
 	services.Slicer = NewSlicerService(services.Settings, repos, store, services.GCodeLibrary)
 	services.ModelImport = NewModelImportService(services.Projects, services.Parts, services.Designs, services.STLLibrary, repos.Tags)
+	services.Thingiverse = NewThingiverseImportService(services.Settings, services.STLLibrary)
 
 	// Wire job completion callback to auto-complete checklist items
 	services.PrintJobs.SetOnJobCompleted(services.Tasks.HandleJobCompleted)
@@ -4901,12 +4903,13 @@ type SettingsService struct {
 
 // sensitiveKeys lists settings that should be encrypted at rest.
 var sensitiveKeys = map[string]bool{
-	"anthropic_api_key":    true,
-	"etsy_client_id":       true,
-	"etsy_access_token":    true,
-	"etsy_refresh_token":   true,
-	"bambu_cloud_token":    true,
-	"bambu_cloud_password": true,
+	"anthropic_api_key":     true,
+	"etsy_client_id":        true,
+	"etsy_access_token":     true,
+	"etsy_refresh_token":    true,
+	"bambu_cloud_token":     true,
+	"bambu_cloud_password":  true,
+	"thingiverse_api_token": true,
 }
 
 // isSensitive checks if a key should be encrypted.

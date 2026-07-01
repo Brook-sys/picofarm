@@ -117,6 +117,19 @@ func NewRouter(services *service.Services, hub *realtime.Hub) http.Handler {
 			r.Post("/import", modelImportHandler.Import)
 		})
 
+		thingiverseHandler := NewThingiverseImportHandler(services.Thingiverse)
+		r.Route("/thingiverse-import", func(r chi.Router) {
+			r.Post("/resolve", thingiverseHandler.Resolve)
+			r.Post("/preview", thingiverseHandler.Preview)
+			r.Post("/import", thingiverseHandler.Import)
+		})
+
+		thingiverseSettings := NewThingiverseSettingsHandler(services.Settings)
+		r.Route("/settings/thingiverse_token", func(r chi.Router) {
+			r.Get("/", thingiverseSettings.GetToken)
+			r.Put("/", thingiverseSettings.SetToken)
+		})
+
 		// Tasks (Work Instances)
 		if services.Tasks != nil {
 			taskHandler := NewTaskHandler(services.Tasks)
