@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/Brook-sys/picofarm/internal/model"
+	"github.com/google/uuid"
 )
 
 type STLLibraryRepository struct {
@@ -89,6 +89,24 @@ func (r *STLLibraryRepository) GetByID(ctx context.Context, id uuid.UUID) (*mode
 		SELECT s.id, s.file_id, s.display_name, f.original_name, f.size_bytes, s.thumbnail_file_id, s.created_at, s.updated_at
 		FROM stl_files s JOIN files f ON f.id = s.file_id WHERE s.id = ?
 	`, id), &f.ID, &f.FileID, &f.DisplayName, &f.FileName, &f.SizeBytes, &f.ThumbnailFileID, &f.CreatedAt, &f.UpdatedAt)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	if tags, err := r.ListTagsForFile(ctx, f.ID); err == nil {
+		f.Tags = tags
+	}
+	return &f, nil
+}
+
+func (r *STLLibraryRepository) GetByFileID(ctx context.Context, fileID uuid.UUID) (*model.STLLibraryFile, error) {
+	var f model.STLLibraryFile
+	err := scanRow(r.db.QueryRowContext(ctx, `
+		SELECT s.id, s.file_id, s.display_name, f.original_name, f.size_bytes, s.thumbnail_file_id, s.created_at, s.updated_at
+		FROM stl_files s JOIN files f ON f.id = s.file_id WHERE s.file_id = ?
+	`, fileID), &f.ID, &f.FileID, &f.DisplayName, &f.FileName, &f.SizeBytes, &f.ThumbnailFileID, &f.CreatedAt, &f.UpdatedAt)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}

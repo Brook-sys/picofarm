@@ -8,9 +8,9 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/Brook-sys/picofarm/internal/crypto"
 	"github.com/Brook-sys/picofarm/internal/model"
+	"github.com/google/uuid"
 )
 
 // DBTX is an interface for database operations that works with both *sql.DB and *sql.Tx.
@@ -704,6 +704,17 @@ func (r *DesignRepository) GetByID(ctx context.Context, id uuid.UUID) (*model.De
 func (r *DesignRepository) Delete(ctx context.Context, id uuid.UUID) error {
 	_, err := r.db.ExecContext(ctx, `DELETE FROM designs WHERE id = ?`, id)
 	return err
+}
+
+func (r *DesignRepository) ProjectHasFileDesign(ctx context.Context, projectID, fileID uuid.UUID) (bool, error) {
+	var count int
+	err := r.db.QueryRowContext(ctx, `
+		SELECT COUNT(*)
+		FROM designs d
+		JOIN parts p ON p.id = d.part_id
+		WHERE p.project_id = ? AND d.file_id = ?
+	`, projectID, fileID).Scan(&count)
+	return count > 0, err
 }
 
 func (r *DesignRepository) ListByPart(ctx context.Context, partID uuid.UUID) ([]model.Design, error) {

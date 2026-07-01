@@ -16,7 +16,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/Brook-sys/picofarm/internal/bambu"
 	"github.com/Brook-sys/picofarm/internal/crypto"
 	"github.com/Brook-sys/picofarm/internal/model"
@@ -26,6 +25,7 @@ import (
 	"github.com/Brook-sys/picofarm/internal/repository"
 	"github.com/Brook-sys/picofarm/internal/storage"
 	"github.com/Brook-sys/picofarm/internal/threemf"
+	"github.com/google/uuid"
 )
 
 // Services holds all service instances.
@@ -87,8 +87,8 @@ func NewServices(repos *repository.Repositories, store storage.Storage, printerM
 
 	services := &Services{
 		Projects:        &ProjectService{repo: repos.Projects, printJobRepo: repos.PrintJobs, printerRepo: repos.Printers, spoolRepo: repos.Spools, templateRepo: repos.Templates, designRepo: repos.Designs, saleRepo: repos.Sales, partRepo: repos.Parts, supplyRepo: repos.ProjectSupplies, repos: repos, printerMgr: printerMgr, hub: hub, storage: store},
-		Parts:           &PartService{repo: repos.Parts},
-		Designs:         &DesignService{repo: repos.Designs, fileRepo: repos.Files, gcodeRepo: repos.GCodeLibrary, stlRepo: repos.STLLibrary, storage: store},
+		Parts:           &PartService{repo: repos.Parts, designRepo: repos.Designs, projectRepo: repos.Projects, tagRepo: repos.Tags, stlRepo: repos.STLLibrary},
+		Designs:         &DesignService{repo: repos.Designs, partRepo: repos.Parts, projectRepo: repos.Projects, tagRepo: repos.Tags, fileRepo: repos.Files, gcodeRepo: repos.GCodeLibrary, stlRepo: repos.STLLibrary, storage: store},
 		Printers:        &PrinterService{repo: repos.Printers, settingsRepo: repos.Settings, printJobRepo: repos.PrintJobs, queueRepo: repos.QueueItems, saleRepo: repos.Sales, macroRepo: repos.PrinterMacros, manager: printerMgr, hub: hub, discovery: printer.NewDiscovery(), bambuCloudRepo: repos.BambuCloud, bambuCloud: bambuCloudClient, reconnecting: make(map[uuid.UUID]time.Time)},
 		Materials:       &MaterialService{repo: repos.Materials},
 		Spools:          &SpoolService{repo: repos.Spools},
@@ -563,7 +563,11 @@ func (s *ProjectService) StartProduction(ctx context.Context, projectID uuid.UUI
 
 // PartService handles part business logic.
 type PartService struct {
-	repo *repository.PartRepository
+	repo        *repository.PartRepository
+	designRepo  *repository.DesignRepository
+	projectRepo *repository.ProjectRepository
+	tagRepo     *repository.TagRepository
+	stlRepo     *repository.STLLibraryRepository
 }
 
 // Create creates a new part.
@@ -594,16 +598,59 @@ func (s *PartService) Update(ctx context.Context, p *model.Part) error {
 
 // Delete removes a part.
 func (s *PartService) Delete(ctx context.Context, id uuid.UUID) error {
-	return s.repo.Delete(ctx, id)
+	part, _ := s.repo.GetByID(ctx, id)
+	var designs []model.Design
+	if s.designRepo != nil {
+		designs, _ = s.designRepo.ListByPart(ctx, id)
+	}
+	if err := s.repo.Delete(ctx, id); err != nil {
+		return err
+	}
+	if part == nil || s.projectRepo == nil || s.tagRepo == nil || s.stlRepo == nil || s.designRepo == nil {
+		return nil
+	}
+	project, err := s.projectRepo.GetByID(ctx, part.ProjectID)
+	if err != nil || project == nil {
+		return err
+	}
+	tag, err := s.tagRepo.GetByName(ctx, projectTagName(project.Name))
+	if err != nil || tag == nil {
+		return err
+	}
+	for _, design := range designs {
+		if design.FileType != model.FileTypeSTL {
+			continue
+		}
+		stillUsed, err := s.designRepo.ProjectHasFileDesign(ctx, project.ID, design.FileID)
+		if err != nil || stillUsed {
+			if err != nil {
+				return err
+			}
+			continue
+		}
+		stl, err := s.stlRepo.GetByFileID(ctx, design.FileID)
+		if err != nil {
+			return err
+		}
+		if stl != nil {
+			if err := s.stlRepo.RemoveTagFromFile(ctx, stl.ID, tag.ID); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 // DesignService handles design business logic.
 type DesignService struct {
-	repo      *repository.DesignRepository
-	fileRepo  *repository.FileRepository
-	gcodeRepo *repository.GCodeLibraryRepository
-	stlRepo   *repository.STLLibraryRepository
-	storage   storage.Storage
+	repo        *repository.DesignRepository
+	partRepo    *repository.PartRepository
+	projectRepo *repository.ProjectRepository
+	tagRepo     *repository.TagRepository
+	fileRepo    *repository.FileRepository
+	gcodeRepo   *repository.GCodeLibraryRepository
+	stlRepo     *repository.STLLibraryRepository
+	storage     storage.Storage
 }
 
 // Create creates a new design version with file upload.
@@ -768,14 +815,89 @@ func (s *DesignService) CreateFromSTLLibrary(ctx context.Context, partID, stlFil
 	if err := s.repo.Create(ctx, design); err != nil {
 		return nil, fmt.Errorf("failed to create design: %w", err)
 	}
+	_ = s.addProjectTagToSTL(ctx, partID, entry.ID)
 	return design, nil
+}
+
+func (s *DesignService) addProjectTagToSTL(ctx context.Context, partID, stlID uuid.UUID) error {
+	if s.partRepo == nil || s.projectRepo == nil || s.tagRepo == nil || s.stlRepo == nil {
+		return nil
+	}
+	part, err := s.partRepo.GetByID(ctx, partID)
+	if err != nil || part == nil {
+		return err
+	}
+	project, err := s.projectRepo.GetByID(ctx, part.ProjectID)
+	if err != nil || project == nil {
+		return err
+	}
+	tag, err := s.projectTag(ctx, project.Name)
+	if err != nil {
+		return err
+	}
+	return s.stlRepo.AddTagToFile(ctx, stlID, tag.ID)
+}
+
+func (s *DesignService) removeProjectTagFromSTLIfUnused(ctx context.Context, design *model.Design) error {
+	if s.partRepo == nil || s.projectRepo == nil || s.tagRepo == nil || s.stlRepo == nil || design == nil || design.FileType != model.FileTypeSTL {
+		return nil
+	}
+	part, err := s.partRepo.GetByID(ctx, design.PartID)
+	if err != nil || part == nil {
+		return err
+	}
+	project, err := s.projectRepo.GetByID(ctx, part.ProjectID)
+	if err != nil || project == nil {
+		return err
+	}
+	stl, err := s.stlRepo.GetByFileID(ctx, design.FileID)
+	if err != nil || stl == nil {
+		return err
+	}
+	stillUsed, err := s.repo.ProjectHasFileDesign(ctx, project.ID, design.FileID)
+	if err != nil || stillUsed {
+		return err
+	}
+	tag, err := s.tagRepo.GetByName(ctx, projectTagName(project.Name))
+	if err != nil || tag == nil {
+		return err
+	}
+	return s.stlRepo.RemoveTagFromFile(ctx, stl.ID, tag.ID)
+}
+
+func (s *DesignService) projectTag(ctx context.Context, projectName string) (*model.Tag, error) {
+	name := projectTagName(projectName)
+	tag, err := s.tagRepo.GetByName(ctx, name)
+	if err != nil || tag != nil {
+		return tag, err
+	}
+	tag = &model.Tag{Name: name, Color: "#f59e0b"}
+	if err := s.tagRepo.Create(ctx, tag); err != nil {
+		return nil, err
+	}
+	return tag, nil
+}
+
+func projectTagName(projectName string) string {
+	name := strings.TrimSpace(projectName)
+	if name == "" {
+		name = "Projeto"
+	}
+	return "Projeto: " + name
 }
 
 func (s *DesignService) Delete(ctx context.Context, id uuid.UUID) error {
 	if id == uuid.Nil {
 		return fmt.Errorf("design ID is required")
 	}
-	return s.repo.Delete(ctx, id)
+	design, err := s.repo.GetByID(ctx, id)
+	if err != nil {
+		return err
+	}
+	if err := s.repo.Delete(ctx, id); err != nil {
+		return err
+	}
+	return s.removeProjectTagFromSTLIfUnused(ctx, design)
 }
 
 // GetByID retrieves a design by ID.
