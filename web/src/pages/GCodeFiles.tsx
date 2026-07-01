@@ -532,7 +532,7 @@ export default function GCodeFiles() {
 
 function SliceSTLModal({ file, onClose, onDone }: { file: STLLibraryFile; onClose: () => void; onDone: () => void }) {
   const [profiles, setProfiles] = useState<Record<'printers' | 'presets' | 'filaments', Array<Record<string, unknown>>>>({ printers: [], presets: [], filaments: [] })
-  const [form, setForm] = useState({ printer: '', preset: '', filament: '', bed_type: '', plate: '1', arrange: true, orient: false, display_name: `${file.display_name || file.file_name}.gcode`, set_default: true, embed_thumbnails: true })
+  const [form, setForm] = useState({ printer: '', preset: '', filament: '', bed_type: '', plate: '1', arrange: true, orient: false, display_name: `${file.display_name || file.file_name}.gcode`, set_default: true })
   const [busy, setBusy] = useState('')
   const [message, setMessage] = useState('')
   const [resolved, setResolved] = useState<Record<string, unknown> | null>(null)
@@ -561,7 +561,7 @@ function SliceSTLModal({ file, onClose, onDone }: { file: STLLibraryFile; onClos
     setBusy('slice')
     setMessage('Slicing in Orca container. This can take a while...')
     try {
-      await slicerApi.sliceSTL({ stl_file_id: file.id, ...form, export_type: 'gcode', embed_thumbnails: form.embed_thumbnails })
+      await slicerApi.sliceSTL({ stl_file_id: file.id, ...form, export_type: 'gcode' })
       setMessage('G-code generated and linked to STL.')
       onDone()
     } catch (err) {
@@ -583,7 +583,7 @@ function SliceSTLModal({ file, onClose, onDone }: { file: STLLibraryFile; onClos
             <label className="block"><span className="text-xs text-surface-500 mb-1 block">Filament profile</span><select className="input" value={form.filament} onChange={e => setForm({ ...form, filament: e.target.value })}>{profiles.filaments.map(p => <option key={String(p.name)} value={String(p.name)}>{String(p.name)}</option>)}</select></label>
             <div className="grid grid-cols-2 gap-3"><label><span className="text-xs text-surface-500 mb-1 block">Bed type</span><input className="input" value={form.bed_type} onChange={e => setForm({ ...form, bed_type: e.target.value })} placeholder="optional" /></label><label><span className="text-xs text-surface-500 mb-1 block">Plate</span><input className="input" value={form.plate} onChange={e => setForm({ ...form, plate: e.target.value })} /></label></div>
             <label className="block"><span className="text-xs text-surface-500 mb-1 block">G-code name</span><input className="input" value={form.display_name} onChange={e => setForm({ ...form, display_name: e.target.value })} /></label>
-            <div className="flex flex-wrap gap-4 text-sm text-surface-300"><label className="flex items-center gap-2"><input type="checkbox" checked={form.arrange} onChange={e => setForm({ ...form, arrange: e.target.checked })} />Auto-arrange</label><label className="flex items-center gap-2"><input type="checkbox" checked={form.orient} onChange={e => setForm({ ...form, orient: e.target.checked })} />Auto-orient</label><label className="flex items-center gap-2"><input type="checkbox" checked={form.set_default} onChange={e => setForm({ ...form, set_default: e.target.checked })} />Make default</label><label className="flex items-center gap-2"><input type="checkbox" checked={form.embed_thumbnails} onChange={e => setForm({ ...form, embed_thumbnails: e.target.checked })} />Embed thumbnail (higher RAM)</label></div>
+            <div className="flex flex-wrap gap-4 text-sm text-surface-300"><label className="flex items-center gap-2"><input type="checkbox" checked={form.arrange} onChange={e => setForm({ ...form, arrange: e.target.checked })} />Auto-arrange</label><label className="flex items-center gap-2"><input type="checkbox" checked={form.orient} onChange={e => setForm({ ...form, orient: e.target.checked })} />Auto-orient</label><label className="flex items-center gap-2"><input type="checkbox" checked={form.set_default} onChange={e => setForm({ ...form, set_default: e.target.checked })} />Make default</label></div>
             <div className="flex gap-2"><button className="btn btn-secondary" disabled={!!busy} onClick={preview} type="button">Preview profiles</button><button className="btn btn-primary" disabled={!!busy || !form.printer || !form.preset || !form.filament} onClick={slice} type="button">Gerar G-code</button></div>
           </div>
           <div className="rounded-xl border border-surface-800 bg-surface-900/70 p-3"><div className="mb-2 text-sm font-medium text-surface-200">Resolved profiles</div>{resolved ? <pre className="max-h-96 overflow-auto rounded-lg bg-surface-950 p-3 text-xs text-surface-400">{JSON.stringify(resolved, null, 2)}</pre> : <div className="flex h-64 items-center justify-center rounded-lg border border-dashed border-surface-700 bg-surface-950/40 text-sm text-surface-600">Preview before slicing</div>}</div>

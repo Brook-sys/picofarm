@@ -64,7 +64,6 @@ type SlicerSliceRequest struct {
 	Overrides          map[string]map[string]any `json:"overrides"`
 	DisplayName        string                    `json:"display_name"`
 	SetDefault         bool                      `json:"set_default"`
-	EmbedThumbnails    bool                      `json:"embed_thumbnails"`
 }
 
 type SlicerSliceResult struct {
@@ -267,9 +266,6 @@ func (s *SlicerService) SliceSTL(ctx context.Context, req SlicerSliceRequest) (*
 	addFormField(writer, "exportType", firstNonEmpty(req.ExportType, "gcode"))
 	addFormField(writer, "resolveProfiles", "true")
 	addFormField(writer, "sanitizeProfiles", "true")
-	if req.EmbedThumbnails {
-		addFormField(writer, "embedThumbnails", "true")
-	}
 	if req.Arrange {
 		addFormField(writer, "arrange", "true")
 	}
