@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -68,8 +69,8 @@ func (s *ThingiverseImportService) getToken(ctx context.Context) (string, error)
 	return setting.Value, nil
 }
 
-func (s *ThingiverseImportService) do(ctx context.Context, method, path string, token string) ([]byte, error) {
-	req, err := http.NewRequestWithContext(ctx, method, "https://api.thingiverse.com"+path, nil)
+func (s *ThingiverseImportService) do(ctx context.Context, path string, token string) ([]byte, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://api.thingiverse.com"+path, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -100,7 +101,7 @@ func (s *ThingiverseImportService) Resolve(ctx context.Context, rawURL string) (
 		return nil, err
 	}
 
-	body, err := s.do(ctx, http.MethodGet, fmt.Sprintf("/things/%d", id), token)
+	body, err := s.do(ctx, fmt.Sprintf("/things/%d", id), token)
 	if err != nil {
 		return nil, err
 	}
@@ -140,7 +141,7 @@ func (s *ThingiverseImportService) Preview(ctx context.Context, rawURL string) (
 	}
 
 	// Get files
-	body, err := s.do(ctx, http.MethodGet, fmt.Sprintf("/things/%d/files", resolved.ID), token)
+	body, err := s.do(ctx, fmt.Sprintf("/things/%d/files", resolved.ID), token)
 	if err != nil {
 		return nil, err
 	}
@@ -187,7 +188,7 @@ func (s *ThingiverseImportService) Import(ctx context.Context, req ModelImportRe
 	}
 
 	// Get all files again to map names to download URLs
-	body, err := s.do(ctx, http.MethodGet, fmt.Sprintf("/things/%d/files", resolved.ID), token)
+	body, err := s.do(ctx, fmt.Sprintf("/things/%d/files", resolved.ID), token)
 	if err != nil {
 		return nil, err
 	}
@@ -221,9 +222,9 @@ func (s *ThingiverseImportService) Import(ctx context.Context, req ModelImportRe
 		if err != nil || resp.StatusCode >= 400 {
 			continue
 		}
-		defer resp.Body.Close()
 
 		stl, err := s.stls.Upload(ctx, f.Name, resp.Body, nil)
+		_ = resp.Body.Close()
 		if err != nil {
 			continue
 		}
@@ -239,8 +240,10 @@ func extractThingID(rawURL string) (int, error) {
 	if len(m) != 2 {
 		return 0, fmt.Errorf("invalid thingiverse url")
 	}
-	var id int
-	fmt.Sscanf(m[1], "%d", &id)
+	id, err := strconv.Atoi(m[1])
+	if err != nil {
+		return 0, fmt.Errorf("invalid thingiverse url")
+	}
 	return id, nil
 }
 
@@ -255,7 +258,7 @@ func (s *ThingiverseImportService) ImportPreview(ctx context.Context, req ModelI
 		return nil, err
 	}
 
-	body, err := s.do(ctx, http.MethodGet, fmt.Sprintf("/things/%d/files", resolved.ID), token)
+	body, err := s.do(ctx, fmt.Sprintf("/things/%d/files", resolved.ID), token)
 	if err != nil {
 		return nil, err
 	}

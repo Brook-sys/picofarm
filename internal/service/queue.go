@@ -9,13 +9,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/Brook-sys/picofarm/internal/gcode"
 	"github.com/Brook-sys/picofarm/internal/model"
 	"github.com/Brook-sys/picofarm/internal/printer"
 	"github.com/Brook-sys/picofarm/internal/realtime"
 	"github.com/Brook-sys/picofarm/internal/repository"
 	"github.com/Brook-sys/picofarm/internal/storage"
+	"github.com/google/uuid"
 )
 
 type QueueBoardItem struct {
@@ -171,7 +171,7 @@ func (s *QueueService) CreateFromUpload(ctx context.Context, filename string, re
 		if file.StoragePath != storagePath {
 			if existingReader, err := s.storage.Get(file.StoragePath); err == nil {
 				existingReader.Close()
-				s.storage.Delete(storagePath)
+				_ = s.storage.Delete(storagePath)
 			} else {
 				file.OriginalName = filename
 				file.ContentType = "text/x-gcode"
@@ -348,7 +348,7 @@ func (s *QueueService) Start(ctx context.Context, id uuid.UUID) error {
 	if err := s.printerMgr.StartJob(*item.AssignedPrinterID, item.FileName, s.storage.GetFullPath(file.StoragePath)); err != nil {
 		item.FailedAttempts++
 		item.Status = model.QueueItemStatusFailed
-		s.repo.Update(ctx, item)
+		_ = s.repo.Update(ctx, item)
 		return err
 	}
 	item.Status = model.QueueItemStatusPrinting
@@ -386,11 +386,12 @@ func (s *QueueService) SetStatus(ctx context.Context, id uuid.UUID, status model
 	if err := s.repo.Update(ctx, item); err != nil {
 		return err
 	}
-	if status == model.QueueItemStatusCancelled {
+	switch status {
+	case model.QueueItemStatusCancelled:
 		s.dispatchQueueNotification(ctx, item, "print.cancelled", "warning", "Print cancelled")
-	} else if status == model.QueueItemStatusFailed {
+	case model.QueueItemStatusFailed:
 		s.dispatchQueueNotification(ctx, item, "print.failed", "error", "Print failed")
-	} else if status == model.QueueItemStatusDone {
+	case model.QueueItemStatusDone:
 		s.dispatchQueueNotification(ctx, item, "print.completed", "success", "Print completed")
 	}
 	return nil
@@ -532,7 +533,7 @@ func (s *QueueService) handlePrinterStatus(newState *model.PrinterState, oldStat
 				item.Status = model.QueueItemStatusDone
 				consumedProgress = 100
 				if (item.SourceType == model.QueueSourceLibrary || item.SourceType == model.QueueSourceProject) && item.SourceID != nil && s.libraryRepo != nil {
-					s.libraryRepo.IncrementPrintCount(ctx, *item.SourceID)
+					_ = s.libraryRepo.IncrementPrintCount(ctx, *item.SourceID)
 				}
 			}
 		case model.PrinterStatusError, model.PrinterStatusOffline:
@@ -549,9 +550,10 @@ func (s *QueueService) handlePrinterStatus(newState *model.PrinterState, oldStat
 			if s.hub != nil {
 				s.hub.Broadcast(realtime.Event{Type: "queue_item_updated", Data: item})
 			}
-			if item.Status == model.QueueItemStatusDone {
+			switch item.Status {
+			case model.QueueItemStatusDone:
 				s.dispatchQueueNotification(ctx, &item, "print.completed", "success", "Print completed")
-			} else if item.Status == model.QueueItemStatusFailed {
+			case model.QueueItemStatusFailed:
 				s.dispatchQueueNotification(ctx, &item, "print.failed", "error", "Print failed")
 			}
 		}
@@ -569,7 +571,7 @@ func (s *QueueService) handlePrinterStatus(newState *model.PrinterState, oldStat
 				if spool.RemainingWeight < 0 {
 					spool.RemainingWeight = 0
 				}
-				s.spoolRepo.Update(ctx, spool)
+				_ = s.spoolRepo.Update(ctx, spool)
 			}
 		}
 	}
@@ -663,7 +665,7 @@ func (s *QueueService) saveThumbnail(ctx context.Context, sourceName string, thu
 		}
 		if reader, err := s.storage.Get(existing.StoragePath); err == nil {
 			reader.Close()
-			s.storage.Delete(storagePath)
+			_ = s.storage.Delete(storagePath)
 			return &existing.ID
 		}
 

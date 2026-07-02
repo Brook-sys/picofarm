@@ -207,25 +207,6 @@ func trimQuoted(s string) string {
 	return strings.Trim(strings.TrimSpace(s), `"`)
 }
 
-func settingFloat(s string) *float64 {
-	value := valueAfterSeparator(s)
-	if value != "" {
-		return firstFloat(value)
-	}
-	return firstFloat(s)
-}
-
-func valueAfterSeparator(s string) string {
-	parts := strings.SplitN(s, "=", 2)
-	if len(parts) == 1 {
-		parts = strings.SplitN(s, ":", 2)
-	}
-	if len(parts) == 2 {
-		return strings.Trim(strings.TrimPrefix(parts[1], ";"), " \t")
-	}
-	return ""
-}
-
 func parseDurationSeconds(s string) int {
 	lower := strings.ToLower(s)
 	total := 0

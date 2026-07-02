@@ -7,10 +7,10 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/google/uuid"
 	"github.com/Brook-sys/picofarm/internal/model"
 	"github.com/Brook-sys/picofarm/internal/repository"
 	"github.com/Brook-sys/picofarm/internal/storage"
+	"github.com/google/uuid"
 )
 
 type STLLibraryListOptions struct {
@@ -74,7 +74,7 @@ func (s *STLLibraryService) Upload(ctx context.Context, filename string, reader 
 	}
 	if existing != nil {
 		if existing.StoragePath != storagePath {
-			s.storage.Delete(storagePath)
+			_ = s.storage.Delete(storagePath)
 		}
 		file = existing
 	} else if err := s.files.Create(ctx, file); err != nil {
@@ -108,7 +108,7 @@ func (s *STLLibraryService) saveThumbnail(ctx context.Context, filename string, 
 	}
 	if existing != nil {
 		if existing.StoragePath != storagePath {
-			s.storage.Delete(storagePath)
+			_ = s.storage.Delete(storagePath)
 		}
 		return &existing.ID, nil
 	}

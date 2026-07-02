@@ -66,9 +66,9 @@ type Services struct {
 	GCodeLibrary  *GCodeLibraryService
 	STLLibrary    *STLLibraryService
 	Notifications *NotificationService
-	Slicer          *SlicerService
-	ModelImport     *ModelImportService
-	Thingiverse     *ThingiverseImportService
+	Slicer        *SlicerService
+	ModelImport   *ModelImportService
+	Thingiverse   *ThingiverseImportService
 }
 
 // EtsyConfig holds Etsy OAuth configuration.
@@ -1008,7 +1008,7 @@ func (s *PrinterService) Create(ctx context.Context, p *model.Printer) error {
 	if s.settingsRepo != nil {
 		printers, _ := s.repo.List(ctx)
 		if len(printers) == 1 {
-			s.settingsRepo.Set(ctx, "default_printer_id", p.ID.String())
+			_ = s.settingsRepo.Set(ctx, "default_printer_id", p.ID.String())
 		}
 	}
 

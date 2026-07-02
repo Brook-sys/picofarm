@@ -7,10 +7,10 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/google/uuid"
 	"github.com/Brook-sys/picofarm/internal/model"
 	"github.com/Brook-sys/picofarm/internal/repository"
 	"github.com/Brook-sys/picofarm/internal/storage"
+	"github.com/google/uuid"
 )
 
 type GCodeLibraryListOptions struct {
@@ -100,7 +100,7 @@ func (s *GCodeLibraryService) UploadWithParent(ctx context.Context, filename str
 		if existing.StoragePath != storagePath {
 			if r, err := s.storage.Get(existing.StoragePath); err == nil {
 				r.Close()
-				s.storage.Delete(storagePath)
+				_ = s.storage.Delete(storagePath)
 			} else {
 				existing.OriginalName = filename
 				existing.ContentType = "text/x-gcode"

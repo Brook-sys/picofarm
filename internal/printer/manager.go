@@ -6,8 +6,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/Brook-sys/picofarm/internal/model"
+	"github.com/google/uuid"
 )
 
 // Client defines the interface for printer communication.
@@ -103,7 +103,7 @@ func (m *Manager) broadcast(eventType string, data interface{}) {
 
 func attachCapabilities(state *model.PrinterState, client Client) *model.PrinterState {
 	if state == nil {
-		return state
+		return nil
 	}
 	if cp, ok := client.(CapabilityProvider); ok {
 		state.Capabilities = cp.Capabilities()

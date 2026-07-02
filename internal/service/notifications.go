@@ -15,9 +15,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/Brook-sys/picofarm/internal/model"
 	"github.com/Brook-sys/picofarm/internal/repository"
+	"github.com/google/uuid"
 )
 
 var severityRank = map[string]int{"info": 0, "success": 1, "warning": 2, "error": 3, "critical": 4}
@@ -147,7 +147,9 @@ func (s *NotificationService) Dispatch(ctx context.Context, event model.Notifica
 		if !notificationChannelMatches(channel, event) {
 			continue
 		}
-		go s.sendToChannel(context.Background(), channel, event)
+		go func(channel model.NotificationChannel) {
+			_ = s.sendToChannel(context.Background(), channel, event)
+		}(channel)
 	}
 }
 
@@ -465,10 +467,6 @@ func notificationChannelMatches(channel model.NotificationChannel, event model.N
 		return false
 	}
 	return true
-}
-
-func formatNotificationText(event model.NotificationEvent) string {
-	return fmt.Sprintf("<b>%s</b>\n\n%s", event.Title, event.Message)
 }
 
 func discordColor(severity string) int {

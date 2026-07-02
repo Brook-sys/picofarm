@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/Brook-sys/picofarm/internal/model"
+	"github.com/google/uuid"
 )
 
 type GCodeLibraryRepository struct {
@@ -51,9 +51,10 @@ func (r *GCodeLibraryRepository) List(ctx context.Context, opts GCodeLibraryList
 		where += " AND g.layer_height = ?"
 		args = append(args, opts.Layer)
 	}
-	if opts.Usage == "never" {
+	switch opts.Usage {
+	case "never":
 		where += " AND g.print_count = 0"
-	} else if opts.Usage == "printed" {
+	case "printed":
 		where += " AND g.print_count > 0"
 	}
 	switch opts.TimeBucket {
