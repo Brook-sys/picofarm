@@ -43,3 +43,10 @@ web/**/*.njsproj
 web/**/*.sln
 web/**/*.sw?
 fly.toml
+
+# Docker/build context
+.git
+.github
+uploads
+data
+coverage.out
