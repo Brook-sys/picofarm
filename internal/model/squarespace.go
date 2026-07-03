@@ -35,30 +35,30 @@ type SquarespaceAddress struct {
 
 // SquarespaceOrder represents an order from Squarespace.
 type SquarespaceOrder struct {
-	ID                 uuid.UUID                 `json:"id"`
-	SquarespaceOrderID string                    `json:"squarespace_order_id"`
-	OrderNumber        string                    `json:"order_number"`
-	CustomerEmail      string                    `json:"customer_email"`
-	CustomerName       string                    `json:"customer_name"`
-	Channel            string                    `json:"channel"`
-	SubtotalCents      int                       `json:"subtotal_cents"`
-	ShippingCents      int                       `json:"shipping_cents"`
-	TaxCents           int                       `json:"tax_cents"`
-	DiscountCents      int                       `json:"discount_cents"`
-	RefundedCents      int                       `json:"refunded_cents"`
-	GrandTotalCents    int                       `json:"grand_total_cents"`
-	Currency           string                    `json:"currency"`
-	FulfillmentStatus  string                    `json:"fulfillment_status"`
-	BillingAddress     *SquarespaceAddress       `json:"billing_address,omitempty"`
-	ShippingAddress    *SquarespaceAddress       `json:"shipping_address,omitempty"`
-	CreatedOn          *time.Time                `json:"created_on,omitempty"`
-	ModifiedOn         *time.Time                `json:"modified_on,omitempty"`
-	IsProcessed        bool                      `json:"is_processed"`
-	ProjectID          *uuid.UUID                `json:"project_id,omitempty"`
-	Items              []SquarespaceOrderItem    `json:"items,omitempty"`
-	SyncedAt           time.Time                 `json:"synced_at"`
-	CreatedAt          time.Time                 `json:"created_at"`
-	UpdatedAt          time.Time                 `json:"updated_at"`
+	ID                 uuid.UUID              `json:"id"`
+	SquarespaceOrderID string                 `json:"squarespace_order_id"`
+	OrderNumber        string                 `json:"order_number"`
+	CustomerEmail      string                 `json:"customer_email"`
+	CustomerName       string                 `json:"customer_name"`
+	Channel            string                 `json:"channel"`
+	SubtotalCents      int                    `json:"subtotal_cents"`
+	ShippingCents      int                    `json:"shipping_cents"`
+	TaxCents           int                    `json:"tax_cents"`
+	DiscountCents      int                    `json:"discount_cents"`
+	RefundedCents      int                    `json:"refunded_cents"`
+	GrandTotalCents    int                    `json:"grand_total_cents"`
+	Currency           string                 `json:"currency"`
+	FulfillmentStatus  string                 `json:"fulfillment_status"`
+	BillingAddress     *SquarespaceAddress    `json:"billing_address,omitempty"`
+	ShippingAddress    *SquarespaceAddress    `json:"shipping_address,omitempty"`
+	CreatedOn          *time.Time             `json:"created_on,omitempty"`
+	ModifiedOn         *time.Time             `json:"modified_on,omitempty"`
+	IsProcessed        bool                   `json:"is_processed"`
+	ProjectID          *uuid.UUID             `json:"project_id,omitempty"`
+	Items              []SquarespaceOrderItem `json:"items,omitempty"`
+	SyncedAt           time.Time              `json:"synced_at"`
+	CreatedAt          time.Time              `json:"created_at"`
+	UpdatedAt          time.Time              `json:"updated_at"`
 }
 
 // SquarespaceOrderItem represents a line item in a Squarespace order.
@@ -76,25 +76,26 @@ type SquarespaceOrderItem struct {
 	ImageURL          string          `json:"image_url"`
 	VariantOptions    json.RawMessage `json:"variant_options,omitempty"`
 	TemplateID        *uuid.UUID      `json:"template_id,omitempty"`
+	ProjectID         *uuid.UUID      `json:"project_id,omitempty"`
 	CreatedAt         time.Time       `json:"created_at"`
 }
 
 // SquarespaceProduct represents a product from Squarespace.
 type SquarespaceProduct struct {
-	ID                   uuid.UUID                    `json:"id"`
-	SquarespaceProductID string                       `json:"squarespace_product_id"`
-	Name                 string                       `json:"name"`
-	Description          string                       `json:"description"`
-	URL                  string                       `json:"url"`
-	Type                 string                       `json:"type"`
-	IsVisible            bool                         `json:"is_visible"`
-	Tags                 json.RawMessage              `json:"tags,omitempty"`
-	Variants             []SquarespaceProductVariant  `json:"variants,omitempty"`
-	CreatedOn            *time.Time                   `json:"created_on,omitempty"`
-	ModifiedOn           *time.Time                   `json:"modified_on,omitempty"`
-	SyncedAt             time.Time                    `json:"synced_at"`
-	CreatedAt            time.Time                    `json:"created_at"`
-	UpdatedAt            time.Time                    `json:"updated_at"`
+	ID                   uuid.UUID                   `json:"id"`
+	SquarespaceProductID string                      `json:"squarespace_product_id"`
+	Name                 string                      `json:"name"`
+	Description          string                      `json:"description"`
+	URL                  string                      `json:"url"`
+	Type                 string                      `json:"type"`
+	IsVisible            bool                        `json:"is_visible"`
+	Tags                 json.RawMessage             `json:"tags,omitempty"`
+	Variants             []SquarespaceProductVariant `json:"variants,omitempty"`
+	CreatedOn            *time.Time                  `json:"created_on,omitempty"`
+	ModifiedOn           *time.Time                  `json:"modified_on,omitempty"`
+	SyncedAt             time.Time                   `json:"synced_at"`
+	CreatedAt            time.Time                   `json:"created_at"`
+	UpdatedAt            time.Time                   `json:"updated_at"`
 }
 
 // SquarespaceProductVariant represents a variant of a Squarespace product.
@@ -112,11 +113,14 @@ type SquarespaceProductVariant struct {
 	CreatedAt            time.Time       `json:"created_at"`
 }
 
-// SquarespaceProductTemplate links a Squarespace product to a template.
-type SquarespaceProductTemplate struct {
-	ID                   uuid.UUID `json:"id"`
+// SquarespaceProductProject links a Squarespace product to a project.
+type SquarespaceProductProject struct {
+	ID                   int64     `json:"id"`
 	SquarespaceProductID string    `json:"squarespace_product_id"`
-	TemplateID           uuid.UUID `json:"template_id"`
-	SKU                  string    `json:"sku,omitempty"`
+	ProjectID            uuid.UUID `json:"project_id"`
+	SKU                  string    `json:"sku"`
 	CreatedAt            time.Time `json:"created_at"`
 }
+
+// SquarespaceProductTemplate is a legacy alias for SquarespaceProductProject.
+type SquarespaceProductTemplate = SquarespaceProductProject

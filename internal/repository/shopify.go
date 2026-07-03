@@ -212,9 +212,9 @@ func (r *ShopifyRepository) GetOrderItems(ctx context.Context, shopifyOrderID uu
 // ---- Product Templates ----
 
 // SaveProductTemplate links a Shopify product to a template.
-func (r *ShopifyRepository) SaveProductTemplate(ctx context.Context, link *model.ShopifyProductTemplate) error {
-	if link.ID == uuid.Nil {
-		link.ID = uuid.New()
+func (r *ShopifyRepository) SaveProductTemplate(ctx context.Context, link *model.ShopifyProductProject) error {
+	if link.ID == 0 {
+		
 	}
 	link.CreatedAt = time.Now()
 
@@ -222,7 +222,7 @@ func (r *ShopifyRepository) SaveProductTemplate(ctx context.Context, link *model
 		INSERT INTO shopify_product_templates (id, shopify_product_id, template_id, sku, created_at)
 		VALUES (?, ?, ?, ?, ?)
 		ON CONFLICT (shopify_product_id, template_id) DO UPDATE SET sku = ?
-	`, link.ID, link.ShopifyProductID, link.TemplateID, link.SKU, link.CreatedAt, link.SKU)
+	`, link.ID, link.ShopifyProductID, link.ProjectID, link.SKU, link.CreatedAt, link.SKU)
 	return err
 }
 
@@ -235,7 +235,7 @@ func (r *ShopifyRepository) DeleteProductTemplate(ctx context.Context, productID
 }
 
 // GetProductTemplatesBySKU retrieves template links by SKU.
-func (r *ShopifyRepository) GetProductTemplatesBySKU(ctx context.Context, sku string) ([]model.ShopifyProductTemplate, error) {
+func (r *ShopifyRepository) GetProductTemplatesBySKU(ctx context.Context, sku string) ([]model.ShopifyProductProject, error) {
 	rows, err := r.db.QueryContext(ctx, `
 		SELECT id, shopify_product_id, template_id, sku, created_at
 		FROM shopify_product_templates WHERE sku = ?
@@ -245,10 +245,10 @@ func (r *ShopifyRepository) GetProductTemplatesBySKU(ctx context.Context, sku st
 	}
 	defer rows.Close()
 
-	var links []model.ShopifyProductTemplate
+	var links []model.ShopifyProductProject
 	for rows.Next() {
-		var link model.ShopifyProductTemplate
-		if err := rows.Scan(&link.ID, &link.ShopifyProductID, &link.TemplateID, &link.SKU, &link.CreatedAt); err != nil {
+		var link model.ShopifyProductProject
+		if err := rows.Scan(&link.ID, &link.ShopifyProductID, &link.ProjectID, &link.SKU, &link.CreatedAt); err != nil {
 			return nil, err
 		}
 		links = append(links, link)
@@ -257,7 +257,7 @@ func (r *ShopifyRepository) GetProductTemplatesBySKU(ctx context.Context, sku st
 }
 
 // GetTemplatesForProduct retrieves all template links for a Shopify product.
-func (r *ShopifyRepository) GetTemplatesForProduct(ctx context.Context, productID string) ([]model.ShopifyProductTemplate, error) {
+func (r *ShopifyRepository) GetTemplatesForProduct(ctx context.Context, productID string) ([]model.ShopifyProductProject, error) {
 	rows, err := r.db.QueryContext(ctx, `
 		SELECT id, shopify_product_id, template_id, sku, created_at
 		FROM shopify_product_templates WHERE shopify_product_id = ?
@@ -267,10 +267,10 @@ func (r *ShopifyRepository) GetTemplatesForProduct(ctx context.Context, productI
 	}
 	defer rows.Close()
 
-	var links []model.ShopifyProductTemplate
+	var links []model.ShopifyProductProject
 	for rows.Next() {
-		var link model.ShopifyProductTemplate
-		if err := rows.Scan(&link.ID, &link.ShopifyProductID, &link.TemplateID, &link.SKU, &link.CreatedAt); err != nil {
+		var link model.ShopifyProductProject
+		if err := rows.Scan(&link.ID, &link.ShopifyProductID, &link.ProjectID, &link.SKU, &link.CreatedAt); err != nil {
 			return nil, err
 		}
 		links = append(links, link)

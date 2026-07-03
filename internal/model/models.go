@@ -1565,14 +1565,17 @@ type ShopifyOrderItem struct {
 	CreatedAt         time.Time `json:"created_at"`
 }
 
-// ShopifyProductTemplate links a Shopify product to a template.
-type ShopifyProductTemplate struct {
-	ID               uuid.UUID `json:"id"`
+// ShopifyProductProject links a Shopify product to a project.
+type ShopifyProductProject struct {
+	ID               int64     `json:"id"`
 	ShopifyProductID string    `json:"shopify_product_id"`
-	TemplateID       uuid.UUID `json:"template_id"`
-	SKU              string    `json:"sku,omitempty"`
+	ProjectID        uuid.UUID `json:"project_id"`
+	SKU              string    `json:"sku"`
 	CreatedAt        time.Time `json:"created_at"`
 }
+
+// ShopifyProductTemplate is a legacy alias for ShopifyProductProject.
+type ShopifyProductTemplate = ShopifyProductProject
 
 // ShopifyIntegrationStatus represents the connection status.
 type ShopifyIntegrationStatus struct {

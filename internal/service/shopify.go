@@ -387,8 +387,8 @@ func (s *ShopifyService) ProcessOrder(ctx context.Context, shopifyOrderID uuid.U
 		if item.SKU != "" {
 			links, err := s.shopifyRepo.GetProductTemplatesBySKU(ctx, item.SKU)
 			if err == nil && len(links) > 0 {
-				orderItem.ProjectID = &links[0].TemplateID
-				orderItem.TemplateID = &links[0].TemplateID
+				orderItem.ProjectID = &links[0].ProjectID
+				orderItem.TemplateID = &links[0].ProjectID
 			}
 		}
 
@@ -419,9 +419,9 @@ func (s *ShopifyService) ProcessOrder(ctx context.Context, shopifyOrderID uuid.U
 
 // LinkProductToProject links a Shopify product to a project by SKU.
 func (s *ShopifyService) LinkProductToProject(ctx context.Context, productID string, projectID uuid.UUID, sku string) error {
-	link := &model.ShopifyProductTemplate{
+	link := &model.ShopifyProductProject{
 		ShopifyProductID: productID,
-		TemplateID:       projectID,
+		ProjectID:        projectID,
 		SKU:              sku,
 	}
 	return s.shopifyRepo.SaveProductTemplate(ctx, link)

@@ -388,7 +388,7 @@ func (r *EtsyRepository) SaveReceiptItem(ctx context.Context, item *model.EtsyRe
 	`, item.ID, item.EtsyReceiptItemID, item.ReceiptID, item.EtsyListingID,
 		item.EtsyTransactionID, item.Title, item.Description, item.Quantity,
 		item.PriceCents, item.ShippingCostCents, item.SKU, item.Variations,
-		item.IsDigital, item.TemplateID, item.CreatedAt)
+		item.IsDigital, item.ProjectID, item.CreatedAt)
 	return err
 }
 
@@ -414,7 +414,7 @@ func (r *EtsyRepository) GetReceiptItems(ctx context.Context, receiptID uuid.UUI
 			&item.ID, &item.EtsyReceiptItemID, &item.ReceiptID, &item.EtsyListingID,
 			&item.EtsyTransactionID, &item.Title, &item.Description, &item.Quantity,
 			&item.PriceCents, &item.ShippingCostCents, &item.SKU, &item.Variations,
-			&item.IsDigital, &item.TemplateID, &item.CreatedAt,
+			&item.IsDigital, &item.ProjectID, &item.CreatedAt,
 		)
 		if err != nil {
 			return nil, err
@@ -604,9 +604,9 @@ func (r *EtsyRepository) ListListings(ctx context.Context, state string, limit, 
 // ---- Listing Template Link Methods ----
 
 // SaveListingTemplate creates or updates a listing-template link.
-func (r *EtsyRepository) SaveListingTemplate(ctx context.Context, link *model.EtsyListingTemplate) error {
-	if link.ID == uuid.Nil {
-		link.ID = uuid.New()
+func (r *EtsyRepository) SaveListingTemplate(ctx context.Context, link *model.EtsyListingProject) error {
+	if link.ID == 0 {
+		
 	}
 	if link.CreatedAt.IsZero() {
 		link.CreatedAt = time.Now()
@@ -618,19 +618,19 @@ func (r *EtsyRepository) SaveListingTemplate(ctx context.Context, link *model.Et
 		ON CONFLICT (etsy_listing_id, template_id) DO UPDATE SET
 			sku = EXCLUDED.sku,
 			sync_inventory = EXCLUDED.sync_inventory
-	`, link.ID, link.EtsyListingID, link.TemplateID, link.SKU, link.SyncInventory, link.CreatedAt)
+	`, link.ID, link.EtsyListingID, link.ProjectID, link.SKU, link.SyncInventory, link.CreatedAt)
 	return err
 }
 
 // GetListingTemplate retrieves a listing-template link.
-func (r *EtsyRepository) GetListingTemplate(ctx context.Context, etsyListingID int64, templateID uuid.UUID) (*model.EtsyListingTemplate, error) {
-	var link model.EtsyListingTemplate
+func (r *EtsyRepository) GetListingTemplate(ctx context.Context, etsyListingID int64, templateID uuid.UUID) (*model.EtsyListingProject, error) {
+	var link model.EtsyListingProject
 	err := scanRow(r.db.QueryRowContext(ctx, `
 		SELECT id, etsy_listing_id, template_id, sku, sync_inventory, created_at
 		FROM etsy_listing_templates
 		WHERE etsy_listing_id = ? AND template_id = ?
 	`, etsyListingID, templateID),
-		&link.ID, &link.EtsyListingID, &link.TemplateID, &link.SKU,
+		&link.ID, &link.EtsyListingID, &link.ProjectID, &link.SKU,
 		&link.SyncInventory, &link.CreatedAt,
 	)
 	if err == sql.ErrNoRows {
@@ -640,7 +640,7 @@ func (r *EtsyRepository) GetListingTemplate(ctx context.Context, etsyListingID i
 }
 
 // GetListingTemplatesBySKU retrieves listing-template links by SKU.
-func (r *EtsyRepository) GetListingTemplatesBySKU(ctx context.Context, sku string) ([]model.EtsyListingTemplate, error) {
+func (r *EtsyRepository) GetListingTemplatesBySKU(ctx context.Context, sku string) ([]model.EtsyListingProject, error) {
 	rows, err := r.db.QueryContext(ctx, `
 		SELECT id, etsy_listing_id, template_id, sku, sync_inventory, created_at
 		FROM etsy_listing_templates
@@ -651,11 +651,11 @@ func (r *EtsyRepository) GetListingTemplatesBySKU(ctx context.Context, sku strin
 	}
 	defer rows.Close()
 
-	var links []model.EtsyListingTemplate
+	var links []model.EtsyListingProject
 	for rows.Next() {
-		var link model.EtsyListingTemplate
+		var link model.EtsyListingProject
 		err := scanRow(rows,
-			&link.ID, &link.EtsyListingID, &link.TemplateID, &link.SKU,
+			&link.ID, &link.EtsyListingID, &link.ProjectID, &link.SKU,
 			&link.SyncInventory, &link.CreatedAt,
 		)
 		if err != nil {
@@ -668,7 +668,7 @@ func (r *EtsyRepository) GetListingTemplatesBySKU(ctx context.Context, sku strin
 }
 
 // GetTemplatesForListing retrieves all templates linked to a listing.
-func (r *EtsyRepository) GetTemplatesForListing(ctx context.Context, etsyListingID int64) ([]model.EtsyListingTemplate, error) {
+func (r *EtsyRepository) GetTemplatesForListing(ctx context.Context, etsyListingID int64) ([]model.EtsyListingProject, error) {
 	rows, err := r.db.QueryContext(ctx, `
 		SELECT id, etsy_listing_id, template_id, sku, sync_inventory, created_at
 		FROM etsy_listing_templates
@@ -679,11 +679,11 @@ func (r *EtsyRepository) GetTemplatesForListing(ctx context.Context, etsyListing
 	}
 	defer rows.Close()
 
-	var links []model.EtsyListingTemplate
+	var links []model.EtsyListingProject
 	for rows.Next() {
-		var link model.EtsyListingTemplate
+		var link model.EtsyListingProject
 		err := scanRow(rows,
-			&link.ID, &link.EtsyListingID, &link.TemplateID, &link.SKU,
+			&link.ID, &link.EtsyListingID, &link.ProjectID, &link.SKU,
 			&link.SyncInventory, &link.CreatedAt,
 		)
 		if err != nil {

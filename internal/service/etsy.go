@@ -608,9 +608,9 @@ func (s *EtsyService) LinkListingToProject(ctx context.Context, listingID uuid.U
 		return fmt.Errorf("listing not found")
 	}
 
-	link := &model.EtsyListingTemplate{
+	link := &model.EtsyListingProject{
 		EtsyListingID: listing.EtsyListingID,
-		TemplateID:    projectID,
+		ProjectID:     projectID,
 		SKU:           sku,
 		SyncInventory: syncInventory,
 	}

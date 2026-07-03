@@ -319,7 +319,7 @@ func (r *SquarespaceRepository) SaveOrderItem(ctx context.Context, item *model.S
 			unit_price_cents = EXCLUDED.unit_price_cents,
 			template_id = EXCLUDED.template_id
 	`, item.ID, item.OrderID, item.SquarespaceItemID, item.ProductID, item.VariantID, item.ProductName,
-		item.SKU, item.Quantity, item.UnitPriceCents, item.Currency, item.ImageURL, item.VariantOptions, item.TemplateID, item.CreatedAt)
+		item.SKU, item.Quantity, item.UnitPriceCents, item.Currency, item.ImageURL, item.VariantOptions, item.ProjectID, item.CreatedAt)
 	return err
 }
 
@@ -342,7 +342,7 @@ func (r *SquarespaceRepository) GetOrderItems(ctx context.Context, orderID uuid.
 		var item model.SquarespaceOrderItem
 		err := scanRow(rows,
 			&item.ID, &item.OrderID, &item.SquarespaceItemID, &item.ProductID, &item.VariantID, &item.ProductName,
-			&item.SKU, &item.Quantity, &item.UnitPriceCents, &item.Currency, &item.ImageURL, &item.VariantOptions, &item.TemplateID, &item.CreatedAt)
+			&item.SKU, &item.Quantity, &item.UnitPriceCents, &item.Currency, &item.ImageURL, &item.VariantOptions, &item.ProjectID, &item.CreatedAt)
 		if err != nil {
 			return nil, err
 		}
@@ -522,9 +522,9 @@ func (r *SquarespaceRepository) GetProductVariants(ctx context.Context, productI
 // ---- Product-Template Link Methods ----
 
 // SaveProductTemplate creates or updates a product-template link.
-func (r *SquarespaceRepository) SaveProductTemplate(ctx context.Context, link *model.SquarespaceProductTemplate) error {
-	if link.ID == uuid.Nil {
-		link.ID = uuid.New()
+func (r *SquarespaceRepository) SaveProductTemplate(ctx context.Context, link *model.SquarespaceProductProject) error {
+	if link.ID == 0 {
+		
 	}
 	if link.CreatedAt.IsZero() {
 		link.CreatedAt = time.Now()
@@ -535,19 +535,19 @@ func (r *SquarespaceRepository) SaveProductTemplate(ctx context.Context, link *m
 		VALUES (?, ?, ?, ?, ?)
 		ON CONFLICT (squarespace_product_id, template_id) DO UPDATE SET
 			sku = EXCLUDED.sku
-	`, link.ID, link.SquarespaceProductID, link.TemplateID, link.SKU, link.CreatedAt)
+	`, link.ID, link.SquarespaceProductID, link.ProjectID, link.SKU, link.CreatedAt)
 	return err
 }
 
 // GetProductTemplate retrieves a product-template link.
-func (r *SquarespaceRepository) GetProductTemplate(ctx context.Context, squarespaceProductID string, templateID uuid.UUID) (*model.SquarespaceProductTemplate, error) {
-	var link model.SquarespaceProductTemplate
+func (r *SquarespaceRepository) GetProductTemplate(ctx context.Context, squarespaceProductID string, templateID uuid.UUID) (*model.SquarespaceProductProject, error) {
+	var link model.SquarespaceProductProject
 	err := scanRow(r.db.QueryRowContext(ctx, `
 		SELECT id, squarespace_product_id, template_id, sku, created_at
 		FROM squarespace_product_templates
 		WHERE squarespace_product_id = ? AND template_id = ?
 	`, squarespaceProductID, templateID),
-		&link.ID, &link.SquarespaceProductID, &link.TemplateID, &link.SKU, &link.CreatedAt)
+		&link.ID, &link.SquarespaceProductID, &link.ProjectID, &link.SKU, &link.CreatedAt)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -555,7 +555,7 @@ func (r *SquarespaceRepository) GetProductTemplate(ctx context.Context, squaresp
 }
 
 // GetTemplatesForProduct retrieves all templates linked to a product.
-func (r *SquarespaceRepository) GetTemplatesForProduct(ctx context.Context, squarespaceProductID string) ([]model.SquarespaceProductTemplate, error) {
+func (r *SquarespaceRepository) GetTemplatesForProduct(ctx context.Context, squarespaceProductID string) ([]model.SquarespaceProductProject, error) {
 	rows, err := r.db.QueryContext(ctx, `
 		SELECT id, squarespace_product_id, template_id, sku, created_at
 		FROM squarespace_product_templates
@@ -566,11 +566,11 @@ func (r *SquarespaceRepository) GetTemplatesForProduct(ctx context.Context, squa
 	}
 	defer rows.Close()
 
-	var links []model.SquarespaceProductTemplate
+	var links []model.SquarespaceProductProject
 	for rows.Next() {
-		var link model.SquarespaceProductTemplate
+		var link model.SquarespaceProductProject
 		err := scanRow(rows,
-			&link.ID, &link.SquarespaceProductID, &link.TemplateID, &link.SKU, &link.CreatedAt)
+			&link.ID, &link.SquarespaceProductID, &link.ProjectID, &link.SKU, &link.CreatedAt)
 		if err != nil {
 			return nil, err
 		}
@@ -581,7 +581,7 @@ func (r *SquarespaceRepository) GetTemplatesForProduct(ctx context.Context, squa
 }
 
 // GetProductTemplatesBySKU retrieves product-template links by SKU.
-func (r *SquarespaceRepository) GetProductTemplatesBySKU(ctx context.Context, sku string) ([]model.SquarespaceProductTemplate, error) {
+func (r *SquarespaceRepository) GetProductTemplatesBySKU(ctx context.Context, sku string) ([]model.SquarespaceProductProject, error) {
 	rows, err := r.db.QueryContext(ctx, `
 		SELECT id, squarespace_product_id, template_id, sku, created_at
 		FROM squarespace_product_templates
@@ -592,11 +592,11 @@ func (r *SquarespaceRepository) GetProductTemplatesBySKU(ctx context.Context, sk
 	}
 	defer rows.Close()
 
-	var links []model.SquarespaceProductTemplate
+	var links []model.SquarespaceProductProject
 	for rows.Next() {
-		var link model.SquarespaceProductTemplate
+		var link model.SquarespaceProductProject
 		err := scanRow(rows,
-			&link.ID, &link.SquarespaceProductID, &link.TemplateID, &link.SKU, &link.CreatedAt)
+			&link.ID, &link.SquarespaceProductID, &link.ProjectID, &link.SKU, &link.CreatedAt)
 		if err != nil {
 			return nil, err
 		}

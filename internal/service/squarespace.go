@@ -321,8 +321,8 @@ func (s *SquarespaceService) ProcessOrder(ctx context.Context, sqOrderID uuid.UU
 			if err != nil {
 				slog.Warn("failed to lookup project by SKU", "sku", item.SKU, "error", err)
 			} else if len(links) > 0 {
-				orderItem.ProjectID = &links[0].TemplateID
-				orderItem.TemplateID = &links[0].TemplateID
+				orderItem.ProjectID = &links[0].ProjectID
+				orderItem.TemplateID = &links[0].ProjectID
 			}
 		}
 
@@ -543,9 +543,9 @@ func (s *SquarespaceService) LinkProductToProject(ctx context.Context, productID
 		return fmt.Errorf("product not found")
 	}
 
-	link := &model.SquarespaceProductTemplate{
+	link := &model.SquarespaceProductProject{
 		SquarespaceProductID: product.SquarespaceProductID,
-		TemplateID:           projectID,
+		ProjectID:            projectID,
 		SKU:                  sku,
 	}
 	return s.repo.SaveProductTemplate(ctx, link)
@@ -573,7 +573,7 @@ func (s *SquarespaceService) UnlinkProductFromTemplate(ctx context.Context, prod
 }
 
 // GetProductTemplates retrieves templates linked to a product.
-func (s *SquarespaceService) GetProductTemplates(ctx context.Context, productID uuid.UUID) ([]model.SquarespaceProductTemplate, error) {
+func (s *SquarespaceService) GetProductTemplates(ctx context.Context, productID uuid.UUID) ([]model.SquarespaceProductProject, error) {
 	product, err := s.repo.GetProductByID(ctx, productID)
 	if err != nil {
 		return nil, fmt.Errorf("getting product: %w", err)
