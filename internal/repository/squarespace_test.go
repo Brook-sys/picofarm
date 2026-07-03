@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Brook-sys/picofarm/internal/model"
 	_ "github.com/glebarez/go-sqlite"
 	"github.com/google/uuid"
-	"github.com/Brook-sys/picofarm/internal/model"
 )
 
 func setupTestDB(t *testing.T) *sql.DB {
