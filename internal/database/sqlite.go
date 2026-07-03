@@ -15,13 +15,13 @@ import (
 //go:embed schema.sql
 var schemaSQL string
 
-// DefaultDBPath returns the default database path (~/.daedalus/daedalus.db).
+// DefaultDBPath returns the default database path (~/.picofarm/picofarm.db).
 func DefaultDBPath() (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", fmt.Errorf("get home dir: %w", err)
 	}
-	return filepath.Join(home, ".daedalus", "daedalus.db"), nil
+	return filepath.Join(home, ".picofarm", "picofarm.db"), nil
 }
 
 // Open opens or creates a SQLite database at the given path.
