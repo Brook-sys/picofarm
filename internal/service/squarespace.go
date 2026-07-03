@@ -7,23 +7,21 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/Brook-sys/picofarm/internal/model"
 	"github.com/Brook-sys/picofarm/internal/repository"
 	"github.com/Brook-sys/picofarm/internal/squarespace"
+	"github.com/google/uuid"
 )
 
 // SquarespaceService handles Squarespace integration business logic.
 type SquarespaceService struct {
 	repo        *repository.SquarespaceRepository
-	templateSvc *TemplateService
 }
 
 // NewSquarespaceService creates a new SquarespaceService.
-func NewSquarespaceService(repo *repository.SquarespaceRepository, templateSvc *TemplateService) *SquarespaceService {
+func NewSquarespaceService(repo *repository.SquarespaceRepository) *SquarespaceService {
 	return &SquarespaceService{
-		repo:        repo,
-		templateSvc: templateSvc,
+		repo: repo,
 	}
 }
 
@@ -350,84 +348,6 @@ func (s *SquarespaceService) ProcessOrder(ctx context.Context, sqOrderID uuid.UU
 
 	slog.Info("Squarespace order processed to unified order", "sq_order_id", sqOrder.ID, "order_id", order.ID)
 	return order, nil
-}
-
-// ProcessOrderLegacy creates a project directly from a Squarespace order (kept for backward compatibility).
-func (s *SquarespaceService) ProcessOrderLegacy(ctx context.Context, orderID uuid.UUID) (*model.Project, error) {
-	order, err := s.GetOrder(ctx, orderID)
-	if err != nil {
-		return nil, fmt.Errorf("getting order: %w", err)
-	}
-	if order == nil {
-		return nil, fmt.Errorf("order not found")
-	}
-	if order.IsProcessed {
-		return nil, fmt.Errorf("order already processed")
-	}
-
-	// Find templates for order items by SKU
-	var templateID *uuid.UUID
-	for _, item := range order.Items {
-		if item.SKU == "" {
-			continue
-		}
-
-		// Look up template links by SKU
-		links, err := s.repo.GetProductTemplatesBySKU(ctx, item.SKU)
-		if err != nil {
-			slog.Warn("failed to lookup template by SKU", "sku", item.SKU, "error", err)
-			continue
-		}
-		if len(links) > 0 {
-			templateID = &links[0].TemplateID
-			break
-		}
-	}
-
-	// Build project name
-	projectName := fmt.Sprintf("Squarespace #%s", order.OrderNumber)
-	if order.CustomerName != "" {
-		projectName += " - " + order.CustomerName
-	}
-
-	externalOrderID := fmt.Sprintf("squarespace-%s", order.SquarespaceOrderID)
-
-	// Create project
-	var project *model.Project
-
-	// If we have a template, use the template service to instantiate
-	if templateID != nil && s.templateSvc != nil {
-		opts := CreateFromTemplateOptions{
-			OrderQuantity:   1,
-			Source:          "squarespace",
-			ExternalOrderID: externalOrderID,
-		}
-		proj, _, err := s.templateSvc.CreateProjectFromTemplate(ctx, *templateID, opts)
-		if err != nil {
-			return nil, fmt.Errorf("creating project from template: %w", err)
-		}
-		project = proj
-	} else {
-		// Just create a basic project without template instantiation
-		project = &model.Project{
-			ID:              uuid.New(),
-			Name:            projectName,
-			Source:          "squarespace",
-			ExternalOrderID: externalOrderID,
-			TemplateID:      templateID,
-			Tags:            []string{},
-			CreatedAt:       time.Now(),
-			UpdatedAt:       time.Now(),
-		}
-	}
-
-	// Mark order as processed
-	if err := s.repo.UpdateOrderProcessed(ctx, order.ID, &project.ID); err != nil {
-		return nil, fmt.Errorf("marking order processed: %w", err)
-	}
-
-	slog.Info("Squarespace order processed", "order_id", order.ID, "project_id", project.ID)
-	return project, nil
 }
 
 // ---- Product Methods ----

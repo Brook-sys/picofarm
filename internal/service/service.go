@@ -91,16 +91,15 @@ func NewServices(repos *repository.Repositories, store storage.Storage, printerM
 	}
 	// Wire cross-service dependencies
 	services.Stats.projectService = services.Projects
-	services.Templates.projectService = services.Projects
+	
 	// Initialize Squarespace with template service for order processing
-	services.Squarespace = NewSquarespaceService(repos.Squarespace, services.Templates)
+	services.Squarespace = NewSquarespaceService(repos.Squarespace)
 	// Initialize Dispatcher service
 	services.Dispatcher = NewDispatcherService(
 		repos.Dispatch,
 		repos.AutoDispatchSettings,
 		repos.PrintJobs,
 		repos.Printers,
-		services.Templates,
 		services.PrintJobs,
 		printerMgr,
 		hub,
@@ -109,10 +108,10 @@ func NewServices(repos *repository.Repositories, store storage.Storage, printerM
 	services.Dispatcher.Init()
 
 	// Initialize new services for feature gaps
-	services.Orders = NewOrderService(repos.Orders, repos.Projects, repos.PrintJobs, services.Templates, hub)
+	services.Orders = NewOrderService(repos.Orders, repos.Projects, repos.PrintJobs, hub)
 	services.Alerts = NewAlertService(repos.Spools, repos.Materials, repos.Orders, repos.AlertDismissals, hub)
 	services.Tags = NewTagService(repos.Tags, repos.Parts, repos.Designs)
-	services.Shopify = NewShopifyService(repos.Shopify, services.Orders, services.Templates, hub)
+	services.Shopify = NewShopifyService(repos.Shopify, services.Orders, hub)
 	services.Timeline = NewTimelineService(repos.Orders, repos.Tasks, repos.Projects, repos.PrintJobs)
 	services.Tasks = NewTaskService(repos.Tasks, repos.Projects, repos.PrintJobs, repos.Parts, repos.TaskChecklist, repos.Designs, hub)
 	services.Feedback = &FeedbackService{repo: repos.Feedback}

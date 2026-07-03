@@ -11,17 +11,16 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/Brook-sys/picofarm/internal/model"
 	"github.com/Brook-sys/picofarm/internal/realtime"
 	"github.com/Brook-sys/picofarm/internal/repository"
+	"github.com/google/uuid"
 )
 
 // ShopifyService handles Shopify integration business logic.
 type ShopifyService struct {
 	shopifyRepo *repository.ShopifyRepository
 	orderSvc    *OrderService
-	templateSvc *TemplateService
 	hub         *realtime.Hub
 }
 
@@ -29,13 +28,11 @@ type ShopifyService struct {
 func NewShopifyService(
 	shopifyRepo *repository.ShopifyRepository,
 	orderSvc *OrderService,
-	templateSvc *TemplateService,
 	hub *realtime.Hub,
 ) *ShopifyService {
 	return &ShopifyService{
 		shopifyRepo: shopifyRepo,
 		orderSvc:    orderSvc,
-		templateSvc: templateSvc,
 		hub:         hub,
 	}
 }
@@ -236,14 +233,14 @@ func (s *ShopifyService) SyncOrders(ctx context.Context) (*model.SyncResult, err
 
 // ShopifyAPIOrder represents a Shopify order from the API.
 type ShopifyAPIOrder struct {
-	ID              int64  `json:"id"`
-	OrderNumber     int    `json:"order_number"`
-	Name            string `json:"name"`
-	Email           string `json:"email"`
-	TotalPrice      string `json:"total_price"`
-	FinancialStatus string `json:"financial_status"`
+	ID                int64  `json:"id"`
+	OrderNumber       int    `json:"order_number"`
+	Name              string `json:"name"`
+	Email             string `json:"email"`
+	TotalPrice        string `json:"total_price"`
+	FinancialStatus   string `json:"financial_status"`
 	FulfillmentStatus string `json:"fulfillment_status"`
-	Customer        struct {
+	Customer          struct {
 		FirstName string `json:"first_name"`
 		LastName  string `json:"last_name"`
 		Email     string `json:"email"`

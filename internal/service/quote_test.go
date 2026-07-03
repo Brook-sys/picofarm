@@ -20,7 +20,7 @@ func newQuoteTestServices(t *testing.T) (*QuoteService, *CustomerService, *Order
 
 	repos := repository.NewRepositories(db)
 	customerSvc := NewCustomerService(repos.Customers, nil)
-	orderSvc := NewOrderService(repos.Orders, repos.Projects, repos.PrintJobs, nil, nil)
+	orderSvc := NewOrderService(repos.Orders, repos.Projects, repos.PrintJobs, nil)
 	quoteSvc := NewQuoteService(repos.Quotes, repos.Customers, repos.Orders, repos, nil)
 	return quoteSvc, customerSvc, orderSvc, repos
 }

@@ -7,11 +7,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/Brook-sys/picofarm/internal/model"
 	"github.com/Brook-sys/picofarm/internal/printer"
 	"github.com/Brook-sys/picofarm/internal/realtime"
 	"github.com/Brook-sys/picofarm/internal/repository"
+	"github.com/google/uuid"
 )
 
 // DispatcherService orchestrates auto-dispatch of jobs to printers.
@@ -20,7 +20,6 @@ type DispatcherService struct {
 	settingsRepo    *repository.AutoDispatchSettingsRepository
 	printJobRepo    *repository.PrintJobRepository
 	printerRepo     *repository.PrinterRepository
-	templateSvc     *TemplateService
 	printJobSvc     *PrintJobService
 	printerMgr      *printer.Manager
 	hub             *realtime.Hub
@@ -37,7 +36,6 @@ func NewDispatcherService(
 	settingsRepo *repository.AutoDispatchSettingsRepository,
 	printJobRepo *repository.PrintJobRepository,
 	printerRepo *repository.PrinterRepository,
-	templateSvc *TemplateService,
 	printJobSvc *PrintJobService,
 	printerMgr *printer.Manager,
 	hub *realtime.Hub,
@@ -48,7 +46,6 @@ func NewDispatcherService(
 		settingsRepo:    settingsRepo,
 		printJobRepo:    printJobRepo,
 		printerRepo:     printerRepo,
-		templateSvc:     templateSvc,
 		printJobSvc:     printJobSvc,
 		printerMgr:      printerMgr,
 		hub:             hub,
@@ -167,68 +164,11 @@ func (s *DispatcherService) FindNextJob(ctx context.Context, printerID uuid.UUID
 			continue
 		}
 
-		// If job has a recipe, validate printer compatibility
-		if job.RecipeID != nil {
-			result, err := s.templateSvc.ValidatePrinterForRecipe(ctx, *job.RecipeID, printerID)
-			if err != nil {
-				slog.Warn("DispatcherService: failed to validate printer for recipe", "job_id", job.ID, "error", err)
-				continue
-			}
-			if !result.Valid {
-				continue
-			}
-		}
-
-		// Check material compatibility if printer has AMS
-		printerState, _ := s.printerMgr.GetState(printerID)
-		if printerState != nil && printerState.AMS != nil && job.RecipeID != nil {
-			compatible := s.checkMaterialCompatibility(ctx, *job.RecipeID, printerState.AMS)
-			if !compatible {
-				continue
-			}
-		}
-
 		// Found a compatible job
 		return &job, nil
 	}
 
 	return nil, nil
-}
-
-// checkMaterialCompatibility checks if the printer's AMS has compatible materials for the recipe.
-func (s *DispatcherService) checkMaterialCompatibility(ctx context.Context, recipeID uuid.UUID, ams *model.AMSState) bool {
-	// Get recipe materials
-	template, err := s.templateSvc.GetByID(ctx, recipeID)
-	if err != nil || template == nil {
-		return false
-	}
-
-	if len(template.Materials) == 0 {
-		return true // No material requirements
-	}
-
-	// Build a map of available AMS materials
-	availableMaterials := make(map[string]bool)
-	for _, unit := range ams.Units {
-		for _, tray := range unit.Trays {
-			if !tray.Empty && tray.Remain > 10 { // At least 10% remaining
-				key := fmt.Sprintf("%s:%s", tray.MaterialType, tray.Color)
-				availableMaterials[key] = true
-				// Also add just the type for looser matching
-				availableMaterials[tray.MaterialType] = true
-			}
-		}
-	}
-
-	// Check if all required materials are available
-	for _, rm := range template.Materials {
-		// Check by type
-		if !availableMaterials[string(rm.MaterialType)] {
-			return false
-		}
-	}
-
-	return true
 }
 
 // CreateDispatchRequest creates a new pending dispatch request.

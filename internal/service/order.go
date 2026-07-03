@@ -6,10 +6,10 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/Brook-sys/picofarm/internal/model"
 	"github.com/Brook-sys/picofarm/internal/realtime"
 	"github.com/Brook-sys/picofarm/internal/repository"
+	"github.com/google/uuid"
 )
 
 // OrderService handles unified order business logic.
@@ -18,7 +18,6 @@ type OrderService struct {
 	projectRepo  *repository.ProjectRepository
 	printJobRepo *repository.PrintJobRepository
 	taskRepo     *repository.TaskRepository
-	templateSvc  *TemplateService
 	hub          *realtime.Hub
 }
 
@@ -27,14 +26,12 @@ func NewOrderService(
 	orderRepo *repository.OrderRepository,
 	projectRepo *repository.ProjectRepository,
 	printJobRepo *repository.PrintJobRepository,
-	templateSvc *TemplateService,
 	hub *realtime.Hub,
 ) *OrderService {
 	return &OrderService{
 		orderRepo:    orderRepo,
 		projectRepo:  projectRepo,
 		printJobRepo: printJobRepo,
-		templateSvc:  templateSvc,
 		hub:          hub,
 	}
 }
@@ -430,7 +427,7 @@ func (s *OrderService) MarkShipped(ctx context.Context, id uuid.UUID, trackingNu
 	event := &model.OrderEvent{
 		OrderID:   id,
 		EventType: "shipped",
-		Message:   fmt.Sprintf("Order shipped%s", func() string {
+		Message: fmt.Sprintf("Order shipped%s", func() string {
 			if trackingNumber != "" {
 				return fmt.Sprintf(" (tracking: %s)", trackingNumber)
 			}

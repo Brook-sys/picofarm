@@ -7,10 +7,10 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/Brook-sys/picofarm/internal/etsy"
 	"github.com/Brook-sys/picofarm/internal/model"
 	"github.com/Brook-sys/picofarm/internal/repository"
+	"github.com/google/uuid"
 )
 
 // EtsyService handles Etsy OAuth and integration business logic.
@@ -322,32 +322,32 @@ func (s *EtsyService) SyncReceipts(ctx context.Context) (*model.SyncResult, erro
 // convertAPIReceiptToModel converts an API receipt to a model receipt.
 func convertAPIReceiptToModel(api etsy.APIReceipt, shopID int64) *model.EtsyReceipt {
 	receipt := &model.EtsyReceipt{
-		EtsyReceiptID:          api.ReceiptID,
-		EtsyShopID:             shopID,
-		BuyerUserID:            api.BuyerUserID,
-		BuyerEmail:             api.BuyerEmail,
-		Name:                   api.Name,
-		Status:                 api.Status,
-		MessageFromBuyer:       api.MessageFromBuyer,
-		IsShipped:              api.IsShipped,
-		IsPaid:                 api.IsPaid,
-		IsGift:                 api.IsGift,
-		GiftMessage:            api.GiftMessage,
-		GrandtotalCents:        etsy.MoneyToCents(api.Grandtotal),
-		SubtotalCents:          etsy.MoneyToCents(api.Subtotal),
-		TotalPriceCents:        etsy.MoneyToCents(api.TotalPrice),
-		TotalShippingCostCents: etsy.MoneyToCents(api.TotalShippingCost),
-		TotalTaxCostCents:      etsy.MoneyToCents(api.TotalTaxCost),
-		DiscountCents:          etsy.MoneyToCents(api.DiscountAmt),
-		Currency:               api.Grandtotal.CurrencyCode,
-		ShippingName:           api.Name,
+		EtsyReceiptID:             api.ReceiptID,
+		EtsyShopID:                shopID,
+		BuyerUserID:               api.BuyerUserID,
+		BuyerEmail:                api.BuyerEmail,
+		Name:                      api.Name,
+		Status:                    api.Status,
+		MessageFromBuyer:          api.MessageFromBuyer,
+		IsShipped:                 api.IsShipped,
+		IsPaid:                    api.IsPaid,
+		IsGift:                    api.IsGift,
+		GiftMessage:               api.GiftMessage,
+		GrandtotalCents:           etsy.MoneyToCents(api.Grandtotal),
+		SubtotalCents:             etsy.MoneyToCents(api.Subtotal),
+		TotalPriceCents:           etsy.MoneyToCents(api.TotalPrice),
+		TotalShippingCostCents:    etsy.MoneyToCents(api.TotalShippingCost),
+		TotalTaxCostCents:         etsy.MoneyToCents(api.TotalTaxCost),
+		DiscountCents:             etsy.MoneyToCents(api.DiscountAmt),
+		Currency:                  api.Grandtotal.CurrencyCode,
+		ShippingName:              api.Name,
 		ShippingAddressFirstLine:  api.FirstLine,
 		ShippingAddressSecondLine: api.SecondLine,
-		ShippingCity:           api.City,
-		ShippingState:          api.State,
-		ShippingZip:            api.Zip,
-		ShippingCountryCode:    api.CountryISO,
-		SyncedAt:               time.Now(),
+		ShippingCity:              api.City,
+		ShippingState:             api.State,
+		ShippingZip:               api.Zip,
+		ShippingCountryCode:       api.CountryISO,
+		SyncedAt:                  time.Now(),
 	}
 
 	if api.CreateTimestamp > 0 {
@@ -428,7 +428,7 @@ func (s *EtsyService) GetReceipt(ctx context.Context, id uuid.UUID) (*model.Etsy
 }
 
 // ProcessReceipt matches a receipt to templates and creates a unified order.
-func (s *EtsyService) ProcessReceipt(ctx context.Context, id uuid.UUID, templateSvc *TemplateService, orderSvc *OrderService) (*model.Order, error) {
+func (s *EtsyService) ProcessReceipt(ctx context.Context, id uuid.UUID, projectSvc *ProjectService, orderSvc *OrderService) (*model.Order, error) {
 	receipt, err := s.GetReceipt(ctx, id)
 	if err != nil {
 		return nil, err
@@ -448,13 +448,16 @@ func (s *EtsyService) ProcessReceipt(ctx context.Context, id uuid.UUID, template
 			Quantity: item.Quantity,
 		}
 
-		// Try to match to template by SKU
-		if item.SKU != "" {
-			template, err := templateSvc.GetBySKU(ctx, item.SKU)
-			if err != nil {
-				slog.Warn("error looking up template by SKU", "sku", item.SKU, "error", err)
-			} else if template != nil {
-				orderItem.TemplateID = &template.ID
+		// Match to project by SKU
+		if item.SKU != "" && projectSvc != nil {
+			projects, err := projectSvc.List(ctx)
+			if err == nil {
+				for _, p := range projects {
+					if p.SKU == item.SKU {
+						orderItem.ProjectID = &p.ID
+						break
+					}
+				}
 			}
 		}
 
@@ -481,61 +484,6 @@ func (s *EtsyService) ProcessReceipt(ctx context.Context, id uuid.UUID, template
 
 	slog.Info("processed Etsy receipt to unified order", "receipt_id", receipt.EtsyReceiptID, "order_id", order.ID)
 	return order, nil
-}
-
-// ProcessReceiptLegacy is the old method that creates a project directly (kept for backward compatibility).
-func (s *EtsyService) ProcessReceiptLegacy(ctx context.Context, id uuid.UUID, templateSvc *TemplateService) (*model.Project, error) {
-	receipt, err := s.GetReceipt(ctx, id)
-	if err != nil {
-		return nil, err
-	}
-	if receipt == nil {
-		return nil, fmt.Errorf("receipt not found")
-	}
-	if receipt.IsProcessed {
-		return nil, fmt.Errorf("receipt already processed")
-	}
-
-	// Try to match items to templates by SKU
-	var matchedTemplate *model.Template
-	for _, item := range receipt.Items {
-		if item.SKU != "" {
-			template, err := templateSvc.GetBySKU(ctx, item.SKU)
-			if err != nil {
-				slog.Warn("error looking up template by SKU", "sku", item.SKU, "error", err)
-				continue
-			}
-			if template != nil {
-				matchedTemplate = template
-				break
-			}
-		}
-	}
-
-	if matchedTemplate == nil {
-		return nil, fmt.Errorf("no matching template found for receipt items")
-	}
-
-	// Create project from template
-	opts := CreateFromTemplateOptions{
-		OrderQuantity:   1,
-		ExternalOrderID: fmt.Sprintf("etsy-%d", receipt.EtsyReceiptID),
-		CustomerNotes:   receipt.MessageFromBuyer,
-		Source:          "etsy",
-	}
-
-	project, _, err := templateSvc.CreateProjectFromTemplate(ctx, matchedTemplate.ID, opts)
-	if err != nil {
-		return nil, fmt.Errorf("creating project from template: %w", err)
-	}
-
-	// Mark receipt as processed
-	if err := s.repo.UpdateReceiptProcessed(ctx, id, &project.ID); err != nil {
-		slog.Warn("failed to mark receipt as processed", "receipt_id", id, "error", err)
-	}
-
-	slog.Info("processed Etsy receipt", "receipt_id", receipt.EtsyReceiptID, "project_id", project.ID)
-	return project, nil
 }
 
 // ---- Listing Methods ----

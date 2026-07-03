@@ -528,7 +528,7 @@ func NewRouter(services *service.Services, hub *realtime.Hub) http.Handler {
 
 		// Etsy Integration (always registered — can be configured at runtime)
 		etsyHandler := NewEtsyHandler(services.Etsy, services.Orders)
-		etsyHandler.SetTemplateSvc(services.Templates)
+		etsyHandler.SetProjectSvc(services.Projects)
 		r.Route("/integrations/etsy", func(r chi.Router) {
 			// Configuration
 			r.Put("/configure", etsyHandler.Configure)

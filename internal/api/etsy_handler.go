@@ -10,15 +10,16 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/google/uuid"
 	"github.com/Brook-sys/picofarm/internal/model"
 	"github.com/Brook-sys/picofarm/internal/service"
+	"github.com/google/uuid"
 )
 
 // EtsyHandler handles Etsy integration endpoints.
 type EtsyHandler struct {
-	service       *service.EtsyService
-	templateSvc   *service.TemplateService
+	service *service.EtsyService
+
+	projectSvc    *service.ProjectService
 	orderSvc      *service.OrderService
 	webhookSecret string
 }
@@ -28,9 +29,8 @@ func NewEtsyHandler(svc *service.EtsyService, orderSvc *service.OrderService) *E
 	return &EtsyHandler{service: svc, orderSvc: orderSvc}
 }
 
-// SetTemplateSvc sets the template service for receipt processing.
-func (h *EtsyHandler) SetTemplateSvc(svc *service.TemplateService) {
-	h.templateSvc = svc
+func (h *EtsyHandler) SetProjectSvc(svc *service.ProjectService) {
+	h.projectSvc = svc
 }
 
 // SetWebhookSecret sets the webhook secret for signature verification.
@@ -244,18 +244,13 @@ func (h *EtsyHandler) GetReceipt(w http.ResponseWriter, r *http.Request) {
 // ProcessReceipt creates a project from a receipt.
 // POST /api/integrations/etsy/receipts/{id}/process
 func (h *EtsyHandler) ProcessReceipt(w http.ResponseWriter, r *http.Request) {
-	if h.templateSvc == nil {
-		respondError(w, http.StatusInternalServerError, "template service not configured")
-		return
-	}
-
 	id, err := parseUUID(r, "id")
 	if err != nil {
 		respondError(w, http.StatusBadRequest, "invalid receipt ID")
 		return
 	}
 
-	order, err := h.service.ProcessReceipt(r.Context(), id, h.templateSvc, h.orderSvc)
+	order, err := h.service.ProcessReceipt(r.Context(), id, h.projectSvc, h.orderSvc)
 	if err != nil {
 		slog.Error("failed to process receipt", "error", err)
 		respondError(w, http.StatusBadRequest, err.Error())
@@ -453,10 +448,10 @@ func (h *EtsyHandler) HandleWebhook(w http.ResponseWriter, r *http.Request) {
 
 	// Parse event
 	var payload struct {
-		Type       string          `json:"type"`
-		ResourceType string        `json:"resource_type"`
-		ResourceID int64           `json:"resource_id"`
-		ShopID     int64           `json:"shop_id"`
+		Type         string `json:"type"`
+		ResourceType string `json:"resource_type"`
+		ResourceID   int64  `json:"resource_id"`
+		ShopID       int64  `json:"shop_id"`
 	}
 	if err := json.Unmarshal(body, &payload); err != nil {
 		slog.Error("failed to parse webhook payload", "error", err)
