@@ -15,7 +15,7 @@ import (
 
 // SquarespaceService handles Squarespace integration business logic.
 type SquarespaceService struct {
-	repo        *repository.SquarespaceRepository
+	repo *repository.SquarespaceRepository
 }
 
 // NewSquarespaceService creates a new SquarespaceService.
@@ -315,12 +315,13 @@ func (s *SquarespaceService) ProcessOrder(ctx context.Context, sqOrderID uuid.UU
 			Quantity: item.Quantity,
 		}
 
-		// Look up template by SKU
+		// Look up project by SKU through legacy product mappings
 		if item.SKU != "" {
 			links, err := s.repo.GetProductTemplatesBySKU(ctx, item.SKU)
 			if err != nil {
-				slog.Warn("failed to lookup template by SKU", "sku", item.SKU, "error", err)
+				slog.Warn("failed to lookup project by SKU", "sku", item.SKU, "error", err)
 			} else if len(links) > 0 {
+				orderItem.ProjectID = &links[0].TemplateID
 				orderItem.TemplateID = &links[0].TemplateID
 			}
 		}

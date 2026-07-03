@@ -450,14 +450,11 @@ func (s *EtsyService) ProcessReceipt(ctx context.Context, id uuid.UUID, projectS
 
 		// Match to project by SKU
 		if item.SKU != "" && projectSvc != nil {
-			projects, err := projectSvc.List(ctx)
-			if err == nil {
-				for _, p := range projects {
-					if p.SKU == item.SKU {
-						orderItem.ProjectID = &p.ID
-						break
-					}
-				}
+			project, err := projectSvc.GetBySKU(ctx, item.SKU)
+			if err != nil {
+				slog.Warn("error looking up project by SKU", "sku", item.SKU, "error", err)
+			} else if project != nil {
+				orderItem.ProjectID = &project.ID
 			}
 		}
 

@@ -383,10 +383,11 @@ func (s *ShopifyService) ProcessOrder(ctx context.Context, shopifyOrderID uuid.U
 			Quantity: item.Quantity,
 		}
 
-		// Look up template by SKU
+		// Look up project by SKU through legacy product mappings
 		if item.SKU != "" {
 			links, err := s.shopifyRepo.GetProductTemplatesBySKU(ctx, item.SKU)
 			if err == nil && len(links) > 0 {
+				orderItem.ProjectID = &links[0].TemplateID
 				orderItem.TemplateID = &links[0].TemplateID
 			}
 		}

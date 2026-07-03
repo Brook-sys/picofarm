@@ -50,7 +50,10 @@ func (s *ProjectService) List(ctx context.Context) ([]model.Project, error) {
 	return s.repo.List(ctx)
 }
 
-// Update updates a project.
+func (s *ProjectService) GetBySKU(ctx context.Context, sku string) (*model.Project, error) {
+	return s.repo.GetBySKU(ctx, sku)
+}
+
 func (s *ProjectService) Update(ctx context.Context, p *model.Project) error {
 	return s.repo.Update(ctx, p)
 }

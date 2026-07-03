@@ -142,6 +142,11 @@ func RunMigrations(db *sql.DB) error {
 		`ALTER TABLE print_jobs ADD COLUMN task_id TEXT REFERENCES tasks(id)`,
 		// Order items link to projects
 		`ALTER TABLE order_items ADD COLUMN project_id TEXT REFERENCES projects(id)`,
+		`UPDATE order_items SET project_id = (SELECT p.id FROM projects p WHERE p.template_id = order_items.template_id ORDER BY p.created_at DESC LIMIT 1) WHERE project_id IS NULL AND template_id IS NOT NULL AND EXISTS (SELECT 1 FROM projects p WHERE p.template_id = order_items.template_id)`,
+		`UPDATE order_items SET project_id = template_id WHERE project_id IS NULL AND template_id IS NOT NULL AND EXISTS (SELECT 1 FROM projects p WHERE p.id = order_items.template_id)`,
+		`UPDATE print_jobs SET project_id = (SELECT p.id FROM projects p WHERE p.template_id = print_jobs.recipe_id ORDER BY p.created_at DESC LIMIT 1) WHERE project_id IS NULL AND recipe_id IS NOT NULL AND EXISTS (SELECT 1 FROM projects p WHERE p.template_id = print_jobs.recipe_id)`,
+		`UPDATE print_jobs SET project_id = recipe_id WHERE project_id IS NULL AND recipe_id IS NOT NULL AND EXISTS (SELECT 1 FROM projects p WHERE p.id = print_jobs.recipe_id)`,
+		`UPDATE queue_items SET project_id = template_id WHERE project_id IS NULL AND template_id IS NOT NULL AND EXISTS (SELECT 1 FROM projects p WHERE p.id = queue_items.template_id)`,
 		// Task pickup/shipping date
 		`ALTER TABLE tasks ADD COLUMN pickup_date TEXT`,
 		// Quote line items link to projects
