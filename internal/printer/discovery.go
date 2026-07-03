@@ -1,6 +1,7 @@
 package printer
 
 import (
+	"strconv"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -141,7 +142,7 @@ func (d *Discovery) isPortOpen(host string, port int) bool {
 
 // isPortOpenTimeout does a TCP port check with a custom timeout.
 func (d *Discovery) isPortOpenTimeout(host string, port int, timeout time.Duration) bool {
-	address := fmt.Sprintf("%s:%d", host, port)
+	address := net.JoinHostPort(host, strconv.Itoa(port))
 	conn, err := net.DialTimeout("tcp", address, timeout)
 	if err != nil {
 		return false
@@ -460,7 +461,7 @@ func (d *Discovery) checkBambu(ctx context.Context, host string, port int) *Disc
 
 	if !isBambu {
 		// MQTT only - check port 21 for FTP banner as secondary confirmation
-		conn, err := net.DialTimeout("tcp", fmt.Sprintf("%s:21", host), bambuTimeout)
+		conn, err := net.DialTimeout("tcp", net.JoinHostPort(host, "21"), bambuTimeout)
 		if err == nil {
 			conn.SetReadDeadline(time.Now().Add(2 * time.Second))
 			banner := make([]byte, 512)
