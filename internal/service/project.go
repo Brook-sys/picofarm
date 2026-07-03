@@ -20,9 +20,8 @@ type ProjectService struct {
 	repo         *repository.ProjectRepository
 	printJobRepo *repository.PrintJobRepository
 	printerRepo  *repository.PrinterRepository
-	spoolRepo    *repository.SpoolRepository
-	templateRepo *repository.TemplateRepository
-	designRepo   *repository.DesignRepository
+	spoolRepo  *repository.SpoolRepository
+	designRepo *repository.DesignRepository
 	saleRepo     *repository.SaleRepository
 	partRepo     *repository.PartRepository
 	supplyRepo   *repository.ProjectSupplyRepository
@@ -252,15 +251,6 @@ func (s *ProjectService) StartProduction(ctx context.Context, projectID uuid.UUI
 		return nil, fmt.Errorf("failed to get project jobs: %w", err)
 	}
 
-	// Get template constraints if this project has a template
-	var template *model.Template
-	if project.TemplateID != nil {
-		template, err = s.templateRepo.GetByID(ctx, *project.TemplateID)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get template: %w", err)
-		}
-	}
-
 	// Get available printers and spools
 	printers, err := s.printerRepo.List(ctx)
 	if err != nil {
@@ -287,15 +277,6 @@ func (s *ProjectService) StartProduction(ctx context.Context, projectID uuid.UUI
 			p := &printers[i]
 			if p.Status != model.PrinterStatusIdle {
 				continue
-			}
-			// Check template constraints
-			if template != nil {
-				if template.PreferredPrinterID != nil && !template.AllowAnyPrinter {
-					if p.ID != *template.PreferredPrinterID {
-						continue
-					}
-				}
-				// TODO: Check printer constraints (HasEnclosure/HasAMS) once printer model supports them
 			}
 			selectedPrinter = p
 			break

@@ -23,9 +23,8 @@ type Services struct {
 	Files           *FileService
 	Expenses        *ExpenseService
 	Sales           *SaleService
-	Stats           *StatsService
-	Templates       *TemplateService
-	Etsy            *EtsyService
+	Stats *StatsService
+	Etsy  *EtsyService
 	Squarespace     *SquarespaceService
 	BambuCloud      *BambuCloudService
 	Settings        *SettingsService
@@ -71,7 +70,7 @@ func NewServices(repos *repository.Repositories, store storage.Storage, printerM
 	bambuCloudClient := bambu.NewCloudClient()
 
 	services := &Services{
-		Projects:        &ProjectService{repo: repos.Projects, printJobRepo: repos.PrintJobs, printerRepo: repos.Printers, spoolRepo: repos.Spools, templateRepo: repos.Templates, designRepo: repos.Designs, saleRepo: repos.Sales, partRepo: repos.Parts, supplyRepo: repos.ProjectSupplies, repos: repos, printerMgr: printerMgr, hub: hub, storage: store},
+		Projects:        &ProjectService{repo: repos.Projects, printJobRepo: repos.PrintJobs, printerRepo: repos.Printers, spoolRepo: repos.Spools, designRepo: repos.Designs, saleRepo: repos.Sales, partRepo: repos.Parts, supplyRepo: repos.ProjectSupplies, repos: repos, printerMgr: printerMgr, hub: hub, storage: store},
 		Parts:           &PartService{repo: repos.Parts, designRepo: repos.Designs, projectRepo: repos.Projects, tagRepo: repos.Tags, stlRepo: repos.STLLibrary},
 		Designs:         &DesignService{repo: repos.Designs, partRepo: repos.Parts, projectRepo: repos.Projects, tagRepo: repos.Tags, fileRepo: repos.Files, gcodeRepo: repos.GCodeLibrary, stlRepo: repos.STLLibrary, storage: store},
 		Printers:        &PrinterService{repo: repos.Printers, settingsRepo: repos.Settings, printJobRepo: repos.PrintJobs, queueRepo: repos.QueueItems, saleRepo: repos.Sales, macroRepo: repos.PrinterMacros, manager: printerMgr, hub: hub, discovery: printer.NewDiscovery(), bambuCloudRepo: repos.BambuCloud, bambuCloud: bambuCloudClient, reconnecting: make(map[uuid.UUID]time.Time)},
@@ -81,10 +80,9 @@ func NewServices(repos *repository.Repositories, store storage.Storage, printerM
 		Files:           &FileService{repo: repos.Files, storage: store},
 		Expenses:        &ExpenseService{repo: repos.Expenses, materialRepo: repos.Materials, spoolRepo: repos.Spools, fileRepo: repos.Files, settingsRepo: repos.Settings, repos: repos, storage: store},
 		Sales:           &SaleService{repo: repos.Sales, taskRepo: repos.Tasks},
-		Stats:           &StatsService{expenseRepo: repos.Expenses, saleRepo: repos.Sales, printJobRepo: repos.PrintJobs, queueRepo: repos.QueueItems, spoolRepo: repos.Spools},
-		Templates:       &TemplateService{repo: repos.Templates, projectRepo: repos.Projects, partRepo: repos.Parts, designRepo: repos.Designs, printJobRepo: repos.PrintJobs, spoolRepo: repos.Spools, materialRepo: repos.Materials, printerRepo: repos.Printers},
-		Etsy:            nil, // Initialize separately with config
-		Squarespace:     nil, // Initialize below after Templates is ready
+		Stats: &StatsService{expenseRepo: repos.Expenses, saleRepo: repos.Sales, printJobRepo: repos.PrintJobs, queueRepo: repos.QueueItems, spoolRepo: repos.Spools},
+		Etsy:  nil, // Initialize separately with config
+		Squarespace:     nil, // Initialize separately with config
 		BambuCloud:      NewBambuCloudService(repos.BambuCloud, repos.Printers, printerMgr, bambuCloudClient),
 		Settings:        &SettingsService{repo: repos.Settings},
 		ProjectSupplies: &ProjectSupplyService{repo: repos.ProjectSupplies, materialRepo: repos.Materials},
@@ -92,7 +90,7 @@ func NewServices(repos *repository.Repositories, store storage.Storage, printerM
 	// Wire cross-service dependencies
 	services.Stats.projectService = services.Projects
 	
-	// Initialize Squarespace with template service for order processing
+	// Initialize Squarespace
 	services.Squarespace = NewSquarespaceService(repos.Squarespace)
 	// Initialize Dispatcher service
 	services.Dispatcher = NewDispatcherService(
