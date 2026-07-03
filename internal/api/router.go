@@ -477,42 +477,6 @@ func NewRouter(services *service.Services, hub *realtime.Hub) http.Handler {
 		r.Get("/stats/sales-by-channel", statsHandler.GetSalesByChannel)
 		r.Get("/stats/sales-by-project", statsHandler.GetSalesByProject)
 
-		// Templates (Recipes)
-		templateHandler := &TemplateHandler{service: services.Templates}
-		r.Route("/templates", func(r chi.Router) {
-			r.Get("/", templateHandler.List)
-			r.Post("/", templateHandler.Create)
-			r.Route("/{id}", func(r chi.Router) {
-				r.Get("/", templateHandler.Get)
-				r.Patch("/", templateHandler.Update)
-				r.Delete("/", templateHandler.Delete)
-				r.Post("/designs", templateHandler.AddDesign)
-				r.Delete("/designs/{designId}", templateHandler.RemoveDesign)
-				r.Post("/instantiate", templateHandler.Instantiate)
-
-				// Recipe material endpoints
-				r.Get("/materials", templateHandler.ListMaterials)
-				r.Post("/materials", templateHandler.AddMaterial)
-				r.Patch("/materials/{materialId}", templateHandler.UpdateMaterial)
-				r.Delete("/materials/{materialId}", templateHandler.RemoveMaterial)
-
-				// Recipe supply endpoints
-				r.Get("/supplies", templateHandler.ListSupplies)
-				r.Post("/supplies", templateHandler.AddSupply)
-				r.Patch("/supplies/{supplyId}", templateHandler.UpdateSupply)
-				r.Delete("/supplies/{supplyId}", templateHandler.RemoveSupply)
-
-				// Recipe compatibility endpoints
-				r.Get("/compatible-printers", templateHandler.GetCompatiblePrinters)
-				r.Get("/compatible-spools", templateHandler.GetCompatibleSpools)
-				r.Get("/cost-estimate", templateHandler.GetCostEstimate)
-				r.Post("/validate-printer/{printerId}", templateHandler.ValidatePrinter)
-
-				// Analytics
-				r.Get("/analytics", templateHandler.GetAnalytics)
-			})
-		})
-
 		// Bambu Cloud Integration
 		if services.BambuCloud != nil {
 			bambuCloudHandler := &BambuCloudHandler{service: services.BambuCloud}

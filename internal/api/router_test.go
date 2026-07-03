@@ -27,7 +27,6 @@ func createTestServices() *service.Services {
 		Expenses:   &service.ExpenseService{},
 		Sales:      &service.SaleService{},
 		Stats:      &service.StatsService{},
-		Templates:  &service.TemplateService{},
 		BambuCloud: &service.BambuCloudService{},
 		// Etsy and Auth are nil (optional services)
 	}
@@ -150,9 +149,6 @@ func TestRouterRegistersAllExpectedRoutes(t *testing.T) {
 		{"POST", "/api/print-jobs/{id}/failure"},
 		{"POST", "/api/print-jobs/{id}/scrap"},
 
-		// Jobs by recipe
-		{"GET", "/api/templates/{id}/jobs"},
-
 		// Files
 		{"GET", "/api/files/{id}"},
 
@@ -172,24 +168,6 @@ func TestRouterRegistersAllExpectedRoutes(t *testing.T) {
 
 		// Stats
 		{"GET", "/api/stats/financial"},
-
-		// Templates
-		{"GET", "/api/templates/"},
-		{"POST", "/api/templates/"},
-		{"GET", "/api/templates/{id}/"},
-		{"PATCH", "/api/templates/{id}/"},
-		{"DELETE", "/api/templates/{id}/"},
-		{"POST", "/api/templates/{id}/designs"},
-		{"DELETE", "/api/templates/{id}/designs/{designId}"},
-		{"POST", "/api/templates/{id}/instantiate"},
-		{"GET", "/api/templates/{id}/materials"},
-		{"POST", "/api/templates/{id}/materials"},
-		{"PATCH", "/api/templates/{id}/materials/{materialId}"},
-		{"DELETE", "/api/templates/{id}/materials/{materialId}"},
-		{"GET", "/api/templates/{id}/compatible-printers"},
-		{"GET", "/api/templates/{id}/compatible-spools"},
-		{"GET", "/api/templates/{id}/cost-estimate"},
-		{"POST", "/api/templates/{id}/validate-printer/{printerId}"},
 
 		// Bambu Cloud
 		{"POST", "/api/bambu-cloud/login"},
