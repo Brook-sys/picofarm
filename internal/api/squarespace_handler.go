@@ -68,15 +68,15 @@ func (h *SquarespaceHandler) GetStatus(w http.ResponseWriter, r *http.Request) {
 	}
 
 	respondJSON(w, http.StatusOK, map[string]interface{}{
-		"connected":             true,
-		"id":                    integration.ID,
-		"site_id":               integration.SiteID,
-		"site_title":            integration.SiteTitle,
-		"is_active":             integration.IsActive,
-		"last_order_sync_at":    integration.LastOrderSyncAt,
-		"last_product_sync_at":  integration.LastProductSyncAt,
-		"created_at":            integration.CreatedAt,
-		"updated_at":            integration.UpdatedAt,
+		"connected":            true,
+		"id":                   integration.ID,
+		"site_id":              integration.SiteID,
+		"site_title":           integration.SiteTitle,
+		"is_active":            integration.IsActive,
+		"last_order_sync_at":   integration.LastOrderSyncAt,
+		"last_product_sync_at": integration.LastProductSyncAt,
+		"created_at":           integration.CreatedAt,
+		"updated_at":           integration.UpdatedAt,
 	})
 }
 
@@ -260,8 +260,9 @@ func (h *SquarespaceHandler) GetProduct(w http.ResponseWriter, r *http.Request) 
 	respondJSON(w, http.StatusOK, product)
 }
 
-// LinkProductRequest represents the request body for linking a product to a template.
+// LinkProductRequest represents the request body for linking a product to a project.
 type LinkProductRequest struct {
+	ProjectID  string `json:"project_id"`
 	TemplateID string `json:"template_id"`
 	SKU        string `json:"sku"`
 }
@@ -281,14 +282,18 @@ func (h *SquarespaceHandler) LinkProduct(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	templateID, err := parseUUIDString(req.TemplateID)
+	projectIDValue := req.ProjectID
+	if projectIDValue == "" {
+		projectIDValue = req.TemplateID
+	}
+	projectID, err := parseUUIDString(projectIDValue)
 	if err != nil {
-		respondError(w, http.StatusBadRequest, "invalid template_id")
+		respondError(w, http.StatusBadRequest, "invalid project_id")
 		return
 	}
 
-	if err := h.service.LinkProductToTemplate(r.Context(), id, templateID, req.SKU); err != nil {
-		slog.Error("failed to link Squarespace product to template", "error", err)
+	if err := h.service.LinkProductToTemplate(r.Context(), id, projectID, req.SKU); err != nil {
+		slog.Error("failed to link Squarespace product to project", "error", err)
 		respondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -305,20 +310,23 @@ func (h *SquarespaceHandler) UnlinkProduct(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	templateIDStr := r.URL.Query().Get("template_id")
-	if templateIDStr == "" {
-		respondError(w, http.StatusBadRequest, "template_id query parameter is required")
+	projectIDStr := r.URL.Query().Get("project_id")
+	if projectIDStr == "" {
+		projectIDStr = r.URL.Query().Get("template_id")
+	}
+	if projectIDStr == "" {
+		respondError(w, http.StatusBadRequest, "project_id query parameter is required")
 		return
 	}
 
-	templateID, err := parseUUIDString(templateIDStr)
+	projectID, err := parseUUIDString(projectIDStr)
 	if err != nil {
-		respondError(w, http.StatusBadRequest, "invalid template_id")
+		respondError(w, http.StatusBadRequest, "invalid project_id")
 		return
 	}
 
-	if err := h.service.UnlinkProductFromTemplate(r.Context(), id, templateID); err != nil {
-		slog.Error("failed to unlink Squarespace product from template", "error", err)
+	if err := h.service.UnlinkProductFromTemplate(r.Context(), id, projectID); err != nil {
+		slog.Error("failed to unlink Squarespace product from project", "error", err)
 		respondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}

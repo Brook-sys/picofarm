@@ -5,9 +5,9 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/Brook-sys/picofarm/internal/model"
 	"github.com/Brook-sys/picofarm/internal/service"
+	"github.com/go-chi/chi/v5"
 )
 
 // ShopifyHandler handles Shopify integration HTTP requests.
@@ -162,8 +162,9 @@ func (h *ShopifyHandler) ProcessOrder(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, http.StatusCreated, order)
 }
 
-// ShopifyLinkProductRequest represents a request to link a Shopify product to a template.
+// ShopifyLinkProductRequest represents a request to link a Shopify product to a project.
 type ShopifyLinkProductRequest struct {
+	ProjectID  string `json:"project_id"`
 	TemplateID string `json:"template_id"`
 	SKU        string `json:"sku"`
 }
@@ -182,13 +183,17 @@ func (h *ShopifyHandler) LinkProduct(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	templateID, err := parseUUIDString(req.TemplateID)
+	projectIDValue := req.ProjectID
+	if projectIDValue == "" {
+		projectIDValue = req.TemplateID
+	}
+	projectID, err := parseUUIDString(projectIDValue)
 	if err != nil {
-		respondError(w, http.StatusBadRequest, "invalid template ID")
+		respondError(w, http.StatusBadRequest, "invalid project ID")
 		return
 	}
 
-	if err := h.service.LinkProductToTemplate(r.Context(), productID, templateID, req.SKU); err != nil {
+	if err := h.service.LinkProductToTemplate(r.Context(), productID, projectID, req.SKU); err != nil {
 		respondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -204,14 +209,17 @@ func (h *ShopifyHandler) UnlinkProduct(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	templateIDStr := r.URL.Query().Get("template_id")
-	templateID, err := parseUUIDString(templateIDStr)
+	projectIDStr := r.URL.Query().Get("project_id")
+	if projectIDStr == "" {
+		projectIDStr = r.URL.Query().Get("template_id")
+	}
+	projectID, err := parseUUIDString(projectIDStr)
 	if err != nil {
-		respondError(w, http.StatusBadRequest, "invalid template ID")
+		respondError(w, http.StatusBadRequest, "invalid project ID")
 		return
 	}
 
-	if err := h.service.UnlinkProductFromTemplate(r.Context(), productID, templateID); err != nil {
+	if err := h.service.UnlinkProductFromTemplate(r.Context(), productID, projectID); err != nil {
 		respondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}

@@ -338,8 +338,9 @@ func (h *EtsyHandler) GetListing(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, http.StatusOK, listing)
 }
 
-// LinkListingRequest represents the request body for linking a listing to a template.
+// LinkListingRequest represents the request body for linking a listing to a project.
 type LinkListingRequest struct {
+	ProjectID     string `json:"project_id"`
 	TemplateID    string `json:"template_id"`
 	SKU           string `json:"sku"`
 	SyncInventory bool   `json:"sync_inventory"`
@@ -360,13 +361,17 @@ func (h *EtsyHandler) LinkListing(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	templateID, err := parseUUIDString(req.TemplateID)
+	projectIDValue := req.ProjectID
+	if projectIDValue == "" {
+		projectIDValue = req.TemplateID
+	}
+	projectID, err := parseUUIDString(projectIDValue)
 	if err != nil {
-		respondError(w, http.StatusBadRequest, "invalid template ID")
+		respondError(w, http.StatusBadRequest, "invalid project ID")
 		return
 	}
 
-	if err := h.service.LinkListingToTemplate(r.Context(), listingID, templateID, req.SKU, req.SyncInventory); err != nil {
+	if err := h.service.LinkListingToTemplate(r.Context(), listingID, projectID, req.SKU, req.SyncInventory); err != nil {
 		slog.Error("failed to link listing", "error", err)
 		respondError(w, http.StatusBadRequest, err.Error())
 		return
@@ -384,19 +389,22 @@ func (h *EtsyHandler) UnlinkListing(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	templateIDStr := r.URL.Query().Get("template_id")
-	if templateIDStr == "" {
-		respondError(w, http.StatusBadRequest, "template_id is required")
+	projectIDStr := r.URL.Query().Get("project_id")
+	if projectIDStr == "" {
+		projectIDStr = r.URL.Query().Get("template_id")
+	}
+	if projectIDStr == "" {
+		respondError(w, http.StatusBadRequest, "project_id is required")
 		return
 	}
 
-	templateID, err := parseUUIDString(templateIDStr)
+	projectID, err := parseUUIDString(projectIDStr)
 	if err != nil {
-		respondError(w, http.StatusBadRequest, "invalid template ID")
+		respondError(w, http.StatusBadRequest, "invalid project ID")
 		return
 	}
 
-	if err := h.service.UnlinkListingFromTemplate(r.Context(), listingID, templateID); err != nil {
+	if err := h.service.UnlinkListingFromTemplate(r.Context(), listingID, projectID); err != nil {
 		slog.Error("failed to unlink listing", "error", err)
 		respondError(w, http.StatusInternalServerError, err.Error())
 		return
