@@ -193,7 +193,7 @@ func (h *ShopifyHandler) LinkProduct(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.service.LinkProductToTemplate(r.Context(), productID, projectID, req.SKU); err != nil {
+	if err := h.service.LinkProductToProject(r.Context(), productID, projectID, req.SKU); err != nil {
 		respondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -219,7 +219,7 @@ func (h *ShopifyHandler) UnlinkProduct(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.service.UnlinkProductFromTemplate(r.Context(), productID, projectID); err != nil {
+	if err := h.service.UnlinkProductFromProject(r.Context(), productID, projectID); err != nil {
 		respondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}

@@ -533,8 +533,8 @@ func (s *SquarespaceService) GetProduct(ctx context.Context, id uuid.UUID) (*mod
 	return product, nil
 }
 
-// LinkProductToTemplate links a Squarespace product to a template.
-func (s *SquarespaceService) LinkProductToTemplate(ctx context.Context, productID uuid.UUID, templateID uuid.UUID, sku string) error {
+// LinkProductToProject links a Squarespace product to a project.
+func (s *SquarespaceService) LinkProductToProject(ctx context.Context, productID uuid.UUID, projectID uuid.UUID, sku string) error {
 	product, err := s.repo.GetProductByID(ctx, productID)
 	if err != nil {
 		return fmt.Errorf("getting product: %w", err)
@@ -545,14 +545,14 @@ func (s *SquarespaceService) LinkProductToTemplate(ctx context.Context, productI
 
 	link := &model.SquarespaceProductTemplate{
 		SquarespaceProductID: product.SquarespaceProductID,
-		TemplateID:           templateID,
+		TemplateID:           projectID,
 		SKU:                  sku,
 	}
 	return s.repo.SaveProductTemplate(ctx, link)
 }
 
-// UnlinkProductFromTemplate removes a product-template link.
-func (s *SquarespaceService) UnlinkProductFromTemplate(ctx context.Context, productID uuid.UUID, templateID uuid.UUID) error {
+// UnlinkProductFromProject removes a product-project link.
+func (s *SquarespaceService) UnlinkProductFromProject(ctx context.Context, productID uuid.UUID, projectID uuid.UUID) error {
 	product, err := s.repo.GetProductByID(ctx, productID)
 	if err != nil {
 		return fmt.Errorf("getting product: %w", err)
@@ -561,7 +561,15 @@ func (s *SquarespaceService) UnlinkProductFromTemplate(ctx context.Context, prod
 		return fmt.Errorf("product not found")
 	}
 
-	return s.repo.DeleteProductTemplate(ctx, product.SquarespaceProductID, templateID)
+	return s.repo.DeleteProductTemplate(ctx, product.SquarespaceProductID, projectID)
+}
+
+func (s *SquarespaceService) LinkProductToTemplate(ctx context.Context, productID uuid.UUID, templateID uuid.UUID, sku string) error {
+	return s.LinkProductToProject(ctx, productID, templateID, sku)
+}
+
+func (s *SquarespaceService) UnlinkProductFromTemplate(ctx context.Context, productID uuid.UUID, templateID uuid.UUID) error {
+	return s.UnlinkProductFromProject(ctx, productID, templateID)
 }
 
 // GetProductTemplates retrieves templates linked to a product.

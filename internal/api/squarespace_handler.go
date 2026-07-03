@@ -292,7 +292,7 @@ func (h *SquarespaceHandler) LinkProduct(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	if err := h.service.LinkProductToTemplate(r.Context(), id, projectID, req.SKU); err != nil {
+	if err := h.service.LinkProductToProject(r.Context(), id, projectID, req.SKU); err != nil {
 		slog.Error("failed to link Squarespace product to project", "error", err)
 		respondError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -325,7 +325,7 @@ func (h *SquarespaceHandler) UnlinkProduct(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	if err := h.service.UnlinkProductFromTemplate(r.Context(), id, projectID); err != nil {
+	if err := h.service.UnlinkProductFromProject(r.Context(), id, projectID); err != nil {
 		slog.Error("failed to unlink Squarespace product from project", "error", err)
 		respondError(w, http.StatusInternalServerError, err.Error())
 		return

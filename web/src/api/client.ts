@@ -1260,14 +1260,14 @@ export const etsyApi = {
   getListing: (id: string) =>
     fetchApi<import('../types').EtsyListing>(`/integrations/etsy/listings/${id}`),
 
-  linkListing: (id: string, data: { template_id: string; sku?: string; sync_inventory?: boolean }) =>
+  linkListing: (id: string, data: { project_id?: string; sku?: string; sync_inventory?: boolean; template_id?: string }) =>
     fetchApi<{ status: string }>(`/integrations/etsy/listings/${id}/link`, {
       method: 'POST',
       body: JSON.stringify(data),
     }),
 
-  unlinkListing: (id: string, templateId: string) =>
-    fetchApi<void>(`/integrations/etsy/listings/${id}/link?template_id=${templateId}`, {
+  unlinkListing: (id: string, projectId: string) =>
+    fetchApi<void>(`/integrations/etsy/listings/${id}/link?project_id=${projectId}`, {
       method: 'DELETE',
     }),
 
@@ -1373,14 +1373,14 @@ export const squarespaceApi = {
   getProduct: (id: string) =>
     fetchApi<import('../types').SquarespaceProduct>(`/integrations/squarespace/products/${id}`),
 
-  linkProduct: (id: string, templateId: string, sku?: string) =>
+  linkProduct: (id: string, projectId: string, sku?: string) =>
     fetchApi<{ status: string }>(`/integrations/squarespace/products/${id}/link`, {
       method: 'POST',
-      body: JSON.stringify({ template_id: templateId, sku })
+      body: JSON.stringify({ project_id: projectId, sku })
     }),
 
-  unlinkProduct: (id: string, templateId: string) =>
-    fetchApi<void>(`/integrations/squarespace/products/${id}/link?template_id=${templateId}`, {
+  unlinkProduct: (id: string, projectId: string) =>
+    fetchApi<void>(`/integrations/squarespace/products/${id}/link?project_id=${projectId}`, {
       method: 'DELETE'
     }),
 }
@@ -1509,7 +1509,7 @@ export const ordersApi = {
     }),
 
   // Order items
-  addItem: (orderId: string, data: { template_id?: string; sku?: string; quantity: number; notes?: string }) =>
+  addItem: (orderId: string, data: { project_id?: string; template_id?: string; sku?: string; quantity: number; notes?: string }) =>
     fetchApi<import('../types').OrderItem>(`/orders/${orderId}/items`, {
       method: 'POST',
       body: JSON.stringify(data),
@@ -1606,14 +1606,14 @@ export const shopifyApi = {
       method: 'POST',
     }),
 
-  linkProduct: (productId: string, templateId: string, sku?: string) =>
+  linkProduct: (productId: string, projectId: string, sku?: string) =>
     fetchApi<{ status: string }>(`/integrations/shopify/products/${productId}/link`, {
       method: 'POST',
-      body: JSON.stringify({ template_id: templateId, sku }),
+      body: JSON.stringify({ project_id: projectId, sku }),
     }),
 
-  unlinkProduct: (productId: string, templateId: string) =>
-    fetchApi<void>(`/integrations/shopify/products/${productId}/link?template_id=${templateId}`, {
+  unlinkProduct: (productId: string, projectId: string) =>
+    fetchApi<void>(`/integrations/shopify/products/${productId}/link?project_id=${projectId}`, {
       method: 'DELETE',
     }),
 }

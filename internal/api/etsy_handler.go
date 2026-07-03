@@ -371,7 +371,7 @@ func (h *EtsyHandler) LinkListing(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.service.LinkListingToTemplate(r.Context(), listingID, projectID, req.SKU, req.SyncInventory); err != nil {
+	if err := h.service.LinkListingToProject(r.Context(), listingID, projectID, req.SKU, req.SyncInventory); err != nil {
 		slog.Error("failed to link listing", "error", err)
 		respondError(w, http.StatusBadRequest, err.Error())
 		return
@@ -404,7 +404,7 @@ func (h *EtsyHandler) UnlinkListing(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.service.UnlinkListingFromTemplate(r.Context(), listingID, projectID); err != nil {
+	if err := h.service.UnlinkListingFromProject(r.Context(), listingID, projectID); err != nil {
 		slog.Error("failed to unlink listing", "error", err)
 		respondError(w, http.StatusInternalServerError, err.Error())
 		return

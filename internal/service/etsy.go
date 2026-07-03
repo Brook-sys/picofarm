@@ -598,8 +598,8 @@ func (s *EtsyService) GetListing(ctx context.Context, id uuid.UUID) (*model.Etsy
 	return s.repo.GetListingByID(ctx, id)
 }
 
-// LinkListingToTemplate creates a mapping between a listing and a template.
-func (s *EtsyService) LinkListingToTemplate(ctx context.Context, listingID uuid.UUID, templateID uuid.UUID, sku string, syncInventory bool) error {
+// LinkListingToProject creates a mapping between a listing and a project.
+func (s *EtsyService) LinkListingToProject(ctx context.Context, listingID uuid.UUID, projectID uuid.UUID, sku string, syncInventory bool) error {
 	listing, err := s.repo.GetListingByID(ctx, listingID)
 	if err != nil {
 		return err
@@ -610,7 +610,7 @@ func (s *EtsyService) LinkListingToTemplate(ctx context.Context, listingID uuid.
 
 	link := &model.EtsyListingTemplate{
 		EtsyListingID: listing.EtsyListingID,
-		TemplateID:    templateID,
+		TemplateID:    projectID,
 		SKU:           sku,
 		SyncInventory: syncInventory,
 	}
@@ -618,8 +618,8 @@ func (s *EtsyService) LinkListingToTemplate(ctx context.Context, listingID uuid.
 	return s.repo.SaveListingTemplate(ctx, link)
 }
 
-// UnlinkListingFromTemplate removes a mapping between a listing and a template.
-func (s *EtsyService) UnlinkListingFromTemplate(ctx context.Context, listingID uuid.UUID, templateID uuid.UUID) error {
+// UnlinkListingFromProject removes a mapping between a listing and a project.
+func (s *EtsyService) UnlinkListingFromProject(ctx context.Context, listingID uuid.UUID, projectID uuid.UUID) error {
 	listing, err := s.repo.GetListingByID(ctx, listingID)
 	if err != nil {
 		return err
@@ -628,7 +628,15 @@ func (s *EtsyService) UnlinkListingFromTemplate(ctx context.Context, listingID u
 		return fmt.Errorf("listing not found")
 	}
 
-	return s.repo.DeleteListingTemplate(ctx, listing.EtsyListingID, templateID)
+	return s.repo.DeleteListingTemplate(ctx, listing.EtsyListingID, projectID)
+}
+
+func (s *EtsyService) LinkListingToTemplate(ctx context.Context, listingID uuid.UUID, templateID uuid.UUID, sku string, syncInventory bool) error {
+	return s.LinkListingToProject(ctx, listingID, templateID, sku, syncInventory)
+}
+
+func (s *EtsyService) UnlinkListingFromTemplate(ctx context.Context, listingID uuid.UUID, templateID uuid.UUID) error {
+	return s.UnlinkListingFromProject(ctx, listingID, templateID)
 }
 
 // SyncInventoryToEtsy pushes local inventory to Etsy for a listing.

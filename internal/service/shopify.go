@@ -417,17 +417,25 @@ func (s *ShopifyService) ProcessOrder(ctx context.Context, shopifyOrderID uuid.U
 	return order, nil
 }
 
-// LinkProductToTemplate links a Shopify product to a template by SKU.
-func (s *ShopifyService) LinkProductToTemplate(ctx context.Context, productID string, templateID uuid.UUID, sku string) error {
+// LinkProductToProject links a Shopify product to a project by SKU.
+func (s *ShopifyService) LinkProductToProject(ctx context.Context, productID string, projectID uuid.UUID, sku string) error {
 	link := &model.ShopifyProductTemplate{
 		ShopifyProductID: productID,
-		TemplateID:       templateID,
+		TemplateID:       projectID,
 		SKU:              sku,
 	}
 	return s.shopifyRepo.SaveProductTemplate(ctx, link)
 }
 
-// UnlinkProductFromTemplate removes a product-template link.
+// UnlinkProductFromProject removes a product-project link.
+func (s *ShopifyService) UnlinkProductFromProject(ctx context.Context, productID string, projectID uuid.UUID) error {
+	return s.shopifyRepo.DeleteProductTemplate(ctx, productID, projectID)
+}
+
+func (s *ShopifyService) LinkProductToTemplate(ctx context.Context, productID string, templateID uuid.UUID, sku string) error {
+	return s.LinkProductToProject(ctx, productID, templateID, sku)
+}
+
 func (s *ShopifyService) UnlinkProductFromTemplate(ctx context.Context, productID string, templateID uuid.UUID) error {
-	return s.shopifyRepo.DeleteProductTemplate(ctx, productID, templateID)
+	return s.UnlinkProductFromProject(ctx, productID, templateID)
 }

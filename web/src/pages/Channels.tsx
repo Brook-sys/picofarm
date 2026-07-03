@@ -350,11 +350,11 @@ export default function Channels() {
     }
   }
 
-  // Link product to template
+  // Link product to project
   async function handleLink(product: UnifiedProduct) {
-    const templateId = selectedTemplate[product.id]
-    if (!templateId) {
-      setError('Please select a template')
+    const projectId = selectedTemplate[product.id]
+    if (!projectId) {
+      setError('Please select a project')
       return
     }
 
@@ -363,9 +363,9 @@ export default function Channels() {
     try {
       const sku = product.skus[0] || ''
       if (product.channel === 'etsy') {
-        await etsyApi.linkListing(product.id, { template_id: templateId, sku })
+        await etsyApi.linkListing(product.id, { project_id: projectId, sku })
       } else {
-        await squarespaceApi.linkProduct(product.id, templateId, sku)
+        await squarespaceApi.linkProduct(product.id, projectId, sku)
       }
       await loadProducts()
       setSelectedTemplate(prev => ({ ...prev, [product.id]: '' }))
