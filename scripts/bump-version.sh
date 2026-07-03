@@ -42,13 +42,6 @@ echo "Bumping version: $CURRENT -> $NEW_VERSION"
 # Update VERSION file
 echo "v$NEW_VERSION" > "$VERSION_FILE"
 
-# Update wails.json
-if [[ -f "$ROOT_DIR/wails.json" ]]; then
-    sed -i.bak "s/\"productVersion\": \"$CURRENT\"/\"productVersion\": \"$NEW_VERSION\"/" "$ROOT_DIR/wails.json"
-    rm -f "$ROOT_DIR/wails.json.bak"
-    echo "  Updated wails.json"
-fi
-
 # Update web/package.json
 if [[ -f "$ROOT_DIR/web/package.json" ]]; then
     sed -i.bak "s/\"version\": \"$CURRENT\"/\"version\": \"$NEW_VERSION\"/" "$ROOT_DIR/web/package.json"

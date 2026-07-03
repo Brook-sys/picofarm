@@ -245,7 +245,7 @@ export default function SlicerSettings() {
       <div className="mb-8 flex items-start justify-between gap-4">
         <div>
           <h1 className="text-3xl font-display font-bold text-surface-100">Slicer Settings</h1>
-          <p className="text-surface-400 mt-1">Connect Daedalus to an external OrcaSlicer API container.</p>
+          <p className="text-surface-400 mt-1">Connect PicoFarm to an external OrcaSlicer API container.</p>
         </div>
         <div className="flex gap-2">
           <button onClick={() => loadProfiles()} disabled={!!busy} className="btn btn-secondary shrink-0"><RefreshCw className="h-4 w-4 mr-2" /> Load profiles</button>

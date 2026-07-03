@@ -1142,6 +1142,16 @@ function BackupSettings() {
             className="input h-auto py-1.5 w-20 text-center"
           />
         </div>
+
+        <div className="bg-surface-900/50 border border-surface-800 rounded-xl p-6 mt-6">
+          <h2 className="text-lg font-semibold text-surface-100">Credits</h2>
+          <p className="text-sm text-surface-400 mt-2">
+            PicoFarm is a fork evolved from Daedalus, created by the original Daedalus project contributors.
+          </p>
+          <p className="text-sm text-surface-500 mt-2">
+            We keep this credit here to acknowledge the foundation inherited from Daedalus while PicoFarm moves toward a server/container-first print farm platform.
+          </p>
+        </div>
       </div>
     </div>
   )
