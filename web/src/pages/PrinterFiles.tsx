@@ -80,12 +80,6 @@ export default function PrinterFiles() {
         </div>
       </div>
 
-      {selectedPrinter?.connection_type === 'moonraker' && selectedPrinter.connection_uri && !/:\d+($|\/)/.test(selectedPrinter.connection_uri.replace(/^https?:\/\//, '')) && (
-        <div className="rounded-xl border border-blue-500/20 bg-blue-500/10 px-4 py-3 text-sm text-blue-200">
-          Moonraker default port is inferred automatically: <span className="font-mono">{effectiveConnection}</span>.
-        </div>
-      )}
-
       {selectedPrinter && (
         <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
           <InfoCard icon={Server} label="Protocol" value={selectedPrinter.connection_type === 'moonraker' ? 'Moonraker / Klipper' : 'OctoPrint'} />
