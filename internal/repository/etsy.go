@@ -605,9 +605,6 @@ func (r *EtsyRepository) ListListings(ctx context.Context, state string, limit, 
 
 // SaveListingTemplate creates or updates a listing-template link.
 func (r *EtsyRepository) SaveListingTemplate(ctx context.Context, link *model.EtsyListingProject) error {
-	if link.ID == 0 {
-		
-	}
 	if link.CreatedAt.IsZero() {
 		link.CreatedAt = time.Now()
 	}

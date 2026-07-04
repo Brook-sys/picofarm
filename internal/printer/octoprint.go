@@ -82,14 +82,8 @@ func (c *OctoPrintClient) GetStatus() (*model.PrinterState, error) {
 
 // StartJob uploads and starts printing a file.
 func (c *OctoPrintClient) ListFiles(ctx context.Context, dir string) ([]model.PrinterFileEntry, error) {
-	_ = ctx
+	_, _ = ctx, dir
 	endpoint := "/api/files/local"
-	if strings.TrimSpace(dir) != "" {
-		// OctoPrint directory lookup (recursive tree, so we need to navigate or request specific folder)
-		// OctoPrint doesn't have a direct "list single folder" API easily, but it allows fetching files.
-		// For simplicity, fetch all and filter or fetch folder by name.
-		// Note: /api/files/local?recursive=true
-	}
 	resp, err := c.doRequest("GET", endpoint, nil)
 	if err != nil {
 		return nil, err
@@ -105,7 +99,7 @@ func (c *OctoPrintClient) ListFiles(ctx context.Context, dir string) ([]model.Pr
 	var entries []model.PrinterFileEntry
 	for _, item := range payload.Files {
 		// We only process top-level for now unless recursive parsed
-		entries = append(entries, item.toModel(""))
+		entries = append(entries, item.toModel())
 	}
 	return entries, nil
 }
@@ -162,9 +156,15 @@ func (c *OctoPrintClient) CreateDirectory(ctx context.Context, dirPath string) e
 	// OctoPrint creates folders via POST /api/files/local
 	payload := &bytes.Buffer{}
 	writer := multipart.NewWriter(payload)
-	writer.WriteField("foldername", filepath.Base(dirPath))
-	writer.WriteField("path", filepath.Dir(dirPath))
-	writer.Close()
+	if err := writer.WriteField("foldername", filepath.Base(dirPath)); err != nil {
+		return err
+	}
+	if err := writer.WriteField("path", filepath.Dir(dirPath)); err != nil {
+		return err
+	}
+	if err := writer.Close(); err != nil {
+		return err
+	}
 
 	req, err := http.NewRequest("POST", c.baseURL+"/api/files/local", payload)
 	if err != nil {
@@ -223,7 +223,7 @@ func (c *OctoPrintClient) GetFileMetadata(ctx context.Context, filePath string) 
 	return &model.PrinterFileMetadata{
 		Path:          filePath,
 		Size:          payload.Size,
-		Modified:      int64(payload.Date),
+		Modified:      payload.Date,
 		EstimatedTime: float64(payload.GcodeAnalysis.EstimatedPrintTime),
 		FilamentTotal: payload.GcodeAnalysis.Filament.Tool0.Length,
 	}, nil
@@ -250,7 +250,7 @@ type octoprintFileEntry struct {
 	} `json:"gcodeAnalysis"`
 }
 
-func (e octoprintFileEntry) toModel(parent string) model.PrinterFileEntry {
+func (e octoprintFileEntry) toModel() model.PrinterFileEntry {
 	entryType := "file"
 	if e.Type == "folder" {
 		entryType = "dir"

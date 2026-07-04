@@ -213,9 +213,6 @@ func (r *ShopifyRepository) GetOrderItems(ctx context.Context, shopifyOrderID uu
 
 // SaveProductTemplate links a Shopify product to a template.
 func (r *ShopifyRepository) SaveProductTemplate(ctx context.Context, link *model.ShopifyProductProject) error {
-	if link.ID == 0 {
-		
-	}
 	link.CreatedAt = time.Now()
 
 	_, err := r.db.ExecContext(ctx, `
