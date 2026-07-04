@@ -40,7 +40,7 @@ func (s *PrinterFileService) Upload(ctx context.Context, printerID uuid.UUID, di
 		return err
 	}
 	defer file.Close()
-	return client.UploadFile(ctx, cleanPrinterPath(dir), header.Filename, file)
+	return client.UploadFile(ctx, printerUploadDir(dir, header.Filename), header.Filename, file)
 }
 
 func (s *PrinterFileService) UploadReader(ctx context.Context, printerID uuid.UUID, dir string, filename string, reader io.Reader) error {
@@ -48,7 +48,7 @@ func (s *PrinterFileService) UploadReader(ctx context.Context, printerID uuid.UU
 	if err != nil {
 		return err
 	}
-	return client.UploadFile(ctx, cleanPrinterPath(dir), filename, reader)
+	return client.UploadFile(ctx, printerUploadDir(dir, filename), filename, reader)
 }
 
 func (s *PrinterFileService) Delete(ctx context.Context, printerID uuid.UUID, filePath string) error {
@@ -130,6 +130,20 @@ func (s *PrinterFileService) client(ctx context.Context, printerID uuid.UUID) (p
 		return printer.NewOctoPrintClient(p.ID, p.ConnectionURI, p.APIKey), nil
 	}
 	return nil, fmt.Errorf("printer file management is only available for Moonraker and OctoPrint printers")
+}
+
+func printerUploadDir(dir string, filename string) string {
+	cleanDir := cleanPrinterPath(dir)
+	if strings.EqualFold(path.Ext(filename), ".gcode") {
+		if cleanDir == "" || cleanDir == "." {
+			return "sda1"
+		}
+		if cleanDir == "sda1" || strings.HasPrefix(cleanDir, "sda1/") {
+			return cleanDir
+		}
+		return path.Join("sda1", cleanDir)
+	}
+	return cleanDir
 }
 
 func cleanPrinterPath(value string) string {

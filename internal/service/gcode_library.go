@@ -263,7 +263,7 @@ func (s *GCodeLibraryService) SendToPrinter(ctx context.Context, id uuid.UUID, o
 		return "", err
 	}
 	defer reader.Close()
-	remoteDir := cleanPrinterPath(opts.RemotePath)
+	remoteDir := printerUploadDir(opts.RemotePath, file.OriginalName)
 	if err := s.printerFiles.UploadReader(ctx, opts.PrinterID, remoteDir, file.OriginalName, reader); err != nil {
 		return "", err
 	}
