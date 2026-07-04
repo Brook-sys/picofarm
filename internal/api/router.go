@@ -377,6 +377,7 @@ func NewRouter(services *service.Services, hub *realtime.Hub) http.Handler {
 		r.Route("/gcode-library", func(r chi.Router) {
 			r.Get("/", libHandler.List)
 			r.Post("/upload", libHandler.Upload)
+			r.Post("/save-from-printer", libHandler.SaveToLibrary)
 			r.Get("/tags", libHandler.ListTags)
 			r.Post("/tags", libHandler.CreateTag)
 			r.Route("/{id}", func(r chi.Router) {

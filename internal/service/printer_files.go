@@ -123,10 +123,13 @@ func (s *PrinterFileService) client(ctx context.Context, printerID uuid.UUID) (p
 	if p == nil {
 		return nil, fmt.Errorf("printer not found")
 	}
-	if p.ConnectionType != model.ConnectionTypeMoonraker {
-		return nil, fmt.Errorf("printer file management is only available for Moonraker printers")
+	if p.ConnectionType == model.ConnectionTypeMoonraker {
+		return printer.NewMoonrakerClient(p.ID, p.ConnectionURI), nil
 	}
-	return printer.NewMoonrakerClient(p.ID, p.ConnectionURI), nil
+	if p.ConnectionType == model.ConnectionTypeOctoPrint {
+		return printer.NewOctoPrintClient(p.ID, p.ConnectionURI, p.APIKey), nil
+	}
+	return nil, fmt.Errorf("printer file management is only available for Moonraker and OctoPrint printers")
 }
 
 func cleanPrinterPath(value string) string {

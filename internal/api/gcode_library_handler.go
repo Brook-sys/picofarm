@@ -223,6 +223,28 @@ func (h *GCodeLibraryHandler) SendToPrinter(w http.ResponseWriter, r *http.Reque
 	respondJSON(w, http.StatusOK, map[string]string{"remote_path": remotePath})
 }
 
+func (h *GCodeLibraryHandler) SaveToLibrary(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		PrinterID   uuid.UUID  `json:"printer_id"`
+		RemotePath  string     `json:"remote_path"`
+		ParentSTLID *uuid.UUID `json:"parent_stl_id,omitempty"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if req.PrinterID == uuid.Nil || req.RemotePath == "" {
+		respondError(w, http.StatusBadRequest, "printer_id and remote_path are required")
+		return
+	}
+	file, err := h.service.SaveToLibrary(r.Context(), req.PrinterID, req.RemotePath, req.ParentSTLID)
+	if err != nil {
+		respondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	respondJSON(w, http.StatusCreated, file)
+}
+
 func (h *GCodeLibraryHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"path"
 	"path/filepath"
 	"strings"
 
@@ -225,6 +226,18 @@ func (s *GCodeLibraryService) SetDefaultForSTL(ctx context.Context, id uuid.UUID
 
 func (s *GCodeLibraryService) repoSTL(ctx context.Context, id uuid.UUID) (*model.STLLibraryFile, error) {
 	return s.stlRepo.GetByID(ctx, id)
+}
+
+func (s *GCodeLibraryService) SaveToLibrary(ctx context.Context, printerID uuid.UUID, remotePath string, parentSTLID *uuid.UUID) (*model.GCodeLibraryFile, error) {
+	if s.printerFiles == nil {
+		return nil, fmt.Errorf("printer file service is unavailable")
+	}
+	reader, err := s.printerFiles.Download(ctx, printerID, remotePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to download from printer: %w", err)
+	}
+	defer reader.Close()
+	return s.UploadWithParent(ctx, path.Base(remotePath), reader, parentSTLID)
 }
 
 func (s *GCodeLibraryService) SendToPrinter(ctx context.Context, id uuid.UUID, opts GCodeLibrarySendOptions) (string, error) {

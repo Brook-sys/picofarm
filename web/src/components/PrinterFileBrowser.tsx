@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Folder, FileText, Upload, Trash2, HardDrive, PlaySquare, ArrowLeft, FolderPlus, Pencil, Download, MoveRight, CheckSquare, Square } from 'lucide-react'
-import { printersApi } from '../api/client'
+import { Folder, FileText, Upload, Trash2, HardDrive, PlaySquare, ArrowLeft, FolderPlus, Pencil, Download, MoveRight, CheckSquare, Square, Save } from 'lucide-react'
+import { printersApi, gcodeLibraryApi } from '../api/client'
+import AppToast, { type AppToastState } from './AppToast'
 import { formatBytes, formatDuration, formatRelativeTime } from '../lib/utils'
 import type { PrinterFileEntry } from '../types'
 
@@ -16,17 +17,23 @@ export function PrinterFileBrowser({ printerId, connectionType }: PrinterFileBro
   const [uploading, setUploading] = useState(false)
   const [selected, setSelected] = useState<string[]>([])
   const [previewFile, setPreviewFile] = useState<PrinterFileEntry | null>(null)
+  const [toast, setToast] = useState<AppToastState | null>(null)
+
+  const showToast = (next: AppToastState) => {
+    setToast(next)
+    window.setTimeout(() => setToast(null), 3500)
+  }
 
   const { data: fileList, isLoading } = useQuery({
     queryKey: ['printer-files', printerId, currentPath],
     queryFn: () => printersApi.listFiles(printerId, currentPath),
-    enabled: connectionType === 'moonraker',
+    enabled: connectionType === 'moonraker' || connectionType === 'octoprint',
   })
 
   const { data: metadata, isLoading: metadataLoading } = useQuery({
     queryKey: ['printer-file-metadata', printerId, previewFile?.path],
     queryFn: () => printersApi.getFileMetadata(printerId, previewFile!.path),
-    enabled: connectionType === 'moonraker' && previewFile?.type === 'file',
+    enabled: (connectionType === 'moonraker' || connectionType === 'octoprint') && previewFile?.type === 'file',
     retry: false,
   })
 
@@ -41,13 +48,18 @@ export function PrinterFileBrowser({ printerId, connectionType }: PrinterFileBro
   const renameMutation = useMutation({ mutationFn: ({ path, newPath }: { path: string; newPath: string }) => printersApi.renameFile(printerId, path, newPath), onSuccess: invalidateFiles })
   const moveMutation = useMutation({ mutationFn: ({ path, newPath }: { path: string; newPath: string }) => printersApi.moveFile(printerId, path, newPath), onSuccess: invalidateFiles })
   const printMutation = useMutation({ mutationFn: (path: string) => printersApi.printFile(printerId, path) })
+  const saveToLibraryMutation = useMutation({
+    mutationFn: (path: string) => gcodeLibraryApi.saveFromPrinter({ printer_id: printerId, remote_path: path }),
+    onSuccess: () => showToast({ title: 'Saved to Library', message: 'File imported to G-code library successfully.', tone: 'success' }),
+    onError: (err) => showToast({ title: 'Import failed', message: err instanceof Error ? err.message : 'Unknown error', tone: 'error' })
+  })
 
-  if (connectionType !== 'moonraker') {
+  if (connectionType !== 'moonraker' && connectionType !== 'octoprint') {
     return (
       <div className="flex flex-col items-center justify-center p-8 text-center bg-surface-900 rounded-lg border border-surface-800">
         <HardDrive className="h-10 w-10 text-surface-500 mb-3" />
         <h3 className="text-sm font-medium text-surface-200">Not Supported</h3>
-        <p className="text-sm text-surface-500 mt-1">File browsing is currently only available for Moonraker/Fluidd/Mainsail connected printers.</p>
+        <p className="text-sm text-surface-500 mt-1">File browsing is currently only available for Moonraker/Fluidd/Mainsail and OctoPrint connected printers.</p>
       </div>
     )
   }
@@ -232,9 +244,12 @@ export function PrinterFileBrowser({ printerId, connectionType }: PrinterFileBro
               </div>
 
               {previewFile.type === 'file' && (
-                <div className="flex gap-2">
-                  <a href={printersApi.downloadFileUrl(printerId, previewFile.path)} className="btn btn-secondary flex-1 text-xs"><Download className="mr-1.5 h-3.5 w-3.5" />Download</a>
-                  <button onClick={() => confirm(`Print ${previewFile.name}?`) && printMutation.mutate(previewFile.path)} className="btn btn-primary flex-1 text-xs"><PlaySquare className="mr-1.5 h-3.5 w-3.5" />Print</button>
+                <div className="flex flex-col gap-2">
+                  <div className="flex gap-2">
+                    <a href={printersApi.downloadFileUrl(printerId, previewFile.path)} className="btn btn-secondary flex-1 text-xs"><Download className="mr-1.5 h-3.5 w-3.5" />Download</a>
+                    <button onClick={() => confirm(`Print ${previewFile.name}?`) && printMutation.mutate(previewFile.path)} className="btn btn-primary flex-1 text-xs"><PlaySquare className="mr-1.5 h-3.5 w-3.5" />Print</button>
+                  </div>
+                  <button onClick={() => saveToLibraryMutation.mutate(previewFile.path)} disabled={saveToLibraryMutation.isPending} className="btn btn-secondary text-xs w-full"><Save className="mr-1.5 h-3.5 w-3.5" />{saveToLibraryMutation.isPending ? 'Saving...' : 'Save to G-code Library'}</button>
                 </div>
               )}
             </div>
@@ -246,6 +261,7 @@ export function PrinterFileBrowser({ printerId, connectionType }: PrinterFileBro
           )}
         </div>
       </div>
+      {toast && <AppToast toast={toast} onClose={() => setToast(null)} />}
     </div>
   )
 }

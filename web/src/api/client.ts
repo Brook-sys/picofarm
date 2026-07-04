@@ -842,6 +842,9 @@ export const gcodeLibraryApi = {
   sendToPrinter: (id: string, data: { printer_id: string; remote_path?: string; start_print?: boolean }) =>
     fetchApi<{ remote_path: string }>(`/gcode-library/${id}/send-to-printer`, { method: 'POST', body: JSON.stringify(data) }),
 
+  saveFromPrinter: (data: { printer_id: string; remote_path: string; parent_stl_id?: string | null }) =>
+    fetchApi<import('../types').GCodeLibraryFile>('/gcode-library/save-from-printer', { method: 'POST', body: JSON.stringify(data) }),
+
   listTags: () => fetchApi<import('../types').Tag[]>('/gcode-library/tags'),
 
   createTag: (data: { name: string; color?: string }) =>

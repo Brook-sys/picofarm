@@ -2,6 +2,7 @@ package printer
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -12,8 +13,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/Brook-sys/picofarm/internal/model"
+	"github.com/google/uuid"
 )
 
 // OctoPrintClient implements Client for OctoPrint API.
@@ -80,9 +81,207 @@ func (c *OctoPrintClient) GetStatus() (*model.PrinterState, error) {
 }
 
 // StartJob uploads and starts printing a file.
+func (c *OctoPrintClient) ListFiles(ctx context.Context, dir string) ([]model.PrinterFileEntry, error) {
+	_ = ctx
+	endpoint := "/api/files/local"
+	if strings.TrimSpace(dir) != "" {
+		// OctoPrint directory lookup (recursive tree, so we need to navigate or request specific folder)
+		// OctoPrint doesn't have a direct "list single folder" API easily, but it allows fetching files.
+		// For simplicity, fetch all and filter or fetch folder by name.
+		// Note: /api/files/local?recursive=true
+	}
+	resp, err := c.doRequest("GET", endpoint, nil)
+	if err != nil {
+		return nil, err
+	}
+	var payload struct {
+		Files []octoprintFileEntry `json:"files"`
+	}
+	if err := json.Unmarshal(resp, &payload); err != nil {
+		return nil, err
+	}
+
+	// Helper to extract
+	var entries []model.PrinterFileEntry
+	for _, item := range payload.Files {
+		// We only process top-level for now unless recursive parsed
+		entries = append(entries, item.toModel(""))
+	}
+	return entries, nil
+}
+
+func (c *OctoPrintClient) UploadFile(ctx context.Context, dir string, filename string, file io.Reader) error {
+	_ = ctx
+	body := &bytes.Buffer{}
+	writer := multipart.NewWriter(body)
+
+	if dir != "" {
+		if err := writer.WriteField("path", dir); err != nil {
+			return err
+		}
+	}
+
+	part, err := writer.CreateFormFile("file", filepath.Base(filename))
+	if err != nil {
+		return err
+	}
+	if _, err := io.Copy(part, file); err != nil {
+		return err
+	}
+	if err := writer.Close(); err != nil {
+		return err
+	}
+
+	req, err := http.NewRequest("POST", c.baseURL+"/api/files/local", body)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("X-Api-Key", c.apiKey)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 400 {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("upload failed: %d %s", resp.StatusCode, strings.TrimSpace(string(bodyBytes)))
+	}
+	return nil
+}
+
+func (c *OctoPrintClient) DeleteFile(ctx context.Context, filePath string) error {
+	_ = ctx
+	_, err := c.doRequest("DELETE", "/api/files/local/"+escapeMoonrakerPath(filePath), nil)
+	return err
+}
+
+func (c *OctoPrintClient) CreateDirectory(ctx context.Context, dirPath string) error {
+	_ = ctx
+	// OctoPrint creates folders via POST /api/files/local
+	payload := &bytes.Buffer{}
+	writer := multipart.NewWriter(payload)
+	writer.WriteField("foldername", filepath.Base(dirPath))
+	writer.WriteField("path", filepath.Dir(dirPath))
+	writer.Close()
+
+	req, err := http.NewRequest("POST", c.baseURL+"/api/files/local", payload)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("X-Api-Key", c.apiKey)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 400 {
+		return fmt.Errorf("mkdir failed: %d", resp.StatusCode)
+	}
+	return nil
+}
+
+func (c *OctoPrintClient) RenameFile(ctx context.Context, oldPath string, newPath string) error {
+	return fmt.Errorf("not supported on OctoPrint")
+}
+
+func (c *OctoPrintClient) MoveFile(ctx context.Context, sourcePath string, destPath string) error {
+	return fmt.Errorf("not supported on OctoPrint")
+}
+
+func (c *OctoPrintClient) DownloadFile(ctx context.Context, filePath string) (io.ReadCloser, error) {
+	_ = ctx
+	req, err := http.NewRequest("GET", c.baseURL+"/downloads/files/local/"+escapeMoonrakerPath(filePath), nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("X-Api-Key", c.apiKey)
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode >= 400 {
+		defer resp.Body.Close()
+		return nil, fmt.Errorf("download failed: %d", resp.StatusCode)
+	}
+	return resp.Body, nil
+}
+
+func (c *OctoPrintClient) GetFileMetadata(ctx context.Context, filePath string) (*model.PrinterFileMetadata, error) {
+	_ = ctx
+	// OctoPrint metadata
+	resp, err := c.doRequest("GET", "/api/files/local/"+escapeMoonrakerPath(filePath), nil)
+	if err != nil {
+		return nil, err
+	}
+	var payload octoprintFileEntry
+	if err := json.Unmarshal(resp, &payload); err != nil {
+		return nil, err
+	}
+	return &model.PrinterFileMetadata{
+		Path:          filePath,
+		Size:          payload.Size,
+		Modified:      int64(payload.Date),
+		EstimatedTime: float64(payload.GcodeAnalysis.EstimatedPrintTime),
+		FilamentTotal: payload.GcodeAnalysis.Filament.Tool0.Length,
+	}, nil
+}
+
+func (c *OctoPrintClient) DownloadThumbnail(ctx context.Context, thumbPath string) (io.ReadCloser, error) {
+	return nil, fmt.Errorf("not supported on OctoPrint")
+}
+
+type octoprintFileEntry struct {
+	Name          string   `json:"name"`
+	Path          string   `json:"path"`
+	Type          string   `json:"type"` // machinecode, folder
+	TypePath      []string `json:"typePath"`
+	Size          int64    `json:"size"`
+	Date          int64    `json:"date"`
+	GcodeAnalysis struct {
+		EstimatedPrintTime int `json:"estimatedPrintTime"`
+		Filament           struct {
+			Tool0 struct {
+				Length float64 `json:"length"`
+			} `json:"tool0"`
+		} `json:"filament"`
+	} `json:"gcodeAnalysis"`
+}
+
+func (e octoprintFileEntry) toModel(parent string) model.PrinterFileEntry {
+	entryType := "file"
+	if e.Type == "folder" {
+		entryType = "dir"
+	}
+	return model.PrinterFileEntry{
+		Path:     e.Path,
+		Name:     e.Name,
+		Type:     entryType,
+		Size:     e.Size,
+		Modified: e.Date,
+	}
+}
+
+func (c *OctoPrintClient) StartPrint(ctx context.Context, filePath string) error {
+	_ = ctx
+	selectReq := map[string]interface{}{
+		"command": "select",
+		"print":   true,
+	}
+	body, _ := json.Marshal(selectReq)
+	_, err := c.doRequest("POST", "/api/files/local/"+escapeMoonrakerPath(filePath), body)
+	return err
+}
 func (c *OctoPrintClient) StartJob(filename string, filepath string) error {
 	// Upload file
-	if err := c.uploadFile(filepath); err != nil {
+	fileReader, err := os.Open(filepath)
+	if err != nil {
+		return fmt.Errorf("failed to open file: %w", err)
+	}
+	defer fileReader.Close()
+	if err := c.UploadFile(context.Background(), "", filename, fileReader); err != nil {
 		return fmt.Errorf("failed to upload file: %w", err)
 	}
 
@@ -93,7 +292,7 @@ func (c *OctoPrintClient) StartJob(filename string, filepath string) error {
 	}
 	body, _ := json.Marshal(selectReq)
 
-	_, err := c.doRequest("POST", "/api/files/local/"+filename, body)
+	_, err = c.doRequest("POST", "/api/files/local/"+filename, body)
 	if err != nil {
 		return fmt.Errorf("failed to start print: %w", err)
 	}
@@ -189,49 +388,6 @@ func (c *OctoPrintClient) doRequest(method string, path string, body []byte) ([]
 	}
 
 	return io.ReadAll(resp.Body)
-}
-
-// uploadFile uploads a file to OctoPrint.
-func (c *OctoPrintClient) uploadFile(filePath string) error {
-	file, err := os.Open(filePath)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-
-	body := &bytes.Buffer{}
-	writer := multipart.NewWriter(body)
-
-	part, err := writer.CreateFormFile("file", filepath.Base(filePath))
-	if err != nil {
-		return err
-	}
-
-	if _, err := io.Copy(part, file); err != nil {
-		return err
-	}
-
-	writer.Close()
-
-	req, err := http.NewRequest("POST", c.baseURL+"/api/files/local", body)
-	if err != nil {
-		return err
-	}
-
-	req.Header.Set("X-Api-Key", c.apiKey)
-	req.Header.Set("Content-Type", writer.FormDataContentType())
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode >= 400 {
-		return fmt.Errorf("upload failed: %d", resp.StatusCode)
-	}
-
-	return nil
 }
 
 // pollStatus periodically polls for status updates.
