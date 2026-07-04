@@ -383,6 +383,7 @@ func NewRouter(services *service.Services, hub *realtime.Hub) http.Handler {
 				r.Patch("/default-for-stl", libHandler.SetDefaultForSTL)
 				r.Delete("/", libHandler.Delete)
 				r.Post("/add-to-queue", libHandler.AddToQueue)
+				r.Post("/send-to-printer", libHandler.SendToPrinter)
 				r.Post("/tags/{tagID}", libHandler.AddTag)
 				r.Delete("/tags/{tagID}", libHandler.RemoveTag)
 			})

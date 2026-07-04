@@ -43,6 +43,14 @@ func (s *PrinterFileService) Upload(ctx context.Context, printerID uuid.UUID, di
 	return client.UploadFile(ctx, cleanPrinterPath(dir), header.Filename, file)
 }
 
+func (s *PrinterFileService) UploadReader(ctx context.Context, printerID uuid.UUID, dir string, filename string, reader io.Reader) error {
+	client, err := s.client(ctx, printerID)
+	if err != nil {
+		return err
+	}
+	return client.UploadFile(ctx, cleanPrinterPath(dir), filename, reader)
+}
+
 func (s *PrinterFileService) Delete(ctx context.Context, printerID uuid.UUID, filePath string) error {
 	client, err := s.client(ctx, printerID)
 	if err != nil {

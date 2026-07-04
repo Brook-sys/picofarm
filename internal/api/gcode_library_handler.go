@@ -5,9 +5,9 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/Brook-sys/picofarm/internal/service"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
-	"github.com/Brook-sys/picofarm/internal/service"
 )
 
 type GCodeLibraryHandler struct {
@@ -202,6 +202,25 @@ func (h *GCodeLibraryHandler) RemoveTag(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *GCodeLibraryHandler) SendToPrinter(w http.ResponseWriter, r *http.Request) {
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		respondError(w, http.StatusBadRequest, "invalid file ID")
+		return
+	}
+	var opts service.GCodeLibrarySendOptions
+	if err := json.NewDecoder(r.Body).Decode(&opts); err != nil {
+		respondError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	remotePath, err := h.service.SendToPrinter(r.Context(), id, opts)
+	if err != nil {
+		respondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	respondJSON(w, http.StatusOK, map[string]string{"remote_path": remotePath})
 }
 
 func (h *GCodeLibraryHandler) Delete(w http.ResponseWriter, r *http.Request) {

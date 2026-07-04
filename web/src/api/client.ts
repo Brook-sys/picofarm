@@ -833,6 +833,9 @@ export const gcodeLibraryApi = {
   addToQueue: (id: string, data?: { assigned_spool_id?: string; project_id?: string; material_type?: string; material_color?: string; filament_name?: string; source_type?: 'library' | 'project' }) =>
     fetchApi<import('../types').GCodeQueueItem>(`/gcode-library/${id}/add-to-queue`, { method: 'POST', body: data ? JSON.stringify(data) : undefined }),
 
+  sendToPrinter: (id: string, data: { printer_id: string; remote_path?: string; start_print?: boolean }) =>
+    fetchApi<{ remote_path: string }>(`/gcode-library/${id}/send-to-printer`, { method: 'POST', body: JSON.stringify(data) }),
+
   listTags: () => fetchApi<import('../types').Tag[]>('/gcode-library/tags'),
 
   createTag: (data: { name: string; color?: string }) =>

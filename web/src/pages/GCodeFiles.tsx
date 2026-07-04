@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { FileCode, Grid3X3, Info as InfoIcon, List, Plus, Search, Upload } from 'lucide-react'
-import { fileLibraryApi, gcodeLibraryApi, slicerApi, stlLibraryApi } from '../api/client'
+import { FileCode, Grid3X3, Info as InfoIcon, List, Plus, Search, Upload, Send } from 'lucide-react'
+import { fileLibraryApi, gcodeLibraryApi, printersApi, slicerApi, stlLibraryApi } from '../api/client'
 import AppToast, { type AppToastState } from '../components/AppToast'
 import type { GCodeLibraryFile, STLLibraryFile, Tag } from '../types'
 import { cn, formatDuration } from '../lib/utils'
@@ -15,6 +15,7 @@ export default function GCodeFiles() {
   const [files, setFiles] = useState<GCodeLibraryFile[]>([])
   const [stlFiles, setSTLFiles] = useState<STLLibraryFile[]>([])
   const [tags, setTags] = useState<Tag[]>([])
+  const [printers, setPrinters] = useState<import('../types').Printer[]>([])
   const [tagFilter, setTagFilter] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -38,6 +39,7 @@ export default function GCodeFiles() {
   const [busy, setBusy] = useState('')
   const [confirmDelete, setConfirmDelete] = useState('')
   const [viewingFile, setViewingFile] = useState<GCodeLibraryFile | null>(null)
+  const [sendingFile, setSendingFile] = useState<GCodeLibraryFile | null>(null)
   const [viewingSTL, setViewingSTL] = useState<STLLibraryFile | null>(null)
   const [slicingSTL, setSlicingSTL] = useState<STLLibraryFile | null>(null)
   const [toast, setToast] = useState<AppToastState | null>(null)
@@ -76,6 +78,7 @@ export default function GCodeFiles() {
   }
 
   useEffect(() => { loadTags() }, [])
+  useEffect(() => { printersApi.list().then(setPrinters).catch(() => setPrinters([])) }, [])
   useEffect(() => { loadFiles() }, [])
 
   const allGCodeFiles = useMemo(() => [...files, ...stlFiles.flatMap(file => file.gcodes || [])], [files, stlFiles])
@@ -250,6 +253,20 @@ export default function GCodeFiles() {
       showToast({ title: 'Added to queue', message: 'G-code is ready in the print queue.', tone: 'success' })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to add to queue')
+    } finally {
+      setBusy('')
+    }
+  }
+
+  const sendToPrinter = async (file: GCodeLibraryFile, printerId: string, remotePath: string, startPrint: boolean) => {
+    setBusy(file.id)
+    setError('')
+    try {
+      const res = await gcodeLibraryApi.sendToPrinter(file.id, { printer_id: printerId, remote_path: remotePath, start_print: startPrint })
+      setSendingFile(null)
+      showToast({ title: startPrint ? 'Print started' : 'Sent to printer', message: `Remote file: ${res.remote_path}`, tone: 'success' })
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to send to printer')
     } finally {
       setBusy('')
     }
@@ -480,6 +497,7 @@ export default function GCodeFiles() {
       {error && <div className="mb-4 rounded-lg border border-red-500/20 bg-red-500/10 text-red-400 px-4 py-3 text-sm">{error}</div>}
       {toast && <AppToast toast={toast} onClose={() => setToast(null)} />}
       {viewingFile && <FileDetailsModal file={viewingFile} tags={tags} onCreateTag={createTag} onAddTag={addTagToFile} onRemoveTag={removeTagFromFile} onClose={() => setViewingFile(null)} />}
+      {sendingFile && <SendToPrinterModal file={sendingFile} printers={printers} busy={busy === sendingFile.id} onClose={() => setSendingFile(null)} onSend={(printerId, remotePath, startPrint) => sendToPrinter(sendingFile, printerId, remotePath, startPrint)} />}
       {viewingSTL && <STLDetailsModal file={viewingSTL} tags={tags} onCreateTag={createTag} onAddTag={addTagToSTL} onRemoveTag={removeTagFromSTL} onClose={() => setViewingSTL(null)} onRetryThumbnail={() => retrySTLThumbnail(viewingSTL)} onSlice={() => setSlicingSTL(viewingSTL)} />}
       {slicingSTL && <SliceSTLModal file={slicingSTL} onClose={() => setSlicingSTL(null)} onDone={() => { setSlicingSTL(null); loadFiles() }} />}
 
@@ -499,7 +517,7 @@ export default function GCodeFiles() {
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
               {libraryItems.map(item => item.type === 'stl'
                 ? <STLFileCard key={`stl-${item.file.id}`} file={item.file} busy={busy === item.file.id} confirmDelete={confirmDelete === item.file.id} onRename={(name) => renameSTLFile(item.file, name)} onDelete={() => deleteSTLFile(item.file.id)} onDropGCode={(gcodeId) => setGCodeParent(gcodeId, item.file.id)} onUploadGCode={(gcodes) => uploadFiles(gcodes, 'gcode', item.file.id)} onViewGCode={setViewingFile} onRenameGCode={renameFile} onAddGCode={addToQueue} onUnlinkGCode={(gcodeId) => setGCodeParent(gcodeId, null)} onMakeDefaultGCode={makeDefaultGCode} onRetryThumbnail={() => retrySTLThumbnail(item.file)} onViewSTL={() => setViewingSTL(item.file)} onSlice={() => setSlicingSTL(item.file)} isGCodeMatch={(gcode) => hasActiveGCodeFilter && gcodeMatchesFilters(gcode)} />
-                : <FileCard key={`gcode-${item.file.id}`} file={item.file} busy={busy === item.file.id} confirmDelete={confirmDelete === item.file.id} onView={() => setViewingFile(item.file)} onRename={(name) => renameFile(item.file, name)} onAdd={() => addToQueue(item.file.id)} onDelete={() => deleteFile(item.file.id)} />)}
+                : <FileCard key={`gcode-${item.file.id}`} file={item.file} busy={busy === item.file.id} confirmDelete={confirmDelete === item.file.id} onView={() => setViewingFile(item.file)} onRename={(name) => renameFile(item.file, name)} onAdd={() => addToQueue(item.file.id)} onSend={() => setSendingFile(item.file)} onDelete={() => deleteFile(item.file.id)} />)}
             </div>
           ) : (
             <div className="card overflow-hidden">
@@ -509,9 +527,9 @@ export default function GCodeFiles() {
               {libraryItems.map(item => item.type === 'stl'
                 ? <div key={`stl-group-${item.file.id}`}>
                     <STLFileRow file={item.file} busy={busy === item.file.id} confirmDelete={confirmDelete === item.file.id} onView={() => setViewingSTL(item.file)} onRename={(name) => renameSTLFile(item.file, name)} onDelete={() => deleteSTLFile(item.file.id)} onRetryThumbnail={() => retrySTLThumbnail(item.file)} onDropGCode={(gcodeId) => setGCodeParent(gcodeId, item.file.id)} onSlice={() => setSlicingSTL(item.file)} />
-                    {(item.file.gcodes || []).map(gcode => <FileRow key={`linked-gcode-${gcode.id}`} file={gcode} busy={busy === gcode.id} confirmDelete={confirmDelete === gcode.id} indented matched={hasActiveGCodeFilter && gcodeMatchesFilters(gcode)} parentName={item.file.display_name} onView={() => setViewingFile(gcode)} onRename={(name) => renameFile(gcode, name)} onAdd={() => addToQueue(gcode.id)} onDelete={() => deleteFile(gcode.id)} />)}
+                    {(item.file.gcodes || []).map(gcode => <FileRow key={`linked-gcode-${gcode.id}`} file={gcode} busy={busy === gcode.id} confirmDelete={confirmDelete === gcode.id} indented matched={hasActiveGCodeFilter && gcodeMatchesFilters(gcode)} parentName={item.file.display_name} onView={() => setViewingFile(gcode)} onRename={(name) => renameFile(gcode, name)} onAdd={() => addToQueue(gcode.id)} onSend={() => setSendingFile(gcode)} onDelete={() => deleteFile(gcode.id)} />)}
                   </div>
-                : <FileRow key={`gcode-${item.file.id}`} file={item.file} busy={busy === item.file.id} confirmDelete={confirmDelete === item.file.id} matched={hasActiveGCodeFilter} onView={() => setViewingFile(item.file)} onRename={(name) => renameFile(item.file, name)} onAdd={() => addToQueue(item.file.id)} onDelete={() => deleteFile(item.file.id)} />)}
+                : <FileRow key={`gcode-${item.file.id}`} file={item.file} busy={busy === item.file.id} confirmDelete={confirmDelete === item.file.id} matched={hasActiveGCodeFilter} onView={() => setViewingFile(item.file)} onRename={(name) => renameFile(item.file, name)} onAdd={() => addToQueue(item.file.id)} onSend={() => setSendingFile(item.file)} onDelete={() => deleteFile(item.file.id)} />)}
             </div>
           )}
         </div>
@@ -716,6 +734,54 @@ function TagChips({ tags, limit = 3 }: { tags?: Tag[]; limit?: number }) {
   )
 }
 
+function SendToPrinterModal({ file, printers, busy, onClose, onSend }: { file: GCodeLibraryFile; printers: import('../types').Printer[]; busy: boolean; onClose: () => void; onSend: (printerId: string, remotePath: string, startPrint: boolean) => void }) {
+  const moonrakerPrinters = printers.filter(printer => printer.connection_type === 'moonraker')
+  const [printerId, setPrinterId] = useState(moonrakerPrinters[0]?.id || '')
+  const [remotePath, setRemotePath] = useState('')
+  const [startPrint, setStartPrint] = useState(false)
+
+  return (
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
+      <div className="card p-6 w-full max-w-lg">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-xl font-semibold text-surface-100">Send to Printer</h2>
+          <button onClick={onClose} className="btn btn-ghost text-sm">Close</button>
+        </div>
+        <div className="space-y-4">
+          <div>
+            <div className="text-sm font-medium text-surface-100">{file.display_name}</div>
+            <div className="text-xs text-surface-500">{file.file_name}</div>
+          </div>
+          <label className="block">
+            <span className="text-xs text-surface-500 mb-1 block">Moonraker printer</span>
+            <select className="input" value={printerId} onChange={e => setPrinterId(e.target.value)}>
+              {moonrakerPrinters.length === 0 && <option value="">No Moonraker printers available</option>}
+              {moonrakerPrinters.map(printer => <option key={printer.id} value={printer.id}>{printer.name}</option>)}
+            </select>
+          </label>
+          <label className="block">
+            <span className="text-xs text-surface-500 mb-1 block">Remote folder under gcodes</span>
+            <input className="input" value={remotePath} onChange={e => setRemotePath(e.target.value)} placeholder="Optional, e.g. projects/calibration" />
+          </label>
+          <label className="flex items-center gap-3 rounded-lg border border-surface-800 bg-surface-900/70 p-3">
+            <input type="checkbox" checked={startPrint} onChange={e => setStartPrint(e.target.checked)} />
+            <span>
+              <span className="block text-sm text-surface-200">Start print immediately</span>
+              <span className="text-xs text-surface-500">Uploads the file and then starts it on the printer.</span>
+            </span>
+          </label>
+          <div className="flex justify-end gap-2">
+            <button onClick={onClose} className="btn btn-secondary">Cancel</button>
+            <button disabled={!printerId || busy} onClick={() => onSend(printerId, remotePath, startPrint)} className="btn btn-primary">
+              <Send className="h-4 w-4 mr-2" />{busy ? 'Sending...' : startPrint ? 'Send & Print' : 'Send'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function FileTagManager({ itemId, currentTags, tags, onCreateTag, onAddTag, onRemoveTag }: { itemId: string; currentTags?: Tag[]; tags: Tag[]; onCreateTag: (name: string, color?: string) => void; onAddTag: (fileId: string, tagId: string) => void; onRemoveTag: (fileId: string, tagId: string) => void }) {
   const [query, setQuery] = useState('')
   const [color, setColor] = useState('#1883FF')
@@ -783,7 +849,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   return <label className="block"><span className="text-[10px] uppercase tracking-wide text-surface-500 mb-1 block">{label}</span>{children}</label>
 }
 
-function FileCard({ file, busy, confirmDelete, onView, onRename, onAdd, onDelete }: { file: GCodeLibraryFile; busy: boolean; confirmDelete: boolean; onView: () => void; onRename: (name: string) => void; onAdd: () => void; onDelete: () => void }) {
+function FileCard({ file, busy, confirmDelete, onView, onRename, onAdd, onSend, onDelete }: { file: GCodeLibraryFile; busy: boolean; confirmDelete: boolean; onView: () => void; onRename: (name: string) => void; onAdd: () => void; onSend: () => void; onDelete: () => void }) {
   const [editingName, setEditingName] = useState(false)
   const [name, setName] = useState(file.display_name)
   const saveName = () => {
@@ -818,6 +884,7 @@ function FileCard({ file, busy, confirmDelete, onView, onRename, onAdd, onDelete
       <div className="flex gap-2">
         <button onClick={onView} className="btn btn-secondary text-sm flex-1" title="Details"><InfoIcon className="h-4 w-4" /></button>
         <button onClick={onAdd} disabled={busy} className="btn btn-primary text-sm flex-1"><Plus className="h-4 w-4 mr-2" />{busy ? 'Adding...' : 'Add to Queue'}</button>
+        <button onClick={onSend} disabled={busy} className="btn btn-secondary text-sm"><Send className="h-4 w-4" /></button>
         {confirmDelete ? (
           <button onClick={onDelete} disabled={busy} className="btn btn-secondary text-sm text-red-400">Confirm</button>
         ) : (
@@ -861,7 +928,7 @@ function STLFileRow({ file, busy, confirmDelete, onView, onRename, onDelete, onR
   )
 }
 
-function FileRow({ file, busy, confirmDelete, indented = false, matched = false, parentName, onView, onRename, onAdd, onDelete }: { file: GCodeLibraryFile; busy: boolean; confirmDelete: boolean; indented?: boolean; matched?: boolean; parentName?: string; onView: () => void; onRename: (name: string) => void; onAdd: () => void; onDelete: () => void }) {
+function FileRow({ file, busy, confirmDelete, indented = false, matched = false, parentName, onView, onRename, onAdd, onSend, onDelete }: { file: GCodeLibraryFile; busy: boolean; confirmDelete: boolean; indented?: boolean; matched?: boolean; parentName?: string; onView: () => void; onRename: (name: string) => void; onAdd: () => void; onSend: () => void; onDelete: () => void }) {
   const [editingName, setEditingName] = useState(false)
   const [name, setName] = useState(file.display_name)
   const saveName = () => {
@@ -892,6 +959,7 @@ function FileRow({ file, busy, confirmDelete, indented = false, matched = false,
       <div className="flex gap-2 justify-end">
         <button onClick={onView} className="btn btn-secondary text-xs" title="Details"><InfoIcon className="h-3.5 w-3.5" /></button>
         <button onClick={onAdd} disabled={busy} className="btn btn-primary text-xs">{busy ? 'Adding...' : 'Queue'}</button>
+        <button onClick={onSend} disabled={busy} className="btn btn-secondary text-xs"><Send className="h-3.5 w-3.5" /></button>
         <button onClick={onDelete} disabled={busy} className={cn('btn text-xs', confirmDelete ? 'btn-secondary text-red-400' : 'btn-ghost text-red-400')}>{confirmDelete ? 'Confirm' : 'Delete'}</button>
       </div>
     </div>

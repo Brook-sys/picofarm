@@ -128,6 +128,7 @@ func NewServices(repos *repository.Repositories, store storage.Storage, printerM
 	services.ModelImport = NewModelImportService(services.Projects, services.Parts, services.Designs, services.STLLibrary, services.Files, repos.Tags)
 	services.Thingiverse = NewThingiverseImportService(services.Settings, services.STLLibrary)
 	services.PrinterFiles = NewPrinterFileService(repos.Printers)
+	services.GCodeLibrary.SetPrinterFileService(services.PrinterFiles)
 
 	// Wire job completion callback to auto-complete checklist items
 	services.PrintJobs.SetOnJobCompleted(services.Tasks.HandleJobCompleted)

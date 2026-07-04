@@ -33,6 +33,12 @@ type GCodeLibraryListResponse struct {
 	PageSize int                      `json:"page_size"`
 }
 
+type GCodeLibrarySendOptions struct {
+	PrinterID  uuid.UUID `json:"printer_id"`
+	RemotePath string    `json:"remote_path"`
+	StartPrint bool      `json:"start_print"`
+}
+
 type GCodeLibraryUpdateOptions struct {
 	DisplayName      string     `json:"display_name"`
 	ParentSTLID      *uuid.UUID `json:"parent_stl_id"`
@@ -48,15 +54,20 @@ type GCodeLibraryUpdateOptions struct {
 }
 
 type GCodeLibraryService struct {
-	repo    *repository.GCodeLibraryRepository
-	stlRepo *repository.STLLibraryRepository
-	files   *repository.FileRepository
-	queue   *QueueService
-	storage storage.Storage
+	repo         *repository.GCodeLibraryRepository
+	stlRepo      *repository.STLLibraryRepository
+	files        *repository.FileRepository
+	queue        *QueueService
+	printerFiles *PrinterFileService
+	storage      storage.Storage
 }
 
 func NewGCodeLibraryService(repos *repository.Repositories, store storage.Storage, queue *QueueService) *GCodeLibraryService {
 	return &GCodeLibraryService{repo: repos.GCodeLibrary, stlRepo: repos.STLLibrary, files: repos.Files, queue: queue, storage: store}
+}
+
+func (s *GCodeLibraryService) SetPrinterFileService(printerFiles *PrinterFileService) {
+	s.printerFiles = printerFiles
 }
 
 func (s *GCodeLibraryService) List(ctx context.Context, opts GCodeLibraryListOptions) (*GCodeLibraryListResponse, error) {
@@ -214,6 +225,45 @@ func (s *GCodeLibraryService) SetDefaultForSTL(ctx context.Context, id uuid.UUID
 
 func (s *GCodeLibraryService) repoSTL(ctx context.Context, id uuid.UUID) (*model.STLLibraryFile, error) {
 	return s.stlRepo.GetByID(ctx, id)
+}
+
+func (s *GCodeLibraryService) SendToPrinter(ctx context.Context, id uuid.UUID, opts GCodeLibrarySendOptions) (string, error) {
+	if opts.PrinterID == uuid.Nil {
+		return "", fmt.Errorf("printer ID is required")
+	}
+	if s.printerFiles == nil {
+		return "", fmt.Errorf("printer file service is unavailable")
+	}
+	entry, err := s.repo.GetByID(ctx, id)
+	if err != nil {
+		return "", err
+	}
+	if entry == nil {
+		return "", fmt.Errorf("gcode file not found")
+	}
+	file, err := s.files.GetByID(ctx, entry.FileID)
+	if err != nil || file == nil {
+		return "", fmt.Errorf("file not found")
+	}
+	reader, err := s.storage.Get(file.StoragePath)
+	if err != nil {
+		return "", err
+	}
+	defer reader.Close()
+	remoteDir := cleanPrinterPath(opts.RemotePath)
+	if err := s.printerFiles.UploadReader(ctx, opts.PrinterID, remoteDir, file.OriginalName, reader); err != nil {
+		return "", err
+	}
+	remotePath := file.OriginalName
+	if remoteDir != "" {
+		remotePath = remoteDir + "/" + file.OriginalName
+	}
+	if opts.StartPrint {
+		if err := s.printerFiles.StartPrint(ctx, opts.PrinterID, remotePath); err != nil {
+			return remotePath, err
+		}
+	}
+	return remotePath, nil
 }
 
 func (s *GCodeLibraryService) Delete(ctx context.Context, id uuid.UUID) error {
