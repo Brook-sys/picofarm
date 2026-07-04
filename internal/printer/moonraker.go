@@ -391,9 +391,8 @@ func (c *MoonrakerClient) CreateDirectory(ctx context.Context, dirPath string) e
 func (c *MoonrakerClient) RenameFile(ctx context.Context, oldPath string, newPath string) error {
 	_ = ctx
 	payload, err := json.Marshal(map[string]string{
-		"root":   "gcodes",
-		"source": strings.TrimPrefix(oldPath, "/"),
-		"dest":   strings.TrimPrefix(newPath, "/"),
+		"source": "gcodes/" + strings.TrimPrefix(oldPath, "/"),
+		"dest":   "gcodes/" + strings.TrimPrefix(newPath, "/"),
 	})
 	if err != nil {
 		return err
