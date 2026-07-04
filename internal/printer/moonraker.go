@@ -378,14 +378,64 @@ func (c *MoonrakerClient) UploadFile(ctx context.Context, dir string, filename s
 
 func (c *MoonrakerClient) DeleteFile(ctx context.Context, filePath string) error {
 	_ = ctx
-	_, err := c.doRequest("DELETE", "/server/files/gcodes/"+url.PathEscape(strings.TrimPrefix(filePath, "/")), nil)
+	_, err := c.doRequest("DELETE", "/server/files/gcodes/"+escapeMoonrakerPath(filePath), nil)
 	return err
+}
+
+func (c *MoonrakerClient) CreateDirectory(ctx context.Context, dirPath string) error {
+	_ = ctx
+	_, err := c.doRequest("POST", "/server/files/directory?root=gcodes&path="+url.QueryEscape(strings.TrimPrefix(dirPath, "/")), nil)
+	return err
+}
+
+func (c *MoonrakerClient) RenameFile(ctx context.Context, oldPath string, newPath string) error {
+	_ = ctx
+	payload, err := json.Marshal(map[string]string{
+		"root":   "gcodes",
+		"source": strings.TrimPrefix(oldPath, "/"),
+		"dest":   strings.TrimPrefix(newPath, "/"),
+	})
+	if err != nil {
+		return err
+	}
+	_, err = c.doRequest("POST", "/server/files/move", payload)
+	return err
+}
+
+func (c *MoonrakerClient) MoveFile(ctx context.Context, sourcePath string, destPath string) error {
+	return c.RenameFile(ctx, sourcePath, destPath)
+}
+
+func (c *MoonrakerClient) DownloadFile(ctx context.Context, filePath string) (io.ReadCloser, error) {
+	_ = ctx
+	req, err := http.NewRequest("GET", c.baseURL+"/server/files/gcodes/"+escapeMoonrakerPath(filePath), nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode >= 400 {
+		defer resp.Body.Close()
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("download failed: %d %s", resp.StatusCode, strings.TrimSpace(string(bodyBytes)))
+	}
+	return resp.Body, nil
 }
 
 func (c *MoonrakerClient) StartPrint(ctx context.Context, filePath string) error {
 	_ = ctx
 	_, err := c.doRequest("POST", "/printer/print/start?filename="+url.QueryEscape(strings.TrimPrefix(filePath, "/")), nil)
 	return err
+}
+
+func escapeMoonrakerPath(filePath string) string {
+	parts := strings.Split(strings.TrimPrefix(filePath, "/"), "/")
+	for i, part := range parts {
+		parts[i] = url.PathEscape(part)
+	}
+	return strings.Join(parts, "/")
 }
 
 type moonrakerFileEntry struct {

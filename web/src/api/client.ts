@@ -526,6 +526,18 @@ export const printersApi = {
   deleteFile: (id: string, path: string) =>
     fetchApi<void>(`/printers/${id}/files`, { method: 'DELETE', body: JSON.stringify({ path }) }),
 
+  createDirectory: (id: string, path: string) =>
+    fetchApi<void>(`/printers/${id}/files/mkdir`, { method: 'POST', body: JSON.stringify({ path }) }),
+
+  renameFile: (id: string, path: string, newPath: string) =>
+    fetchApi<void>(`/printers/${id}/files/rename`, { method: 'POST', body: JSON.stringify({ path, new_path: newPath }) }),
+
+  moveFile: (id: string, path: string, newPath: string) =>
+    fetchApi<void>(`/printers/${id}/files/move`, { method: 'POST', body: JSON.stringify({ path, new_path: newPath }) }),
+
+  downloadFileUrl: (id: string, path: string) =>
+    `${API_URL}/api/printers/${id}/files/download?path=${encodeURIComponent(path)}`,
+
   printFile: (id: string, path: string) =>
     fetchApi<void>(`/printers/${id}/files/print`, { method: 'POST', body: JSON.stringify({ path }) }),
 

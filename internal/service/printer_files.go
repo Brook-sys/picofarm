@@ -51,6 +51,38 @@ func (s *PrinterFileService) Delete(ctx context.Context, printerID uuid.UUID, fi
 	return client.DeleteFile(ctx, cleanPrinterPath(filePath))
 }
 
+func (s *PrinterFileService) CreateDirectory(ctx context.Context, printerID uuid.UUID, dirPath string) error {
+	client, err := s.client(ctx, printerID)
+	if err != nil {
+		return err
+	}
+	return client.CreateDirectory(ctx, cleanPrinterPath(dirPath))
+}
+
+func (s *PrinterFileService) Rename(ctx context.Context, printerID uuid.UUID, oldPath string, newPath string) error {
+	client, err := s.client(ctx, printerID)
+	if err != nil {
+		return err
+	}
+	return client.RenameFile(ctx, cleanPrinterPath(oldPath), cleanPrinterPath(newPath))
+}
+
+func (s *PrinterFileService) Move(ctx context.Context, printerID uuid.UUID, sourcePath string, destPath string) error {
+	client, err := s.client(ctx, printerID)
+	if err != nil {
+		return err
+	}
+	return client.MoveFile(ctx, cleanPrinterPath(sourcePath), cleanPrinterPath(destPath))
+}
+
+func (s *PrinterFileService) Download(ctx context.Context, printerID uuid.UUID, filePath string) (io.ReadCloser, error) {
+	client, err := s.client(ctx, printerID)
+	if err != nil {
+		return nil, err
+	}
+	return client.DownloadFile(ctx, cleanPrinterPath(filePath))
+}
+
 func (s *PrinterFileService) StartPrint(ctx context.Context, printerID uuid.UUID, filePath string) error {
 	client, err := s.client(ctx, printerID)
 	if err != nil {
