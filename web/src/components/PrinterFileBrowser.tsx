@@ -125,7 +125,7 @@ export function PrinterFileBrowser({ printerId, connectionType }: PrinterFileBro
   }
 
   return (
-    <div className="flex flex-col h-full bg-surface-900 rounded-lg border border-surface-800 overflow-hidden">
+    <div className="flex h-full min-h-[620px] flex-col overflow-hidden rounded-xl border border-surface-800 bg-surface-900 shadow-inner shadow-black/20">
       <div className="flex flex-wrap items-center justify-between gap-3 p-3 border-b border-surface-800 bg-surface-800/30">
         <div className="flex items-center gap-2 min-w-0">
           <button disabled={!currentPath} onClick={navigateUp} className="p-1.5 rounded-md hover:bg-surface-700 disabled:opacity-30">
