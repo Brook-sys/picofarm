@@ -91,6 +91,22 @@ func (s *PrinterFileService) Download(ctx context.Context, printerID uuid.UUID, 
 	return client.DownloadFile(ctx, cleanPrinterPath(filePath))
 }
 
+func (s *PrinterFileService) Metadata(ctx context.Context, printerID uuid.UUID, filePath string) (*model.PrinterFileMetadata, error) {
+	client, err := s.client(ctx, printerID)
+	if err != nil {
+		return nil, err
+	}
+	return client.GetFileMetadata(ctx, cleanPrinterPath(filePath))
+}
+
+func (s *PrinterFileService) Thumbnail(ctx context.Context, printerID uuid.UUID, thumbPath string) (io.ReadCloser, error) {
+	client, err := s.client(ctx, printerID)
+	if err != nil {
+		return nil, err
+	}
+	return client.DownloadThumbnail(ctx, cleanPrinterPath(thumbPath))
+}
+
 func (s *PrinterFileService) StartPrint(ctx context.Context, printerID uuid.UUID, filePath string) error {
 	client, err := s.client(ctx, printerID)
 	if err != nil {

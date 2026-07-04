@@ -15,5 +15,7 @@ type FileClient interface {
 	RenameFile(ctx context.Context, oldPath string, newPath string) error
 	MoveFile(ctx context.Context, sourcePath string, destPath string) error
 	DownloadFile(ctx context.Context, path string) (io.ReadCloser, error)
+	GetFileMetadata(ctx context.Context, path string) (*model.PrinterFileMetadata, error)
+	DownloadThumbnail(ctx context.Context, path string) (io.ReadCloser, error)
 	StartPrint(ctx context.Context, path string) error
 }

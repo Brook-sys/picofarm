@@ -208,6 +208,23 @@ export interface PrinterFileList {
   files: PrinterFileEntry[]
 }
 
+export interface PrinterFileMetadata {
+  path: string
+  size?: number
+  modified?: number
+  estimated_time?: number
+  filament_total?: number
+  layer_height?: number
+  object_height?: number
+  first_layer_height?: number
+  first_layer_bed_temp?: number
+  first_layer_extr_temp?: number
+  slicer?: string
+  slicer_version?: string
+  thumbnail_relative_path?: string
+  thumbnails?: string[]
+}
+
 export interface Printer {
   id: string
   name: string

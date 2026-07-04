@@ -479,6 +479,23 @@ type PrinterFileList struct {
 	Files []PrinterFileEntry `json:"files"`
 }
 
+type PrinterFileMetadata struct {
+	Path               string   `json:"path"`
+	Size               int64    `json:"size,omitempty"`
+	Modified           int64    `json:"modified,omitempty"`
+	EstimatedTime      float64  `json:"estimated_time,omitempty"`
+	FilamentTotal      float64  `json:"filament_total,omitempty"`
+	LayerHeight        float64  `json:"layer_height,omitempty"`
+	ObjectHeight       float64  `json:"object_height,omitempty"`
+	FirstLayerHeight   float64  `json:"first_layer_height,omitempty"`
+	FirstLayerBedTemp  float64  `json:"first_layer_bed_temp,omitempty"`
+	FirstLayerExtrTemp float64  `json:"first_layer_extr_temp,omitempty"`
+	Slicer             string   `json:"slicer,omitempty"`
+	SlicerVersion      string   `json:"slicer_version,omitempty"`
+	ThumbnailRelative  string   `json:"thumbnail_relative_path,omitempty"`
+	Thumbnails         []string `json:"thumbnails,omitempty"`
+}
+
 type NotificationChannel struct {
 	ID          uuid.UUID      `json:"id"`
 	Name        string         `json:"name"`

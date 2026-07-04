@@ -424,6 +424,64 @@ func (c *MoonrakerClient) DownloadFile(ctx context.Context, filePath string) (io
 	return resp.Body, nil
 }
 
+func (c *MoonrakerClient) GetFileMetadata(ctx context.Context, filePath string) (*model.PrinterFileMetadata, error) {
+	_ = ctx
+	resp, err := c.doRequest("GET", "/server/files/metadata?filename="+url.QueryEscape(strings.TrimPrefix(filePath, "/")), nil)
+	if err != nil {
+		return nil, err
+	}
+	var payload struct {
+		Result struct {
+			Size               int64   `json:"size"`
+			Modified           float64 `json:"modified"`
+			EstimatedTime      float64 `json:"estimated_time"`
+			FilamentTotal      float64 `json:"filament_total"`
+			LayerHeight        float64 `json:"layer_height"`
+			ObjectHeight       float64 `json:"object_height"`
+			FirstLayerHeight   float64 `json:"first_layer_height"`
+			FirstLayerBedTemp  float64 `json:"first_layer_bed_temp"`
+			FirstLayerExtrTemp float64 `json:"first_layer_extr_temp"`
+			Slicer             string  `json:"slicer"`
+			SlicerVersion      string  `json:"slicer_version"`
+			Thumbnails         []struct {
+				RelativePath string `json:"relative_path"`
+			} `json:"thumbnails"`
+		} `json:"result"`
+	}
+	if err := json.Unmarshal(resp, &payload); err != nil {
+		return nil, err
+	}
+	metadata := &model.PrinterFileMetadata{Path: strings.TrimPrefix(filePath, "/"), Size: payload.Result.Size, Modified: int64(payload.Result.Modified), EstimatedTime: payload.Result.EstimatedTime, FilamentTotal: payload.Result.FilamentTotal, LayerHeight: payload.Result.LayerHeight, ObjectHeight: payload.Result.ObjectHeight, FirstLayerHeight: payload.Result.FirstLayerHeight, FirstLayerBedTemp: payload.Result.FirstLayerBedTemp, FirstLayerExtrTemp: payload.Result.FirstLayerExtrTemp, Slicer: payload.Result.Slicer, SlicerVersion: payload.Result.SlicerVersion}
+	for _, thumb := range payload.Result.Thumbnails {
+		if thumb.RelativePath == "" {
+			continue
+		}
+		metadata.Thumbnails = append(metadata.Thumbnails, thumb.RelativePath)
+	}
+	if len(metadata.Thumbnails) > 0 {
+		metadata.ThumbnailRelative = metadata.Thumbnails[len(metadata.Thumbnails)-1]
+	}
+	return metadata, nil
+}
+
+func (c *MoonrakerClient) DownloadThumbnail(ctx context.Context, thumbPath string) (io.ReadCloser, error) {
+	_ = ctx
+	req, err := http.NewRequest("GET", c.baseURL+"/server/files/gcodes/"+escapeMoonrakerPath(thumbPath), nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode >= 400 {
+		defer resp.Body.Close()
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("thumbnail failed: %d %s", resp.StatusCode, strings.TrimSpace(string(bodyBytes)))
+	}
+	return resp.Body, nil
+}
+
 func (c *MoonrakerClient) StartPrint(ctx context.Context, filePath string) error {
 	_ = ctx
 	_, err := c.doRequest("POST", "/printer/print/start?filename="+url.QueryEscape(strings.TrimPrefix(filePath, "/")), nil)

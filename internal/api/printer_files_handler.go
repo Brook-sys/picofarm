@@ -115,6 +115,46 @@ func (h *PrinterFileHandler) Move(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+func (h *PrinterFileHandler) Metadata(w http.ResponseWriter, r *http.Request) {
+	printerID, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		respondError(w, http.StatusBadRequest, "invalid printer ID")
+		return
+	}
+	filePath := r.URL.Query().Get("path")
+	if filePath == "" {
+		respondError(w, http.StatusBadRequest, "path is required")
+		return
+	}
+	metadata, err := h.service.Metadata(r.Context(), printerID, filePath)
+	if err != nil {
+		respondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	respondJSON(w, http.StatusOK, metadata)
+}
+
+func (h *PrinterFileHandler) Thumbnail(w http.ResponseWriter, r *http.Request) {
+	printerID, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		respondError(w, http.StatusBadRequest, "invalid printer ID")
+		return
+	}
+	thumbPath := r.URL.Query().Get("path")
+	if thumbPath == "" {
+		respondError(w, http.StatusBadRequest, "path is required")
+		return
+	}
+	body, err := h.service.Thumbnail(r.Context(), printerID, thumbPath)
+	if err != nil {
+		respondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	defer body.Close()
+	w.Header().Set("Content-Type", "image/png")
+	_, _ = io.Copy(w, body)
+}
+
 func (h *PrinterFileHandler) Download(w http.ResponseWriter, r *http.Request) {
 	printerID, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {

@@ -218,6 +218,8 @@ func NewRouter(services *service.Services, hub *realtime.Hub) http.Handler {
 				r.Post("/macro", printerHandler.RunMacro)
 				r.Get("/files", printerFilesHandler.List)
 				r.Post("/files/upload", printerFilesHandler.Upload)
+				r.Get("/files/metadata", printerFilesHandler.Metadata)
+				r.Get("/files/thumbnail", printerFilesHandler.Thumbnail)
 				r.Get("/files/download", printerFilesHandler.Download)
 				r.Delete("/files", printerFilesHandler.Delete)
 				r.Post("/files/mkdir", printerFilesHandler.CreateDirectory)

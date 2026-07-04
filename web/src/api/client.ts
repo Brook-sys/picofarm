@@ -538,6 +538,12 @@ export const printersApi = {
   downloadFileUrl: (id: string, path: string) =>
     `${API_URL}/api/printers/${id}/files/download?path=${encodeURIComponent(path)}`,
 
+  getFileMetadata: (id: string, path: string) =>
+    fetchApi<import('../types').PrinterFileMetadata>(`/printers/${id}/files/metadata?path=${encodeURIComponent(path)}`),
+
+  thumbnailUrl: (id: string, path: string) =>
+    `${API_URL}/api/printers/${id}/files/thumbnail?path=${encodeURIComponent(path)}`,
+
   printFile: (id: string, path: string) =>
     fetchApi<void>(`/printers/${id}/files/print`, { method: 'POST', body: JSON.stringify({ path }) }),
 
