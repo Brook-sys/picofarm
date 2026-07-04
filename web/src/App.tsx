@@ -8,6 +8,7 @@ import { Tasks } from './pages/Tasks'
 import { TaskDetail } from './pages/TaskDetail'
 import Printers from './pages/Printers'
 import PrinterDetail from './pages/PrinterDetail'
+import PrinterFiles from './pages/PrinterFiles'
 import Materials from './pages/Materials'
 import Expenses from './pages/Expenses'
 import Sales from './pages/Sales'
@@ -66,6 +67,7 @@ function App() {
         <Route path="/templates/*" element={<Navigate to="/projects" replace />} />
         <Route path="/printers" element={<Printers />} />
         <Route path="/printers/:id" element={<PrinterDetail />} />
+        <Route path="/printer-files" element={<PrinterFiles />} />
         <Route path="/cameras" element={<Cameras />} />
         <Route path="/archives" element={<Archives />} />
         <Route path="/materials" element={<Materials />} />

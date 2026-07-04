@@ -20,6 +20,7 @@ import {
   Archive,
   ListChecks,
   FileCode,
+  HardDrive,
   Bell,
 } from 'lucide-react'
 import { cn } from '../lib/utils'
@@ -32,6 +33,7 @@ const navigation = [
     items: [
       { name: 'Queue', href: '/queue', icon: ListChecks },
       { name: 'Files', href: '/files', icon: FileCode },
+      { name: 'Printer Files', href: '/printer-files', icon: HardDrive },
       { name: 'Slicer', href: '/slicer', icon: Settings },
       { name: 'Notifications', href: '/notifications', icon: Bell },
       { name: 'Cameras', href: '/cameras', icon: Camera },

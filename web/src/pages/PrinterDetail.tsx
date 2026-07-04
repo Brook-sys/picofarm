@@ -7,7 +7,6 @@ import { printJobsApi, printersApi, queueApi } from '../api/client'
 import { cn, getStatusBadge, formatDuration, formatRelativeTime } from '../lib/utils'
 import { ExpandableJobEvents } from '../components/JobEventTimeline'
 import AutoDispatchSettings from '../components/AutoDispatchSettings'
-import { PrinterFileBrowser } from '../components/PrinterFileBrowser'
 import type { PrintJob, PrinterUtilization, PrinterROI, PrinterHealth, PrinterMacro, QueueItem } from '../types'
 
 const SPEED_LABELS: Record<number, string> = {
@@ -368,15 +367,6 @@ export default function PrinterDetail() {
 
         {/* AUTO-DISPATCH SETTINGS */}
         <AutoDispatchSettings printerId={printer.id} />
-
-        {/* PRINTER FILES */}
-        <div className="card p-5">
-          <h2 className="text-sm font-semibold text-surface-400 uppercase tracking-wider mb-4 flex items-center gap-2">
-            <Box className="h-4 w-4" />
-            Arquivos da Impressora
-          </h2>
-          <PrinterFileBrowser printerId={printer.id} connectionType={printer.connection_type} />
-        </div>
 
         {/* CONTROLS */}
         <div className="card p-5">

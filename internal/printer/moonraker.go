@@ -498,23 +498,35 @@ func escapeMoonrakerPath(filePath string) string {
 
 type moonrakerFileEntry struct {
 	Path     string  `json:"path"`
+	Filename string  `json:"filename"`
+	Dirname  string  `json:"dirname"`
 	Root     string  `json:"root"`
 	Size     int64   `json:"size"`
 	Modified float64 `json:"modified"`
 }
 
 func (e moonrakerFileEntry) toModel(entryType string) model.PrinterFileEntry {
-	name := path.Base(e.Path)
-	if e.Path == "" || e.Path == "." {
+	name := e.Filename
+	if entryType == "dir" {
+		name = e.Dirname
+	}
+	if name == "" {
+		name = path.Base(e.Path)
+	}
+	if name == "" || name == "." {
 		name = "gcodes"
 	}
+	fullPath := e.Path
+	if fullPath == "" {
+		fullPath = name
+	}
 	return model.PrinterFileEntry{
-		Path:      e.Path,
+		Path:      fullPath,
 		Name:      name,
 		Type:      entryType,
 		Size:      e.Size,
 		Modified:  int64(e.Modified),
 		Root:      e.Root,
-		Extension: strings.TrimPrefix(strings.ToLower(path.Ext(e.Path)), "."),
+		Extension: strings.TrimPrefix(strings.ToLower(path.Ext(fullPath)), "."),
 	}
 }
