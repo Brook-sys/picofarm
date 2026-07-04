@@ -9,6 +9,8 @@ export default function PrinterFiles() {
   const [printers, setPrinters] = useState<Printer[]>([])
   const [selectedPrinterId, setSelectedPrinterId] = useState('')
   const [loading, setLoading] = useState(true)
+  const [stateLoading, setStateLoading] = useState(false)
+  const [printerState, setPrinterState] = useState<import('../types').PrinterState | null>(null)
   const [error, setError] = useState('')
 
   useEffect(() => {
@@ -31,6 +33,24 @@ export default function PrinterFiles() {
   }, [])
 
   const selectedPrinter = useMemo(() => printers.find(printer => printer.id === selectedPrinterId), [printers, selectedPrinterId])
+
+  useEffect(() => {
+    if (!selectedPrinterId) {
+      setPrinterState(null)
+      return
+    }
+    let cancelled = false
+    setStateLoading(true)
+    printersApi.getState(selectedPrinterId)
+      .then(state => { if (!cancelled) setPrinterState(state) })
+      .catch(() => { if (!cancelled) setPrinterState(null) })
+      .finally(() => { if (!cancelled) setStateLoading(false) })
+    return () => { cancelled = true }
+  }, [selectedPrinterId])
+
+  const effectiveConnection = selectedPrinter?.connection_type === 'moonraker' && selectedPrinter.connection_uri && !/:\d+($|\/)/.test(selectedPrinter.connection_uri.replace(/^https?:\/\//, ''))
+    ? `${selectedPrinter.connection_uri.replace(/\/$/, '')}:7125`
+    : selectedPrinter?.connection_uri || 'Configured'
 
   return (
     <div className="mx-auto flex h-[calc(100vh-3rem)] max-w-[1600px] flex-col gap-5 px-4 py-2 sm:px-6 lg:px-8">
@@ -60,11 +80,17 @@ export default function PrinterFiles() {
         </div>
       </div>
 
+      {selectedPrinter?.connection_type === 'moonraker' && selectedPrinter.connection_uri && !/:\d+($|\/)/.test(selectedPrinter.connection_uri.replace(/^https?:\/\//, '')) && (
+        <div className="rounded-xl border border-blue-500/20 bg-blue-500/10 px-4 py-3 text-sm text-blue-200">
+          Moonraker default port is inferred automatically: <span className="font-mono">{effectiveConnection}</span>.
+        </div>
+      )}
+
       {selectedPrinter && (
         <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
           <InfoCard icon={Server} label="Protocol" value={selectedPrinter.connection_type === 'moonraker' ? 'Moonraker / Klipper' : 'OctoPrint'} />
-          <InfoCard icon={Wifi} label="Connection" value={selectedPrinter.connection_uri || 'Configured'} />
-          <InfoCard icon={Activity} label="Status" value={selectedPrinter.status || 'unknown'} status={selectedPrinter.status} />
+          <InfoCard icon={Wifi} label="Effective connection" value={effectiveConnection} />
+          <InfoCard icon={Activity} label="Live status" value={stateLoading ? 'checking...' : (printerState?.status || selectedPrinter.status || 'unknown')} status={printerState?.status || selectedPrinter.status} />
         </div>
       )}
 
