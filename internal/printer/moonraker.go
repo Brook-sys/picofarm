@@ -328,11 +328,12 @@ func (c *MoonrakerClient) ListFiles(ctx context.Context, dir string) ([]model.Pr
 		return nil, err
 	}
 	entries := make([]model.PrinterFileEntry, 0, len(payload.Result.Dirs)+len(payload.Result.Files))
+	baseDir := strings.TrimPrefix(dir, "/")
 	for _, item := range payload.Result.Dirs {
-		entries = append(entries, item.toModel("dir"))
+		entries = append(entries, item.toModel("dir", baseDir))
 	}
 	for _, item := range payload.Result.Files {
-		entries = append(entries, item.toModel("file"))
+		entries = append(entries, item.toModel("file", baseDir))
 	}
 	return entries, nil
 }
@@ -504,7 +505,7 @@ type moonrakerFileEntry struct {
 	Modified float64 `json:"modified"`
 }
 
-func (e moonrakerFileEntry) toModel(entryType string) model.PrinterFileEntry {
+func (e moonrakerFileEntry) toModel(entryType string, baseDir string) model.PrinterFileEntry {
 	name := e.Filename
 	if entryType == "dir" {
 		name = e.Dirname
@@ -518,6 +519,9 @@ func (e moonrakerFileEntry) toModel(entryType string) model.PrinterFileEntry {
 	fullPath := e.Path
 	if fullPath == "" {
 		fullPath = name
+	}
+	if fullPath != "" && baseDir != "" && !strings.HasPrefix(fullPath, baseDir+"/") && fullPath != baseDir {
+		fullPath = path.Join(baseDir, fullPath)
 	}
 	return model.PrinterFileEntry{
 		Path:      fullPath,

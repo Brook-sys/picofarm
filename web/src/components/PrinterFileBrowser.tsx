@@ -118,7 +118,11 @@ export function PrinterFileBrowser({ printerId, connectionType }: PrinterFileBro
         await moveMutation.mutateAsync({ path: file.path, newPath: joinPath(targetDir, file.name) })
       }
       setMoveRequest(null)
-      showToast({ title: 'Moved', message: `${files.length} item${files.length === 1 ? '' : 's'} moved successfully.`, tone: 'success' })
+      setSelected([])
+      setPreviewFile(null)
+      setCurrentPath(targetDir)
+      queryClient.invalidateQueries({ queryKey: ['printer-files', printerId] })
+      showToast({ title: 'Moved', message: `${files.length} item${files.length === 1 ? '' : 's'} moved to gcodes/${targetDir}.`, tone: 'success' })
     } catch (err) {
       showToast({ title: 'Move failed', message: err instanceof Error ? err.message : 'Failed to move file', tone: 'error' })
     }
