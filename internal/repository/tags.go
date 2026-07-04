@@ -32,10 +32,10 @@ func (r *TagRepository) Create(ctx context.Context, tag *model.Tag) error {
 // GetByID retrieves a tag by ID.
 func (r *TagRepository) GetByID(ctx context.Context, id uuid.UUID) (*model.Tag, error) {
 	var tag model.Tag
-	err := r.db.QueryRowContext(ctx, `
-		SELECT id, name, color, created_at
+	err := scanRow(r.db.QueryRowContext(ctx, `
+		SELECT id, name, color, created_at, updated_at
 		FROM tags WHERE id = ?
-	`, id).Scan(&tag.ID, &tag.Name, &tag.Color, &tag.CreatedAt)
+	`, id), &tag.ID, &tag.Name, &tag.Color, &tag.CreatedAt, &tag.UpdatedAt)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -45,10 +45,10 @@ func (r *TagRepository) GetByID(ctx context.Context, id uuid.UUID) (*model.Tag, 
 // GetByName retrieves a tag by name.
 func (r *TagRepository) GetByName(ctx context.Context, name string) (*model.Tag, error) {
 	var tag model.Tag
-	err := r.db.QueryRowContext(ctx, `
-		SELECT id, name, color, created_at
+	err := scanRow(r.db.QueryRowContext(ctx, `
+		SELECT id, name, color, created_at, updated_at
 		FROM tags WHERE name = ?
-	`, name).Scan(&tag.ID, &tag.Name, &tag.Color, &tag.CreatedAt)
+	`, name), &tag.ID, &tag.Name, &tag.Color, &tag.CreatedAt, &tag.UpdatedAt)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -58,7 +58,7 @@ func (r *TagRepository) GetByName(ctx context.Context, name string) (*model.Tag,
 // List retrieves all tags.
 func (r *TagRepository) List(ctx context.Context) ([]model.Tag, error) {
 	rows, err := r.db.QueryContext(ctx, `
-		SELECT id, name, color, created_at
+		SELECT id, name, color, created_at, updated_at
 		FROM tags ORDER BY name ASC
 	`)
 	if err != nil {
@@ -69,7 +69,7 @@ func (r *TagRepository) List(ctx context.Context) ([]model.Tag, error) {
 	var tags []model.Tag
 	for rows.Next() {
 		var tag model.Tag
-		if err := rows.Scan(&tag.ID, &tag.Name, &tag.Color, &tag.CreatedAt); err != nil {
+		if err := scanRow(rows, &tag.ID, &tag.Name, &tag.Color, &tag.CreatedAt, &tag.UpdatedAt); err != nil {
 			return nil, err
 		}
 		tags = append(tags, tag)
@@ -112,7 +112,7 @@ func (r *TagRepository) RemoveFromPart(ctx context.Context, partID, tagID uuid.U
 // GetForPart retrieves all tags for a part.
 func (r *TagRepository) GetForPart(ctx context.Context, partID uuid.UUID) ([]model.Tag, error) {
 	rows, err := r.db.QueryContext(ctx, `
-		SELECT t.id, t.name, t.color, t.created_at
+		SELECT t.id, t.name, t.color, t.created_at, t.updated_at
 		FROM tags t
 		JOIN part_tags pt ON t.id = pt.tag_id
 		WHERE pt.part_id = ?
@@ -126,7 +126,7 @@ func (r *TagRepository) GetForPart(ctx context.Context, partID uuid.UUID) ([]mod
 	var tags []model.Tag
 	for rows.Next() {
 		var tag model.Tag
-		if err := rows.Scan(&tag.ID, &tag.Name, &tag.Color, &tag.CreatedAt); err != nil {
+		if err := scanRow(rows, &tag.ID, &tag.Name, &tag.Color, &tag.CreatedAt, &tag.UpdatedAt); err != nil {
 			return nil, err
 		}
 		tags = append(tags, tag)
@@ -154,7 +154,7 @@ func (r *TagRepository) RemoveFromDesign(ctx context.Context, designID, tagID uu
 // GetForDesign retrieves all tags for a design.
 func (r *TagRepository) GetForDesign(ctx context.Context, designID uuid.UUID) ([]model.Tag, error) {
 	rows, err := r.db.QueryContext(ctx, `
-		SELECT t.id, t.name, t.color, t.created_at
+		SELECT t.id, t.name, t.color, t.created_at, t.updated_at
 		FROM tags t
 		JOIN design_tags dt ON t.id = dt.tag_id
 		WHERE dt.design_id = ?
@@ -168,7 +168,7 @@ func (r *TagRepository) GetForDesign(ctx context.Context, designID uuid.UUID) ([
 	var tags []model.Tag
 	for rows.Next() {
 		var tag model.Tag
-		if err := rows.Scan(&tag.ID, &tag.Name, &tag.Color, &tag.CreatedAt); err != nil {
+		if err := scanRow(rows, &tag.ID, &tag.Name, &tag.Color, &tag.CreatedAt, &tag.UpdatedAt); err != nil {
 			return nil, err
 		}
 		tags = append(tags, tag)

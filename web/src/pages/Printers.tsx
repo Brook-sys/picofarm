@@ -365,13 +365,13 @@ export default function Printers() {
             return (
               <Link key={printer.id} to={`/printers/${printer.id}`} className={cn('card relative overflow-hidden p-5 block border shadow-lg transition-all hover:scale-[1.01]', cardClass)}>
                 <div className={cn('absolute inset-y-0 left-0 w-1.5', stateBarClass)} />
-                <div className="flex items-start justify-between mb-4 pl-1">
-                  <div className="flex items-center gap-3">
+                <div className="flex flex-col gap-4 mb-4 pl-1">
+                  <div className="flex min-w-0 items-center gap-3">
                     <div className={cn('p-2 rounded-lg', iconClass)}>
                       <PrinterIcon className="h-5 w-5" />
                     </div>
-                    <div>
-                      <h3 className="font-semibold text-surface-100 flex items-center gap-2">
+                    <div className="min-w-0">
+                      <h3 className="font-semibold text-surface-100 flex items-center gap-2 flex-wrap">
                         {printer.name}
                         {defaultPrinter?.id === printer.id && <span className="badge bg-accent-500/20 text-accent-300 border-accent-500/30">Default</span>}
                       </h3>
@@ -385,7 +385,7 @@ export default function Printers() {
                       )}
                     </div>
                   </div>
-                  <div className="flex items-center gap-1" onClick={(e) => { e.preventDefault(); e.stopPropagation() }}>
+                  <div className="flex flex-wrap items-center gap-2" onClick={(e) => { e.preventDefault(); e.stopPropagation() }}>
                       {(status === 'offline' || status === 'error') && !printer.maintenance_mode && printer.connection_type !== 'manual' && (
                         <button
                           onClick={() => handleReconnect(printer.id)}

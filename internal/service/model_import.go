@@ -21,6 +21,7 @@ type ModelImportService struct {
 	parts    *PartService
 	designs  *DesignService
 	stls     *STLLibraryService
+	files    *FileService
 	tags     *repository.TagRepository
 	client   *http.Client
 }
@@ -37,6 +38,7 @@ type ModelImportPreview struct {
 	Author      string            `json:"author"`
 	License     string            `json:"license"`
 	ImageURL    string            `json:"image_url"`
+	PDFURL      string            `json:"pdf_url,omitempty"`
 	STLFiles    []ModelImportFile `json:"stl_files"`
 }
 
@@ -64,8 +66,8 @@ var (
 	stlJsonPattern = regexp.MustCompile(`(?i)["'](?:file|download|stl|model)["']\s*:\s*["']([^"'\\]+\.stl(?:\?[^"'\\]*)?)["']`)
 )
 
-func NewModelImportService(projects *ProjectService, parts *PartService, designs *DesignService, stls *STLLibraryService, tags *repository.TagRepository) *ModelImportService {
-	return &ModelImportService{projects: projects, parts: parts, designs: designs, stls: stls, tags: tags, client: &http.Client{Timeout: 45 * time.Second}}
+func NewModelImportService(projects *ProjectService, parts *PartService, designs *DesignService, stls *STLLibraryService, files *FileService, tags *repository.TagRepository) *ModelImportService {
+	return &ModelImportService{projects: projects, parts: parts, designs: designs, stls: stls, files: files, tags: tags, client: &http.Client{Timeout: 45 * time.Second}}
 }
 
 func (s *ModelImportService) Preview(ctx context.Context, rawURL string) (*ModelImportPreview, error) {
@@ -92,13 +94,6 @@ func (s *ModelImportService) Preview(ctx context.Context, rawURL string) (*Model
 		stlFiles[i].URL = resolveURL(rawURL, stlFiles[i].URL)
 	}
 
-	// Enrich Printables files with real download URLs via GraphQL
-	if provider == "Printables" {
-		if enriched := s.enrichPrintablesFiles(ctx, rawURL, stlFiles); len(enriched) > 0 {
-			stlFiles = enriched
-		}
-	}
-
 	preview := &ModelImportPreview{
 		Provider:    provider,
 		SourceURL:   rawURL,
@@ -109,6 +104,15 @@ func (s *ModelImportService) Preview(ctx context.Context, rawURL string) (*Model
 		ImageURL:    resolveURL(rawURL, firstNonEmpty(meta["og:image"], meta["twitter:image"])),
 		STLFiles:    stlFiles,
 	}
+
+	// Enrich Printables metadata from the embedded SvelteKit payload.
+	if provider == "Printables" {
+		s.enrichPrintablesEmbedded(body, preview)
+		if enriched := s.enrichPrintablesFiles(ctx, preview, preview.STLFiles); len(enriched) > 0 {
+			preview.STLFiles = enriched
+		}
+	}
+
 	return preview, nil
 }
 
@@ -122,6 +126,11 @@ func (s *ModelImportService) Import(ctx context.Context, req ModelImportRequest)
 		name = preview.Title
 	}
 	project := &model.Project{Name: name, Description: preview.Description, Source: "import", SourceURL: preview.SourceURL, SourceProvider: preview.Provider, SourceAuthor: preview.Author, SourceLicense: preview.License, SourceDescription: preview.Description}
+	if preview.ImageURL != "" && s.files != nil {
+		if cover, err := s.downloadImage(ctx, preview.ImageURL); err == nil {
+			project.CoverFileID = &cover.ID
+		}
+	}
 	if err := s.projects.Create(ctx, project); err != nil {
 		return nil, err
 	}
@@ -156,6 +165,27 @@ func (s *ModelImportService) Import(ctx context.Context, req ModelImportRequest)
 		result.Parts = append(result.Parts, part)
 	}
 	return result, nil
+}
+
+func (s *ModelImportService) downloadImage(ctx context.Context, imageURL string) (*model.File, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, imageURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; Picofarm/1.0)")
+	resp, err := s.client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 400 {
+		return nil, fmt.Errorf("failed to download image: %d", resp.StatusCode)
+	}
+	name := filepath.Base(strings.Split(imageURL, "?")[0])
+	if name == "" || name == "." || name == "/" {
+		name = "cover.jpg"
+	}
+	return s.files.Upload(ctx, name, resp.Body)
 }
 
 func (s *ModelImportService) downloadSTL(ctx context.Context, file ModelImportFile) (*model.STLLibraryFile, error) {
@@ -346,15 +376,128 @@ func htmlUnescape(value string) string {
 	return strings.NewReplacer("&amp;", "&", "&quot;", "\"", "&#39;", "'", "&lt;", "<", "&gt;", ">").Replace(value)
 }
 
-func (s *ModelImportService) enrichPrintablesFiles(ctx context.Context, pageURL string, files []ModelImportFile) []ModelImportFile {
+func (s *ModelImportService) enrichPrintablesEmbedded(body string, preview *ModelImportPreview) {
+	for _, match := range regexp.MustCompile(`(?is)<script[^>]+data-sveltekit-fetched[^>]*>(.*?)</script>`).FindAllStringSubmatch(body, -1) {
+		if len(match) < 2 {
+			continue
+		}
+		var outer struct {
+			Body string `json:"body"`
+		}
+		if err := json.Unmarshal([]byte(htmlUnescape(match[1])), &outer); err != nil || outer.Body == "" {
+			continue
+		}
+		var payload struct {
+			Data struct {
+				Model struct {
+					ID          string `json:"id"`
+					Name        string `json:"name"`
+					Description string `json:"description"`
+					Summary     string `json:"summary"`
+					PDFFilePath string `json:"pdfFilePath"`
+					Image       struct {
+						FilePath string `json:"filePath"`
+					} `json:"image"`
+					User struct {
+						PublicUsername string `json:"publicUsername"`
+					} `json:"user"`
+					License struct {
+						ID                string `json:"id"`
+						DisallowRemixing  bool   `json:"disallowRemixing"`
+						DisallowCommercial bool   `json:"disallowCommercial"`
+					} `json:"license"`
+					FilesCount int `json:"filesCount"`
+				} `json:"model"`
+			} `json:"data"`
+		}
+		if err := json.Unmarshal([]byte(outer.Body), &payload); err != nil || payload.Data.Model.ID == "" {
+			continue
+		}
+		model := payload.Data.Model
+		if model.Name != "" {
+			preview.Title = model.Name
+		}
+		if model.Description != "" {
+			preview.Description = cleanHTMLText(model.Description)
+		} else if model.Summary != "" {
+			preview.Description = htmlUnescape(model.Summary)
+		}
+		if model.User.PublicUsername != "" {
+			preview.Author = model.User.PublicUsername
+		}
+		if model.License.ID != "" {
+			preview.License = printablesLicenseName(model.License.ID, model.License.DisallowRemixing, model.License.DisallowCommercial)
+		}
+		if model.Image.FilePath != "" {
+			preview.ImageURL = printablesMediaURL(model.Image.FilePath)
+		}
+		if model.PDFFilePath != "" {
+			preview.PDFURL = printablesMediaURL(model.PDFFilePath)
+		}
+		return
+	}
+}
+
+func printablesMediaURL(filePath string) string {
+	if filePath == "" || strings.HasPrefix(filePath, "http") {
+		return filePath
+	}
+	return "https://media.printables.com/" + strings.TrimLeft(filePath, "/")
+}
+
+func printablesLicenseName(id string, disallowRemixing, disallowCommercial bool) string {
+	switch id {
+	case "1":
+		return "Public Domain"
+	case "2":
+		return "Creative Commons Attribution"
+	case "3":
+		return "Creative Commons Attribution-ShareAlike"
+	case "4":
+		return "Creative Commons Attribution-NonCommercial"
+	case "5":
+		return "Creative Commons Attribution-NonCommercial-ShareAlike"
+	case "6":
+		return "Creative Commons Attribution-NoDerivatives"
+	case "7":
+		return "Creative Commons Attribution-NonCommercial-NoDerivatives"
+	}
+	parts := []string{"Printables license"}
+	if disallowCommercial {
+		parts = append(parts, "non-commercial")
+	}
+	if disallowRemixing {
+		parts = append(parts, "no derivatives")
+	}
+	return strings.Join(parts, ", ")
+}
+
+func cleanHTMLText(value string) string {
+	value = regexp.MustCompile(`(?i)<br\s*/?>`).ReplaceAllString(value, "\n")
+	value = regexp.MustCompile(`(?i)</p>|</li>|</h[1-6]>`).ReplaceAllString(value, "\n")
+	value = regexp.MustCompile(`(?i)<li[^>]*>`).ReplaceAllString(value, "- ")
+	value = regexp.MustCompile(`<[^>]+>`).ReplaceAllString(value, "")
+	value = htmlUnescape(value)
+	lines := strings.Split(value, "\n")
+	clean := make([]string, 0, len(lines))
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line != "" {
+			clean = append(clean, line)
+		}
+	}
+	return strings.Join(clean, "\n")
+}
+
+func (s *ModelImportService) enrichPrintablesFiles(ctx context.Context, preview *ModelImportPreview, files []ModelImportFile) []ModelImportFile {
 	reID := regexp.MustCompile(`/model/(\d+)`)
-	m := reID.FindStringSubmatch(pageURL)
+	m := reID.FindStringSubmatch(preview.SourceURL)
 	if len(m) != 2 {
 		return files
 	}
 	modelID := m[1]
 
-	query := `{"query":"query ModelFiles($id:ID!){model(id:$id){files{id,name,downloadUrl}}}","variables":{"id":"` + modelID + `"}}`
+	query := `{"query":"query ModelDetails($id:ID!){model(id:$id){name,description,user{publicUsername},license{name},files{id,name,downloadUrl}}}","variables":{"id":"` + modelID + `"}}`
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://api.printables.com/graphql", strings.NewReader(query))
 	if err != nil {
@@ -375,6 +518,14 @@ func (s *ModelImportService) enrichPrintablesFiles(ctx context.Context, pageURL 
 	var gql struct {
 		Data struct {
 			Model struct {
+				Name        string `json:"name"`
+				Description string `json:"description"`
+				User        struct {
+					PublicUsername string `json:"publicUsername"`
+				} `json:"user"`
+				License struct {
+					Name string `json:"name"`
+				} `json:"license"`
 				Files []struct {
 					ID          string `json:"id"`
 					Name        string `json:"name"`
@@ -385,6 +536,20 @@ func (s *ModelImportService) enrichPrintablesFiles(ctx context.Context, pageURL 
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&gql); err != nil {
 		return files
+	}
+
+	// Update preview with GraphQL details which are usually better/cleaner than meta tags
+	if gql.Data.Model.Name != "" {
+		preview.Title = gql.Data.Model.Name
+	}
+	if gql.Data.Model.User.PublicUsername != "" {
+		preview.Author = gql.Data.Model.User.PublicUsername
+	}
+	if gql.Data.Model.License.Name != "" {
+		preview.License = gql.Data.Model.License.Name
+	}
+	if gql.Data.Model.Description != "" {
+		preview.Description = cleanHTMLText(gql.Data.Model.Description)
 	}
 
 	nameToURL := map[string]string{}

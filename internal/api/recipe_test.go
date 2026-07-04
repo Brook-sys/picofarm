@@ -10,16 +10,16 @@ import (
 	"github.com/Brook-sys/picofarm/internal/model"
 )
 
-func TestAddMaterialRequest_Validation(t *testing.T) {
+func TestRecipeMaterial_Validation(t *testing.T) {
 	tests := []struct {
 		name    string
-		request AddMaterialRequest
+		request model.RecipeMaterial
 		wantErr bool
 	}{
 		{
 			name: "valid request",
-			request: AddMaterialRequest{
-				MaterialType:  "pla",
+			request: model.RecipeMaterial{
+				MaterialType:  model.MaterialTypePLA,
 				WeightGrams:   50,
 				SequenceOrder: 0,
 			},
@@ -27,8 +27,8 @@ func TestAddMaterialRequest_Validation(t *testing.T) {
 		},
 		{
 			name: "with color spec",
-			request: AddMaterialRequest{
-				MaterialType: "petg",
+			request: model.RecipeMaterial{
+				MaterialType: model.MaterialTypePETG,
 				WeightGrams:  100,
 				ColorSpec: &model.ColorSpec{
 					Mode: "exact",
@@ -41,8 +41,8 @@ func TestAddMaterialRequest_Validation(t *testing.T) {
 		},
 		{
 			name: "with AMS position",
-			request: AddMaterialRequest{
-				MaterialType:  "pla",
+			request: model.RecipeMaterial{
+				MaterialType:  model.MaterialTypePLA,
 				WeightGrams:   75,
 				AMSPosition:   intPtr(2),
 				SequenceOrder: 0,
@@ -51,8 +51,8 @@ func TestAddMaterialRequest_Validation(t *testing.T) {
 		},
 		{
 			name: "with notes",
-			request: AddMaterialRequest{
-				MaterialType:  "abs",
+			request: model.RecipeMaterial{
+				MaterialType:  model.MaterialTypeABS,
 				WeightGrams:   120,
 				Notes:         "Main body color",
 				SequenceOrder: 0,
@@ -68,7 +68,7 @@ func TestAddMaterialRequest_Validation(t *testing.T) {
 				t.Fatalf("Failed to marshal request: %v", err)
 			}
 
-			var parsed AddMaterialRequest
+			var parsed model.RecipeMaterial
 			err = json.Unmarshal(data, &parsed)
 			hasErr := err != nil
 			if hasErr != tt.wantErr {

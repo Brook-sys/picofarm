@@ -38,7 +38,7 @@ func (r *FeedbackRepository) List(ctx context.Context) ([]model.Feedback, error)
 		var f model.Feedback
 		var id string
 		var contact, page, appVersion sql.NullString
-		if err := rows.Scan(&id, &f.Type, &f.Message, &contact, &page, &appVersion, &f.CreatedAt); err != nil {
+		if err := scanRow(rows, &id, &f.Type, &f.Message, &contact, &page, &appVersion, &f.CreatedAt); err != nil {
 			return nil, err
 		}
 		f.ID = uuid.MustParse(id)

@@ -23,8 +23,8 @@ type Services struct {
 	Files           *FileService
 	Expenses        *ExpenseService
 	Sales           *SaleService
-	Stats *StatsService
-	Etsy  *EtsyService
+	Stats           *StatsService
+	Etsy            *EtsyService
 	Squarespace     *SquarespaceService
 	BambuCloud      *BambuCloudService
 	Settings        *SettingsService
@@ -51,6 +51,7 @@ type Services struct {
 	Slicer        *SlicerService
 	ModelImport   *ModelImportService
 	Thingiverse   *ThingiverseImportService
+	PrinterFiles  *PrinterFileService
 }
 
 // EtsyConfig holds Etsy OAuth configuration.
@@ -70,7 +71,7 @@ func NewServices(repos *repository.Repositories, store storage.Storage, printerM
 	bambuCloudClient := bambu.NewCloudClient()
 
 	services := &Services{
-		Projects:        &ProjectService{repo: repos.Projects, printJobRepo: repos.PrintJobs, printerRepo: repos.Printers, spoolRepo: repos.Spools, designRepo: repos.Designs, saleRepo: repos.Sales, partRepo: repos.Parts, supplyRepo: repos.ProjectSupplies, repos: repos, printerMgr: printerMgr, hub: hub, storage: store},
+		Projects:        &ProjectService{repo: repos.Projects, printJobRepo: repos.PrintJobs, printerRepo: repos.Printers, spoolRepo: repos.Spools, designRepo: repos.Designs, tagRepo: repos.Tags, saleRepo: repos.Sales, partRepo: repos.Parts, supplyRepo: repos.ProjectSupplies, repos: repos, printerMgr: printerMgr, hub: hub, storage: store},
 		Parts:           &PartService{repo: repos.Parts, designRepo: repos.Designs, projectRepo: repos.Projects, tagRepo: repos.Tags, stlRepo: repos.STLLibrary},
 		Designs:         &DesignService{repo: repos.Designs, partRepo: repos.Parts, projectRepo: repos.Projects, tagRepo: repos.Tags, fileRepo: repos.Files, gcodeRepo: repos.GCodeLibrary, stlRepo: repos.STLLibrary, storage: store},
 		Printers:        &PrinterService{repo: repos.Printers, settingsRepo: repos.Settings, printJobRepo: repos.PrintJobs, queueRepo: repos.QueueItems, saleRepo: repos.Sales, macroRepo: repos.PrinterMacros, manager: printerMgr, hub: hub, discovery: printer.NewDiscovery(), bambuCloudRepo: repos.BambuCloud, bambuCloud: bambuCloudClient, reconnecting: make(map[uuid.UUID]time.Time)},
@@ -80,8 +81,8 @@ func NewServices(repos *repository.Repositories, store storage.Storage, printerM
 		Files:           &FileService{repo: repos.Files, storage: store},
 		Expenses:        &ExpenseService{repo: repos.Expenses, materialRepo: repos.Materials, spoolRepo: repos.Spools, fileRepo: repos.Files, settingsRepo: repos.Settings, repos: repos, storage: store},
 		Sales:           &SaleService{repo: repos.Sales, taskRepo: repos.Tasks},
-		Stats: &StatsService{expenseRepo: repos.Expenses, saleRepo: repos.Sales, printJobRepo: repos.PrintJobs, queueRepo: repos.QueueItems, spoolRepo: repos.Spools},
-		Etsy:  nil, // Initialize separately with config
+		Stats:           &StatsService{expenseRepo: repos.Expenses, saleRepo: repos.Sales, printJobRepo: repos.PrintJobs, queueRepo: repos.QueueItems, spoolRepo: repos.Spools},
+		Etsy:            nil, // Initialize separately with config
 		Squarespace:     nil, // Initialize separately with config
 		BambuCloud:      NewBambuCloudService(repos.BambuCloud, repos.Printers, printerMgr, bambuCloudClient),
 		Settings:        &SettingsService{repo: repos.Settings},
@@ -89,7 +90,7 @@ func NewServices(repos *repository.Repositories, store storage.Storage, printerM
 	}
 	// Wire cross-service dependencies
 	services.Stats.projectService = services.Projects
-	
+
 	// Initialize Squarespace
 	services.Squarespace = NewSquarespaceService(repos.Squarespace)
 	// Initialize Dispatcher service
@@ -124,8 +125,9 @@ func NewServices(repos *repository.Repositories, store storage.Storage, printerM
 	services.Notifications = NewNotificationService(repos.Notifications)
 	services.Queue.SetNotificationService(services.Notifications)
 	services.Slicer = NewSlicerService(services.Settings, repos, store, services.GCodeLibrary)
-	services.ModelImport = NewModelImportService(services.Projects, services.Parts, services.Designs, services.STLLibrary, repos.Tags)
+	services.ModelImport = NewModelImportService(services.Projects, services.Parts, services.Designs, services.STLLibrary, services.Files, repos.Tags)
 	services.Thingiverse = NewThingiverseImportService(services.Settings, services.STLLibrary)
+	services.PrinterFiles = NewPrinterFileService(repos.Printers)
 
 	// Wire job completion callback to auto-complete checklist items
 	services.PrintJobs.SetOnJobCompleted(services.Tasks.HandleJobCompleted)

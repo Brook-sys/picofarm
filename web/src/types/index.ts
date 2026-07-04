@@ -193,6 +193,21 @@ export interface PrinterMacro {
   updated_at: string
 }
 
+export interface PrinterFileEntry {
+  path: string
+  name: string
+  type: 'file' | 'dir'
+  size?: number
+  modified?: number
+  root?: string
+  extension?: string
+}
+
+export interface PrinterFileList {
+  path: string
+  files: PrinterFileEntry[]
+}
+
 export interface Printer {
   id: string
   name: string

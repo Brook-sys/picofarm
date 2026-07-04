@@ -14,8 +14,11 @@ function formatBytes(bytes: number): string {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i]
 }
 
+type SettingsTab = 'integrations' | 'api-keys' | 'backups' | 'dispatch' | 'other'
+
 export default function Settings() {
   const [searchParams, setSearchParams] = useSearchParams()
+  const [activeTab, setActiveTab] = useState<SettingsTab>('integrations')
   const [etsyStatus, setEtsyStatus] = useState<EtsyIntegration | null>(null)
   const [squarespaceStatus, setSquarespaceStatus] = useState<SquarespaceIntegration | null>(null)
   const [loading, setLoading] = useState(true)
@@ -331,12 +334,39 @@ export default function Settings() {
     return hoursUntilExpiry < 24
   }
 
+  const tabs: { id: SettingsTab; label: string; icon: React.ReactNode }[] = [
+    { id: 'integrations', label: 'Integrations', icon: <Store className="h-4 w-4" /> },
+    { id: 'api-keys', label: 'API Keys', icon: <Key className="h-4 w-4" /> },
+    { id: 'backups', label: 'Backups', icon: <Database className="h-4 w-4" /> },
+    { id: 'dispatch', label: 'Dispatch', icon: <Zap className="h-4 w-4" /> },
+    { id: 'other', label: 'Other', icon: <SettingsIcon className="h-4 w-4" /> },
+  ]
+
   return (
     <div className="p-6">
-      <div className="max-w-2xl">
+      <div className="max-w-4xl">
         <h1 className="text-2xl font-display font-semibold text-surface-100 mb-6">
           Settings
         </h1>
+
+        {/* Tab Navigation */}
+        <div className="flex gap-1 mb-6 border-b border-surface-800">
+          {tabs.map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={cn(
+                'flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-t-lg transition-colors',
+                activeTab === tab.id
+                  ? 'bg-surface-900/50 text-surface-100 border-b-2 border-accent-500'
+                  : 'text-surface-400 hover:text-surface-200 hover:bg-surface-900/30'
+              )}
+            >
+              {tab.icon}
+              {tab.label}
+            </button>
+          ))}
+        </div>
 
         {/* Success Message */}
         {successMessage && (
@@ -367,6 +397,7 @@ export default function Settings() {
         )}
 
         {/* Database Backups Card */}
+        {activeTab === 'backups' && (
         <div className="bg-surface-900/50 border border-surface-800 rounded-xl p-6 mb-6">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-3">
@@ -458,11 +489,13 @@ export default function Settings() {
             Backups are stored locally in your data directory. Consider copying important backups to external storage.
           </p>
         </div>
+        )}
 
         {/* Auto-Dispatch Settings Card */}
-        <AutoDispatchGlobalSettings />
+        {activeTab === 'dispatch' && <AutoDispatchGlobalSettings />}
 
         {/* API Keys Card */}
+        {activeTab === 'api-keys' && (
         <div className="bg-surface-900/50 border border-surface-800 rounded-xl p-6 mb-6">
           <div className="flex items-center gap-3 mb-4">
             <div className="p-2 bg-purple-500/10 rounded-lg">
@@ -534,8 +567,10 @@ export default function Settings() {
              </div>
            </div>
          </div>
+         )}
 
          {/* Thingiverse API Token */}
+         {activeTab === 'api-keys' && (
          <div className="bg-surface-900/50 border border-surface-800 rounded-xl p-6">
            <div className="flex items-center gap-3 mb-4">
              <div className="p-2 bg-blue-500/10 rounded-lg">
@@ -592,12 +627,14 @@ export default function Settings() {
                <p className="mt-2 text-xs text-surface-500">
                  Get your token at <a href="https://www.thingiverse.com/settings/personal-access-tokens" target="_blank" rel="noreferrer" className="text-accent-400 hover:underline">Thingiverse Settings → Personal Access Tokens</a>
                </p>
-             </div>
-           </div>
-         </div>
-
-         {/* Etsy Integration Card */}
-        <div className="bg-surface-900/50 border border-surface-800 rounded-xl p-6">
+              </div>
+            </div>
+          </div>
+          )}
+ 
+           {/* Etsy Integration Card */}
+         {activeTab === 'integrations' && (
+         <div className="bg-surface-900/50 border border-surface-800 rounded-xl p-6">
           <div className="flex items-center gap-3 mb-4">
             <div className="p-2 bg-orange-500/10 rounded-lg">
               <Store className="h-6 w-6 text-orange-400" />
@@ -727,11 +764,13 @@ export default function Settings() {
                 Connect to Etsy
               </button>
             </div>
-          )}
-        </div>
+           )}
+         </div>
+         )}
 
-        {/* Squarespace Integration Card */}
-        <div className="bg-surface-900/50 border border-surface-800 rounded-xl p-6">
+         {/* Squarespace Integration Card */}
+         {activeTab === 'integrations' && (
+         <div className="bg-surface-900/50 border border-surface-800 rounded-xl p-6">
           <div className="flex items-center gap-3 mb-4">
             <div className="p-2 bg-purple-500/10 rounded-lg">
               <ShoppingBag className="h-6 w-6 text-purple-400" />
@@ -836,12 +875,33 @@ export default function Settings() {
                 </button>
               </div>
             </div>
-          )}
-        </div>
+           )}
+         </div>
+         )}
 
-        {/* Business Information */}
-        <BusinessInfoSettings />
+         {/* Business Information */}
+         {activeTab === 'other' && <BusinessInfoSettings />}
+
+         <CreditsFooter />
       </div>
+    </div>
+  )
+}
+
+function CreditsFooter() {
+  return (
+    <div className="mt-8 pt-6 border-t border-surface-800">
+      <h2 className="text-sm font-semibold text-surface-300">Credits</h2>
+      <p className="text-xs text-surface-500 mt-2">
+        PicoFarm is a fork evolved from{' '}
+        <a href="https://github.com/philjestin/Daedalus" target="_blank" rel="noopener noreferrer" className="text-accent-400 hover:underline">
+          Daedalus
+        </a>
+        , created by the original Daedalus project contributors.
+      </p>
+      <p className="text-xs text-surface-600 mt-2">
+        We keep this credit here to acknowledge the foundation inherited from Daedalus while PicoFarm moves toward a server/container-first print farm platform.
+      </p>
     </div>
   )
 }
@@ -1143,15 +1203,6 @@ function BackupSettings() {
           />
         </div>
 
-        <div className="bg-surface-900/50 border border-surface-800 rounded-xl p-6 mt-6">
-          <h2 className="text-lg font-semibold text-surface-100">Credits</h2>
-          <p className="text-sm text-surface-400 mt-2">
-            PicoFarm is a fork evolved from Daedalus, created by the original Daedalus project contributors.
-          </p>
-          <p className="text-sm text-surface-500 mt-2">
-            We keep this credit here to acknowledge the foundation inherited from Daedalus while PicoFarm moves toward a server/container-first print farm platform.
-          </p>
-        </div>
       </div>
     </div>
   )

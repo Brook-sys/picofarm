@@ -76,6 +76,8 @@ export function useCreatePart() {
     onSuccess: (_, { projectId }) => {
       queryClient.invalidateQueries({ queryKey: ['parts', projectId] })
       queryClient.invalidateQueries({ queryKey: ['designs'] })
+      queryClient.invalidateQueries({ queryKey: ['file-library'] })
+      queryClient.invalidateQueries({ queryKey: ['root-file-library-picker'] })
     },
   })
 }
@@ -89,6 +91,8 @@ export function useUpdatePart() {
       partsApi.update(id, data),
     onSuccess: (part) => {
       queryClient.invalidateQueries({ queryKey: ['parts', part.project_id] })
+      queryClient.invalidateQueries({ queryKey: ['file-library'] })
+      queryClient.invalidateQueries({ queryKey: ['root-file-library-picker'] })
     },
   })
 }

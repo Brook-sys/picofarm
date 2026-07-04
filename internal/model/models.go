@@ -464,6 +464,21 @@ type PrinterMacro struct {
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
+type PrinterFileEntry struct {
+	Path      string `json:"path"`
+	Name      string `json:"name"`
+	Type      string `json:"type"`
+	Size      int64  `json:"size,omitempty"`
+	Modified  int64  `json:"modified,omitempty"`
+	Root      string `json:"root,omitempty"`
+	Extension string `json:"extension,omitempty"`
+}
+
+type PrinterFileList struct {
+	Path  string             `json:"path"`
+	Files []PrinterFileEntry `json:"files"`
+}
+
 type NotificationChannel struct {
 	ID          uuid.UUID      `json:"id"`
 	Name        string         `json:"name"`

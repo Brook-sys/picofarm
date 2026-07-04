@@ -9,8 +9,9 @@ async function fetchApi<T>(
 
   console.log(`[API] ${options.method || 'GET'} ${url}`)
 
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
+  const headers: Record<string, string> = {}
+  if (!(options.body instanceof FormData)) {
+    headers['Content-Type'] = 'application/json'
   }
 
   // Merge any existing headers
@@ -512,6 +513,22 @@ export const printersApi = {
   getAnalytics: (id: string) =>
     fetchApi<import('../types').PrinterAnalytics>(`/printers/${id}/analytics`),
 
+  listFiles: (id: string, path = '') =>
+    fetchApi<import('../types').PrinterFileList>(`/printers/${id}/files${path ? `?path=${encodeURIComponent(path)}` : ''}`),
+
+  uploadFile: (id: string, path: string, file: File) => {
+    const form = new FormData()
+    form.append('file', file)
+    form.append('path', path)
+    return fetchApi<void>(`/printers/${id}/files/upload`, { method: 'POST', body: form })
+  },
+
+  deleteFile: (id: string, path: string) =>
+    fetchApi<void>(`/printers/${id}/files`, { method: 'DELETE', body: JSON.stringify({ path }) }),
+
+  printFile: (id: string, path: string) =>
+    fetchApi<void>(`/printers/${id}/files/print`, { method: 'POST', body: JSON.stringify({ path }) }),
+
   discover: async () => {
     console.log('Starting printer discovery...')
     try {
@@ -814,6 +831,19 @@ export const gcodeLibraryApi = {
 
   removeTag: (fileId: string, tagId: string) =>
     fetchApi<void>(`/gcode-library/${fileId}/tags/${tagId}`, { method: 'DELETE' }),
+}
+
+export const fileApi = {
+  upload: async (file: File) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    const response = await fetch(`${API_URL}/api/files`, { method: 'POST', body: formData })
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: 'Upload failed' }))
+      throw new Error(error.error)
+    }
+    return response.json() as Promise<import('../types').FileRecord>
+  },
 }
 
 export const fileLibraryApi = {

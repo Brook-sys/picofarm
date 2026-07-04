@@ -29,11 +29,11 @@ func (r *AlertDismissalRepository) Create(ctx context.Context, dismissal *model.
 // GetByEntity retrieves a dismissal for a specific alert type and entity.
 func (r *AlertDismissalRepository) GetByEntity(ctx context.Context, alertType model.AlertType, entityID string) (*model.AlertDismissal, error) {
 	var dismissal model.AlertDismissal
-	err := r.db.QueryRowContext(ctx, `
+	err := scanRow(r.db.QueryRowContext(ctx, `
 		SELECT id, alert_type, entity_id, dismissed_at, dismissed_until
 		FROM alert_dismissals WHERE alert_type = ? AND entity_id = ?
 		ORDER BY dismissed_at DESC LIMIT 1
-	`, alertType, entityID).Scan(&dismissal.ID, &dismissal.AlertType, &dismissal.EntityID, &dismissal.DismissedAt, &dismissal.DismissedUntil)
+	`, alertType, entityID), &dismissal.ID, &dismissal.AlertType, &dismissal.EntityID, &dismissal.DismissedAt, &dismissal.DismissedUntil)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -97,7 +97,7 @@ func (r *AlertDismissalRepository) List(ctx context.Context) ([]model.AlertDismi
 	var dismissals []model.AlertDismissal
 	for rows.Next() {
 		var dismissal model.AlertDismissal
-		if err := rows.Scan(&dismissal.ID, &dismissal.AlertType, &dismissal.EntityID, &dismissal.DismissedAt, &dismissal.DismissedUntil); err != nil {
+		if err := scanRow(rows, &dismissal.ID, &dismissal.AlertType, &dismissal.EntityID, &dismissal.DismissedAt, &dismissal.DismissedUntil); err != nil {
 			return nil, err
 		}
 		dismissals = append(dismissals, dismissal)

@@ -143,9 +143,9 @@ func TestConvertAPIListingToModel_NoTagsOrSKUs(t *testing.T) {
 func TestEtsyListingTemplate_Linking(t *testing.T) {
 	t.Run("create basic link", func(t *testing.T) {
 		link := &model.EtsyListingTemplate{
-			ID:            uuid.New(),
+			ID:            123,
 			EtsyListingID: 12345,
-			TemplateID:    uuid.New(),
+			ProjectID:    uuid.New(),
 			SKU:           "TEST-SKU",
 			SyncInventory: true,
 		}
@@ -163,9 +163,9 @@ func TestEtsyListingTemplate_Linking(t *testing.T) {
 
 	t.Run("link without SKU", func(t *testing.T) {
 		link := &model.EtsyListingTemplate{
-			ID:            uuid.New(),
+			ID:            124,
 			EtsyListingID: 12345,
-			TemplateID:    uuid.New(),
+			ProjectID:    uuid.New(),
 			SyncInventory: false,
 		}
 
@@ -229,7 +229,7 @@ func TestEtsyListing_StateValues(t *testing.T) {
 	for _, state := range validStates {
 		t.Run("state_"+state, func(t *testing.T) {
 			listing := &model.EtsyListing{
-				ID:            uuid.New(),
+			ID:            uuid.New(),
 				EtsyListingID: 12345,
 				State:         state,
 			}
@@ -299,7 +299,7 @@ func TestEtsyListing_PriceFormats(t *testing.T) {
 
 func TestEtsyListing_WithLinkedTemplate(t *testing.T) {
 	template := &model.Template{
-		ID:               uuid.New(),
+			ID:            uuid.New(),
 		Name:             "Test Template",
 		SKU:              "TEMPLATE-001",
 		MaterialType:     model.MaterialTypePLA,

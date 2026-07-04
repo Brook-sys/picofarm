@@ -166,20 +166,28 @@ func TestProjectRepository_Delete(t *testing.T) {
 func TestProjectRepository_ListByTemplateID(t *testing.T) {
 	db := openTestDB(t)
 	projectRepo := &ProjectRepository{db: db}
-	templateRepo := &TemplateRepository{db: db}
 	ctx := context.Background()
 
-	// Create a template first
-	template := &model.Template{Name: "Test Template"}
-	if err := templateRepo.Create(ctx, template); err != nil {
-		t.Fatalf("Create template failed: %v", err)
+	// Create projects - template_id is now just a string reference, but it must be valid or NULL
+	// Since we drop templates table eventually, we shouldn't test ListByTemplateID here in the same way,
+	// but we'll mock a template project and use its ID to test the legacy field.
+	// Actually, the schema still has `template_id TEXT REFERENCES templates(id)`, so we MUST create a row in `templates`
+	// However, `TemplateRepository` was removed. The migration 041 doesn't drop `templates` table yet.
+	// For this test, we can just test that we can link projects using `TemplateID` by inserting directly or bypassing the constraint if we could, 
+	// but since it's SQLite with PRAGMA foreign_keys=ON, we must create a template first.
+	// Let's create a raw template record just to satisfy the FK constraint for the test.
+	templateID := uuid.New()
+	_, err := db.Exec(`INSERT INTO templates (id, name, description, sku, material_type, estimated_material_grams, quantity_per_order, labor_minutes, sale_price_cents, version, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, 
+		templateID, "Test Template", "", "", "", 0, 0, 0, 0, 1, time.Now(), time.Now())
+	if err != nil {
+		t.Fatalf("Create legacy template failed: %v", err)
 	}
 
 	// Create projects linked to template
 	for i := 0; i < 2; i++ {
 		p := &model.Project{
 			Name:       "Linked Project " + string(rune('A'+i)),
-			TemplateID: &template.ID,
+			TemplateID: &templateID,
 		}
 		if err := projectRepo.Create(ctx, p); err != nil {
 			t.Fatalf("Create linked project %d failed: %v", i, err)
@@ -193,7 +201,7 @@ func TestProjectRepository_ListByTemplateID(t *testing.T) {
 	}
 
 	// List by template ID
-	projects, err := projectRepo.ListByTemplateID(ctx, template.ID)
+	projects, err := projectRepo.ListByTemplateID(ctx, templateID)
 	if err != nil {
 		t.Fatalf("ListByTemplateID failed: %v", err)
 	}
@@ -781,19 +789,13 @@ func TestSettingsRepository_Delete(t *testing.T) {
 
 func TestTemplateRepository_CreateAndGetByID(t *testing.T) {
 	db := openTestDB(t)
-	repo := &TemplateRepository{db: db}
+	repo := &ProjectRepository{db: db}
 	ctx := context.Background()
 
-	template := &model.Template{
+	template := &model.Project{
 		Name:                   "Test Template",
 		Description:            "A test template",
 		SKU:                    "TEST-001",
-		MaterialType:           "pla",
-		EstimatedMaterialGrams: 50,
-		QuantityPerOrder:       1,
-		LaborMinutes:           5,
-		SalePriceCents:         1500,
-		IsActive:               true,
 	}
 
 	if err := repo.Create(ctx, template); err != nil {
@@ -810,9 +812,6 @@ func TestTemplateRepository_CreateAndGetByID(t *testing.T) {
 	}
 	if got.SKU != "TEST-001" {
 		t.Errorf("SKU = %q, want %q", got.SKU, "TEST-001")
-	}
-	if got.SalePriceCents != 1500 {
-		t.Errorf("SalePriceCents = %d, want 1500", got.SalePriceCents)
 	}
 }
 

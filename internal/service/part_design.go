@@ -328,6 +328,10 @@ func (s *DesignService) projectTag(ctx context.Context, projectName string) (*mo
 	}
 	tag = &model.Tag{Name: name, Color: "#f59e0b"}
 	if err := s.tagRepo.Create(ctx, tag); err != nil {
+		// Concurrency handling: if it failed to create because another request just created it, try fetching again
+		if existing, errRetry := s.tagRepo.GetByName(ctx, name); errRetry == nil && existing != nil {
+			return existing, nil
+		}
 		return nil, err
 	}
 	return tag, nil

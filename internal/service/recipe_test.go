@@ -110,6 +110,12 @@ func TestPrinterValidation(t *testing.T) {
 	}
 }
 
+type PrinterValidationResult struct {
+	Valid    bool
+	Errors   []string
+	Warnings []string
+}
+
 // validatePrinterConstraints is a helper to test constraint validation logic
 func validatePrinterConstraints(constraints *model.PrinterConstraints, printer *model.Printer) *PrinterValidationResult {
 	result := &PrinterValidationResult{Valid: true}

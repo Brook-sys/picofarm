@@ -487,7 +487,7 @@ func TestSquarespaceRepository_ProductTemplates(t *testing.T) {
 	t.Run("SaveProductTemplate", func(t *testing.T) {
 		link := &model.SquarespaceProductTemplate{
 			SquarespaceProductID: "sq-prod-for-link",
-			TemplateID:           templateID,
+			ProjectID:            templateID,
 			SKU:                  "LINK-SKU",
 		}
 
@@ -496,7 +496,7 @@ func TestSquarespaceRepository_ProductTemplates(t *testing.T) {
 			t.Fatalf("SaveProductTemplate failed: %v", err)
 		}
 
-		if link.ID == uuid.Nil {
+		if link.ID == 0 {
 			t.Error("expected ID to be set")
 		}
 	})

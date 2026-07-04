@@ -2,6 +2,7 @@ package printer
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -10,12 +11,13 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/Brook-sys/picofarm/internal/model"
+	"github.com/google/uuid"
 )
 
 // MoonrakerClient implements Client for Moonraker API (Klipper).
@@ -304,4 +306,107 @@ func (c *MoonrakerClient) parseState(resp []byte) *model.PrinterState {
 	}
 
 	return state
+}
+
+func (c *MoonrakerClient) ListFiles(ctx context.Context, dir string) ([]model.PrinterFileEntry, error) {
+	_ = ctx
+	endpoint := "/server/files/directory?root=gcodes"
+	if strings.TrimSpace(dir) != "" {
+		endpoint += "&path=" + url.QueryEscape(dir)
+	}
+	resp, err := c.doRequest("GET", endpoint, nil)
+	if err != nil {
+		return nil, err
+	}
+	var payload struct {
+		Result struct {
+			Dirs  []moonrakerFileEntry `json:"dirs"`
+			Files []moonrakerFileEntry `json:"files"`
+		} `json:"result"`
+	}
+	if err := json.Unmarshal(resp, &payload); err != nil {
+		return nil, err
+	}
+	entries := make([]model.PrinterFileEntry, 0, len(payload.Result.Dirs)+len(payload.Result.Files))
+	for _, item := range payload.Result.Dirs {
+		entries = append(entries, item.toModel("dir"))
+	}
+	for _, item := range payload.Result.Files {
+		entries = append(entries, item.toModel("file"))
+	}
+	return entries, nil
+}
+
+func (c *MoonrakerClient) UploadFile(ctx context.Context, dir string, filename string, file io.Reader) error {
+	_ = ctx
+	body := &bytes.Buffer{}
+	writer := multipart.NewWriter(body)
+	part, err := writer.CreateFormFile("file", filepath.Base(filename))
+	if err != nil {
+		return err
+	}
+	if _, err := io.Copy(part, file); err != nil {
+		return err
+	}
+	if strings.TrimSpace(dir) != "" {
+		if err := writer.WriteField("path", dir); err != nil {
+			return err
+		}
+	}
+	if err := writer.WriteField("root", "gcodes"); err != nil {
+		return err
+	}
+	if err := writer.Close(); err != nil {
+		return err
+	}
+	req, err := http.NewRequest("POST", c.baseURL+"/server/files/upload", body)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 400 {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("upload failed: %d %s", resp.StatusCode, strings.TrimSpace(string(bodyBytes)))
+	}
+	return nil
+}
+
+func (c *MoonrakerClient) DeleteFile(ctx context.Context, filePath string) error {
+	_ = ctx
+	_, err := c.doRequest("DELETE", "/server/files/gcodes/"+url.PathEscape(strings.TrimPrefix(filePath, "/")), nil)
+	return err
+}
+
+func (c *MoonrakerClient) StartPrint(ctx context.Context, filePath string) error {
+	_ = ctx
+	_, err := c.doRequest("POST", "/printer/print/start?filename="+url.QueryEscape(strings.TrimPrefix(filePath, "/")), nil)
+	return err
+}
+
+type moonrakerFileEntry struct {
+	Path     string  `json:"path"`
+	Root     string  `json:"root"`
+	Size     int64   `json:"size"`
+	Modified float64 `json:"modified"`
+}
+
+func (e moonrakerFileEntry) toModel(entryType string) model.PrinterFileEntry {
+	name := path.Base(e.Path)
+	if e.Path == "" || e.Path == "." {
+		name = "gcodes"
+	}
+	return model.PrinterFileEntry{
+		Path:      e.Path,
+		Name:      name,
+		Type:      entryType,
+		Size:      e.Size,
+		Modified:  int64(e.Modified),
+		Root:      e.Root,
+		Extension: strings.TrimPrefix(strings.ToLower(path.Ext(e.Path)), "."),
+	}
 }

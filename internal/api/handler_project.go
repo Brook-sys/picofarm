@@ -41,6 +41,10 @@ func (h *ProjectHandler) Create(w http.ResponseWriter, r *http.Request) {
 	v.Required("name", project.Name)
 	v.MaxLength("name", project.Name, 255)
 	v.MaxLength("description", project.Description, 5000)
+	v.MaxLength("source_url", project.SourceURL, 2000)
+	v.MaxLength("source_provider", project.SourceProvider, 255)
+	v.MaxLength("source_author", project.SourceAuthor, 255)
+	v.MaxLength("source_license", project.SourceLicense, 255)
 	v.NoControlChars("name", project.Name)
 	if err := v.Error(); err != nil {
 		respondValidationError(w, err)

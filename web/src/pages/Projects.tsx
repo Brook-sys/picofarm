@@ -141,6 +141,8 @@ export default function Projects() {
     await createProject.mutateAsync({
       name: formData.get('name') as string,
       description: formData.get('description') as string,
+      source_url: formData.get('source_url') as string,
+      source_license: formData.get('source_license') as string,
       tags: [],
     })
 
@@ -349,6 +351,7 @@ export default function Projects() {
               to={`/projects/${project.id}`}
               className="card p-5 hover:border-surface-700 transition-colors group"
             >
+              {project.cover_file_id && <img src={`/api/files/${project.cover_file_id}`} className="mb-4 h-40 w-full rounded-xl object-cover bg-surface-800" />}
               <div className="flex items-start justify-between gap-3 mb-3">
                 <h3 className="font-semibold text-surface-100 group-hover:text-accent-400 transition-colors">
                   {project.name}
@@ -376,6 +379,13 @@ export default function Projects() {
                 <p className="text-sm text-surface-500 mb-4 line-clamp-2">
                   {project.description}
                 </p>
+              )}
+
+              {(project.source_url || project.source_license) && (
+                <div className="flex flex-wrap gap-2 mb-4 text-xs">
+                  {project.source_url && <span className="text-accent-400">Source link</span>}
+                  {project.source_license && <span className="text-surface-500">License: {project.source_license}</span>}
+                </div>
               )}
 
               <div className="flex items-center gap-4 text-xs text-surface-500">
@@ -440,6 +450,28 @@ export default function Projects() {
                     rows={3}
                     className="input resize-none"
                     placeholder="What are you building?"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-surface-300 mb-1">
+                    Project/source URL
+                  </label>
+                  <input
+                    type="url"
+                    name="source_url"
+                    className="input"
+                    placeholder="https://..."
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-surface-300 mb-1">
+                    License
+                  </label>
+                  <input
+                    type="text"
+                    name="source_license"
+                    className="input"
+                    placeholder="CC BY, MIT, Commercial use..."
                   />
                 </div>
               </div>

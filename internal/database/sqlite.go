@@ -110,6 +110,19 @@ func RunMigrations(db *sql.DB) error {
 		`CREATE TABLE IF NOT EXISTS stl_file_tags (stl_file_id TEXT NOT NULL REFERENCES stl_files(id) ON DELETE CASCADE, tag_id TEXT NOT NULL REFERENCES tags(id) ON DELETE CASCADE, PRIMARY KEY (stl_file_id, tag_id))`,
 		`CREATE INDEX IF NOT EXISTS idx_stl_file_tags_file ON stl_file_tags(stl_file_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_stl_file_tags_tag ON stl_file_tags(tag_id)`,
+		`INSERT OR IGNORE INTO tags (id, name, color, created_at, updated_at)
+			SELECT lower(hex(randomblob(4))) || '-' || lower(hex(randomblob(2))) || '-4' || substr(lower(hex(randomblob(2))), 2) || '-' || substr('89ab', abs(random()) % 4 + 1, 1) || substr(lower(hex(randomblob(2))), 2) || '-' || lower(hex(randomblob(6))), 'Projeto: ' || p.name, '#f59e0b', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+			FROM projects p
+			WHERE EXISTS (SELECT 1 FROM parts pa JOIN designs d ON d.part_id = pa.id JOIN stl_files sf ON sf.file_id = d.file_id WHERE pa.project_id = p.id AND d.file_type = 'stl')
+			AND NOT EXISTS (SELECT 1 FROM tags t WHERE t.name = 'Projeto: ' || p.name)`,
+		`INSERT OR IGNORE INTO stl_file_tags (stl_file_id, tag_id)
+			SELECT sf.id, t.id
+			FROM projects p
+			JOIN parts pa ON pa.project_id = p.id
+			JOIN designs d ON d.part_id = pa.id
+			JOIN stl_files sf ON sf.file_id = d.file_id
+			JOIN tags t ON t.name = 'Projeto: ' || p.name
+			WHERE d.file_type = 'stl'`,
 		`ALTER TABLE print_jobs ADD COLUMN printer_time_cost_cents INTEGER`,
 		`ALTER TABLE print_jobs ADD COLUMN material_cost_cents INTEGER`,
 		`ALTER TABLE project_supplies ADD COLUMN material_id TEXT REFERENCES materials(id)`,

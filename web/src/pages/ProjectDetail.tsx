@@ -29,7 +29,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useProject, useParts, useCreatePart, useUpdateProject } from '../hooks/useProjects'
 import { usePrinters, usePrinterStates } from '../hooks/usePrinters'
 import { useSpoolsWithMaterials } from '../hooks/useMaterials'
-import { designsApi, printJobsApi, projectsApi, partsApi, suppliesApi, materialsApi, queueApi, gcodeLibraryApi, fileLibraryApi, enqueueProjectParts } from '../api/client'
+import { designsApi, printJobsApi, projectsApi, partsApi, suppliesApi, materialsApi, queueApi, gcodeLibraryApi, fileLibraryApi, fileApi, enqueueProjectParts } from '../api/client'
 import { cn, getStatusBadge, formatBytes, formatRelativeTime } from '../lib/utils'
 import AppToast, { type AppToastState } from '../components/AppToast'
 import { FailureModal } from '../components/FailureModal'
@@ -60,8 +60,10 @@ export default function ProjectDetail() {
   const [showFailureModal, setShowFailureModal] = useState<PrintJob | null>(null)
   const [activeTab, setActiveTab] = useState<'parts' | 'history' | 'analytics'>('parts')
   const [editingProject, setEditingProject] = useState(false)
-  const [projectForm, setProjectForm] = useState({ name: '', description: '' })
+  const [projectForm, setProjectForm] = useState({ name: '', description: '', source_url: '', source_license: '', source_author: '', source_provider: '', cover_file_id: '', image_file_ids: [] as string[] })
   const [projectEditError, setProjectEditError] = useState('')
+  const [uploadingCover, setUploadingCover] = useState(false)
+  const [descriptionExpanded, setDescriptionExpanded] = useState(false)
   const [selectedRootFiles, setSelectedRootFiles] = useState<RootProjectFile[]>([])
   const [showGCodePicker, setShowGCodePicker] = useState(false)
   const [partDeleteError, setPartDeleteError] = useState('')
@@ -132,7 +134,16 @@ export default function ProjectDetail() {
   }
 
   const startProjectEdit = () => {
-    setProjectForm({ name: project.name || '', description: project.description || '' })
+    setProjectForm({
+      name: project.name || '',
+      description: project.description || '',
+      source_url: project.source_url || '',
+      source_license: project.source_license || '',
+      source_author: project.source_author || '',
+      source_provider: project.source_provider || '',
+      cover_file_id: project.cover_file_id || '',
+      image_file_ids: Array.from(new Set([project.cover_file_id, ...((project.default_settings?.image_file_ids as string[] | undefined) || [])].filter(Boolean) as string[])),
+    })
     setProjectEditError('')
     setEditingProject(true)
   }
@@ -140,12 +151,41 @@ export default function ProjectDetail() {
   const saveProjectEdit = async () => {
     setProjectEditError('')
     try {
-      await updateProject.mutateAsync({ id: project.id, data: projectForm })
+      await updateProject.mutateAsync({
+        id: project.id,
+        data: {
+          ...projectForm,
+          cover_file_id: projectForm.cover_file_id || undefined,
+          default_settings: { ...(project.default_settings || {}), image_file_ids: projectForm.image_file_ids },
+        },
+      })
       setEditingProject(false)
     } catch (err) {
       setProjectEditError(err instanceof Error ? err.message : 'Failed to update project')
     }
   }
+
+  const uploadProjectImage = async (file?: File) => {
+    if (!file) return
+    setUploadingCover(true)
+    setProjectEditError('')
+    try {
+      const uploaded = await fileApi.upload(file)
+      setProjectForm(prev => ({
+        ...prev,
+        cover_file_id: prev.cover_file_id || uploaded.id,
+        image_file_ids: Array.from(new Set([...prev.image_file_ids, uploaded.id])),
+      }))
+    } catch (err) {
+      setProjectEditError(err instanceof Error ? err.message : 'Failed to upload project photo')
+    } finally {
+      setUploadingCover(false)
+    }
+  }
+
+  const projectImages = Array.from(new Set([project.cover_file_id, ...((project.default_settings?.image_file_ids as string[] | undefined) || [])].filter(Boolean) as string[]))
+  const hasLongDescription = (project.description || '').length > 420
+  const visibleDescription = !hasLongDescription || descriptionExpanded ? project.description : `${project.description.slice(0, 420).trim()}...`
 
   return (
     <div className="p-4 sm:p-6 lg:p-8">
@@ -171,6 +211,50 @@ export default function ProjectDetail() {
                 <label className="block text-xs text-surface-500 mb-1">Descrição</label>
                 <textarea value={projectForm.description} onChange={e => setProjectForm(prev => ({ ...prev, description: e.target.value }))} rows={2} className="input resize-none" placeholder="Descrição opcional" />
               </div>
+              <div className="grid gap-3 md:grid-cols-2">
+                <div>
+                  <label className="block text-xs text-surface-500 mb-1">Link do projeto / fonte</label>
+                  <input value={projectForm.source_url} onChange={e => setProjectForm(prev => ({ ...prev, source_url: e.target.value }))} className="input" placeholder="https://..." />
+                </div>
+                <div>
+                  <label className="block text-xs text-surface-500 mb-1">Licença</label>
+                  <input value={projectForm.source_license} onChange={e => setProjectForm(prev => ({ ...prev, source_license: e.target.value }))} className="input" placeholder="CC BY, MIT, Commercial use..." />
+                </div>
+                <div>
+                  <label className="block text-xs text-surface-500 mb-1">Autor / criador</label>
+                  <input value={projectForm.source_author} onChange={e => setProjectForm(prev => ({ ...prev, source_author: e.target.value }))} className="input" placeholder="Nome do autor" />
+                </div>
+                <div>
+                  <label className="block text-xs text-surface-500 mb-1">Plataforma</label>
+                  <input value={projectForm.source_provider} onChange={e => setProjectForm(prev => ({ ...prev, source_provider: e.target.value }))} className="input" placeholder="MakerWorld, Printables, etc." />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs text-surface-500 mb-1">Foto de capa</label>
+                <div className="space-y-3">
+                  <label className="btn btn-secondary text-sm cursor-pointer w-fit">
+                    {uploadingCover ? 'Enviando...' : 'Adicionar foto'}
+                    <input type="file" accept="image/png,image/jpeg" disabled={uploadingCover} className="hidden" onChange={e => void uploadProjectImage(e.target.files?.[0])} />
+                  </label>
+                  {projectForm.image_file_ids.length > 0 && (
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                      {projectForm.image_file_ids.map(fileId => (
+                        <div key={fileId} className={cn('relative overflow-hidden rounded-xl border bg-surface-900', projectForm.cover_file_id === fileId ? 'border-accent-500' : 'border-surface-800')}>
+                          <img src={`/api/files/${fileId}`} className="h-28 w-full object-cover" />
+                          <div className="absolute inset-x-0 bottom-0 flex gap-1 bg-black/70 p-1">
+                            <button type="button" onClick={() => setProjectForm(prev => ({ ...prev, cover_file_id: fileId }))} className="flex-1 rounded bg-surface-800/80 px-2 py-1 text-[10px] text-surface-200 hover:bg-accent-600">
+                              {projectForm.cover_file_id === fileId ? 'Capa' : 'Definir capa'}
+                            </button>
+                            <button type="button" onClick={() => setProjectForm(prev => ({ ...prev, image_file_ids: prev.image_file_ids.filter(id => id !== fileId), cover_file_id: prev.cover_file_id === fileId ? '' : prev.cover_file_id }))} className="rounded bg-red-500/20 px-2 py-1 text-[10px] text-red-200 hover:bg-red-500/40">
+                              Remover
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
               {projectEditError && <div className="text-sm text-red-400">{projectEditError}</div>}
               <div className="flex gap-2">
                 <button onClick={saveProjectEdit} disabled={updateProject.isPending} className="btn btn-primary text-sm">{updateProject.isPending ? 'Salvando...' : 'Salvar'}</button>
@@ -178,16 +262,46 @@ export default function ProjectDetail() {
               </div>
             </div>
           ) : (
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <h1 className="text-3xl font-display font-bold text-surface-100">
-                  {project.name}
-                </h1>
-                {project.description && (
-                  <p className="text-surface-400 mt-1">{project.description}</p>
-                )}
+            <div className="space-y-6">
+              <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
+                <div className="min-w-0">
+                  <h1 className="text-3xl font-display font-bold text-surface-100">
+                    {project.name}
+                  </h1>
+                  {(project.source_url || project.source_license || project.source_author || project.source_provider) && (
+                    <div className="mt-3 flex flex-wrap gap-2 text-xs text-surface-500">
+                      {project.source_url && <a href={project.source_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-accent-400 hover:underline"><ExternalLink className="h-3 w-3" />Source</a>}
+                      {project.source_license && <span className="rounded-full border border-surface-700 px-2 py-0.5">License: {project.source_license}</span>}
+                      {project.source_author && <span className="rounded-full border border-surface-700 px-2 py-0.5">By {project.source_author}</span>}
+                      {project.source_provider && <span className="rounded-full border border-surface-700 px-2 py-0.5">{project.source_provider}</span>}
+                    </div>
+                  )}
+                  {project.description && (
+                    <div className="mt-5 rounded-2xl border border-surface-800 bg-surface-950/40 p-4">
+                      <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-surface-200">
+                        <Info className="h-4 w-4 text-accent-400" />Descrição
+                      </div>
+                      <p className="whitespace-pre-line text-sm leading-6 text-surface-300">{visibleDescription}</p>
+                      {hasLongDescription && (
+                        <button onClick={() => setDescriptionExpanded(prev => !prev)} className="mt-3 text-sm font-medium text-accent-400 hover:text-accent-300">
+                          {descriptionExpanded ? 'Ver menos' : 'Ver mais'}
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+                <div className="space-y-3">
+                  <div className="overflow-hidden rounded-2xl border border-surface-800 bg-surface-900/70">
+                    {project.cover_file_id ? <img src={`/api/files/${project.cover_file_id}`} className="h-56 w-full object-cover" /> : <div className="flex h-56 items-center justify-center text-surface-600"><Box className="h-10 w-10" /></div>}
+                  </div>
+                  {projectImages.length > 1 && (
+                    <div className="grid grid-cols-4 gap-2">
+                      {projectImages.map(fileId => <img key={fileId} src={`/api/files/${fileId}`} className={cn('h-16 w-full rounded-lg object-cover border', project.cover_file_id === fileId ? 'border-accent-500' : 'border-surface-800')} />)}
+                    </div>
+                  )}
+                </div>
               </div>
-              <div className="flex items-center gap-3">
+              <div className="flex flex-wrap items-center gap-3">
                 <button onClick={handlePrintProject} disabled={printingProject} className="btn btn-primary" title="Print whole project">
                   <Play className="h-4 w-4 mr-2" />
                   {printingProject ? 'Queueing...' : 'Print Project'}

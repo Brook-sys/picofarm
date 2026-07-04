@@ -354,14 +354,14 @@ func TestSquarespaceProductModel(t *testing.T) {
 }
 
 func TestSquarespaceProductTemplateModel(t *testing.T) {
-	linkID := uuid.New()
+
 	templateID := uuid.New()
 	now := time.Now()
 
 	link := &model.SquarespaceProductTemplate{
-		ID:                   linkID,
+		ID:                   1,
 		SquarespaceProductID: "sq-prod-1",
-		TemplateID:           templateID,
+		ProjectID:            templateID,
 		SKU:                  "LINK-SKU",
 		CreatedAt:            now,
 	}
@@ -376,27 +376,12 @@ func TestSquarespaceProductTemplateModel(t *testing.T) {
 		t.Fatalf("failed to unmarshal: %v", err)
 	}
 
-	if parsed.TemplateID != templateID {
-		t.Errorf("expected TemplateID %s, got %s", templateID, parsed.TemplateID)
+	if parsed.ProjectID != templateID {
+		t.Errorf("expected TemplateID %s, got %s", templateID, parsed.ProjectID)
 	}
 	if parsed.SKU != "LINK-SKU" {
 		t.Errorf("expected SKU 'LINK-SKU', got '%s'", parsed.SKU)
 	}
 }
 
-func TestCreateFromTemplateOptions(t *testing.T) {
-	t.Run("squarespace source", func(t *testing.T) {
-		opts := CreateFromTemplateOptions{
-			OrderQuantity:   1,
-			Source:          "squarespace",
-			ExternalOrderID: "squarespace-sq-123",
-		}
 
-		if opts.Source != "squarespace" {
-			t.Errorf("expected source 'squarespace', got '%s'", opts.Source)
-		}
-		if opts.ExternalOrderID != "squarespace-sq-123" {
-			t.Errorf("expected ExternalOrderID 'squarespace-sq-123', got '%s'", opts.ExternalOrderID)
-		}
-	})
-}

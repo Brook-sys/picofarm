@@ -524,7 +524,7 @@ func (r *SquarespaceRepository) GetProductVariants(ctx context.Context, productI
 // SaveProductTemplate creates or updates a product-template link.
 func (r *SquarespaceRepository) SaveProductTemplate(ctx context.Context, link *model.SquarespaceProductProject) error {
 	if link.ID == 0 {
-		
+		link.ID = time.Now().UnixNano()
 	}
 	if link.CreatedAt.IsZero() {
 		link.CreatedAt = time.Now()
@@ -536,6 +536,7 @@ func (r *SquarespaceRepository) SaveProductTemplate(ctx context.Context, link *m
 		ON CONFLICT (squarespace_product_id, template_id) DO UPDATE SET
 			sku = EXCLUDED.sku
 	`, link.ID, link.SquarespaceProductID, link.ProjectID, link.SKU, link.CreatedAt)
+	
 	return err
 }
 

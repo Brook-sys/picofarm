@@ -184,6 +184,7 @@ func NewRouter(services *service.Services, hub *realtime.Hub) http.Handler {
 
 		// Printers
 		printerHandler := &PrinterHandler{service: services.Printers}
+		printerFilesHandler := NewPrinterFileHandler(services.PrinterFiles)
 		printerPrintJobHandler := &PrintJobHandler{service: services.PrintJobs}
 		dispatchHandler := &DispatchHandler{service: services.Dispatcher}
 		r.Route("/printers", func(r chi.Router) {
@@ -215,6 +216,10 @@ func NewRouter(services *service.Services, hub *realtime.Hub) http.Handler {
 				r.Post("/maintenance", printerHandler.SetMaintenanceMode)
 				r.Post("/default", printerHandler.SetDefault)
 				r.Post("/macro", printerHandler.RunMacro)
+				r.Get("/files", printerFilesHandler.List)
+				r.Post("/files/upload", printerFilesHandler.Upload)
+				r.Delete("/files", printerFilesHandler.Delete)
+				r.Post("/files/print", printerFilesHandler.StartPrint)
 				// Advanced controls
 				r.Post("/emergency-stop", printerHandler.EmergencyStop)
 				r.Post("/speed", printerHandler.SetPrintSpeed)

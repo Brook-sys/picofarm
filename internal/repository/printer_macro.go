@@ -21,7 +21,7 @@ func (r *PrinterMacroRepository) List(ctx context.Context) ([]model.PrinterMacro
 	macros := []model.PrinterMacro{}
 	for rows.Next() {
 		var macro model.PrinterMacro
-		if err := rows.Scan(&macro.ID, &macro.Title, &macro.Command, &macro.CreatedAt, &macro.UpdatedAt); err != nil {
+		if err := scanRow(rows, &macro.ID, &macro.Title, &macro.Command, &macro.CreatedAt, &macro.UpdatedAt); err != nil {
 			return nil, err
 		}
 		macros = append(macros, macro)

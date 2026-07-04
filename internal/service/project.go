@@ -20,12 +20,13 @@ type ProjectService struct {
 	repo         *repository.ProjectRepository
 	printJobRepo *repository.PrintJobRepository
 	printerRepo  *repository.PrinterRepository
-	spoolRepo  *repository.SpoolRepository
-	designRepo *repository.DesignRepository
+	spoolRepo    *repository.SpoolRepository
+	designRepo   *repository.DesignRepository
+	tagRepo      *repository.TagRepository
 	saleRepo     *repository.SaleRepository
 	partRepo     *repository.PartRepository
 	supplyRepo   *repository.ProjectSupplyRepository
-	repos        *repository.Repositories // For transaction support
+	repos        *repository.Repositories
 	printerMgr   *printer.Manager
 	hub          *realtime.Hub
 	storage      storage.Storage
@@ -59,8 +60,11 @@ func (s *ProjectService) Update(ctx context.Context, p *model.Project) error {
 
 // Delete removes a project and clears nullable FK references that would block deletion.
 func (s *ProjectService) Delete(ctx context.Context, id uuid.UUID) error {
+	project, err := s.repo.GetByID(ctx, id)
+	if err != nil {
+		return err
+	}
 	return s.repos.WithTransaction(ctx, func(tx *sql.Tx) error {
-		// Clear nullable FK references that would block deletion (RESTRICT)
 		for _, stmt := range []string{
 			`UPDATE print_jobs SET project_id = NULL WHERE project_id = ?`,
 			`UPDATE sales SET project_id = NULL WHERE project_id = ?`,
@@ -71,9 +75,14 @@ func (s *ProjectService) Delete(ctx context.Context, id uuid.UUID) error {
 				return err
 			}
 		}
-		// tasks, parts, and project_supplies cascade via FK constraints
-		_, err := tx.ExecContext(ctx, `DELETE FROM projects WHERE id = ?`, id)
-		return err
+		if _, err := tx.ExecContext(ctx, `DELETE FROM projects WHERE id = ?`, id); err != nil {
+			return err
+		}
+		if project != nil {
+			_, err := tx.ExecContext(ctx, `DELETE FROM tags WHERE name = ?`, projectTagName(project.Name))
+			return err
+		}
+		return nil
 	})
 }
 

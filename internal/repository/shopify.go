@@ -42,10 +42,10 @@ func (r *ShopifyRepository) SaveCredentials(ctx context.Context, creds *model.Sh
 func (r *ShopifyRepository) GetCredentials(ctx context.Context) (*model.ShopifyCredentials, error) {
 	var creds model.ShopifyCredentials
 	var encryptedToken string
-	err := r.db.QueryRowContext(ctx, `
+	err := scanRow(r.db.QueryRowContext(ctx, `
 		SELECT id, shop_domain, access_token, created_at, updated_at
 		FROM shopify_credentials LIMIT 1
-	`).Scan(&creds.ID, &creds.ShopDomain, &encryptedToken, &creds.CreatedAt, &creds.UpdatedAt)
+	`), &creds.ID, &creds.ShopDomain, &encryptedToken, &creds.CreatedAt, &creds.UpdatedAt)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -92,10 +92,10 @@ func (r *ShopifyRepository) SaveOrder(ctx context.Context, order *model.ShopifyO
 // GetOrderByShopifyID retrieves a Shopify order by its Shopify ID.
 func (r *ShopifyRepository) GetOrderByShopifyID(ctx context.Context, shopifyOrderID string) (*model.ShopifyOrder, error) {
 	var order model.ShopifyOrder
-	err := r.db.QueryRowContext(ctx, `
+	err := scanRow(r.db.QueryRowContext(ctx, `
 		SELECT id, shopify_order_id, order_id, shop_domain, order_number, customer_name, customer_email, total_cents, status, synced_at, created_at, updated_at
 		FROM shopify_orders WHERE shopify_order_id = ?
-	`, shopifyOrderID).Scan(&order.ID, &order.ShopifyOrderID, &order.OrderID, &order.ShopDomain, &order.OrderNumber, &order.CustomerName, &order.CustomerEmail, &order.TotalCents, &order.Status, &order.SyncedAt, &order.CreatedAt, &order.UpdatedAt)
+	`, shopifyOrderID), &order.ID, &order.ShopifyOrderID, &order.OrderID, &order.ShopDomain, &order.OrderNumber, &order.CustomerName, &order.CustomerEmail, &order.TotalCents, &order.Status, &order.SyncedAt, &order.CreatedAt, &order.UpdatedAt)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -105,10 +105,10 @@ func (r *ShopifyRepository) GetOrderByShopifyID(ctx context.Context, shopifyOrde
 // GetOrderByID retrieves a Shopify order by internal ID.
 func (r *ShopifyRepository) GetOrderByID(ctx context.Context, id uuid.UUID) (*model.ShopifyOrder, error) {
 	var order model.ShopifyOrder
-	err := r.db.QueryRowContext(ctx, `
+	err := scanRow(r.db.QueryRowContext(ctx, `
 		SELECT id, shopify_order_id, order_id, shop_domain, order_number, customer_name, customer_email, total_cents, status, synced_at, created_at, updated_at
 		FROM shopify_orders WHERE id = ?
-	`, id).Scan(&order.ID, &order.ShopifyOrderID, &order.OrderID, &order.ShopDomain, &order.OrderNumber, &order.CustomerName, &order.CustomerEmail, &order.TotalCents, &order.Status, &order.SyncedAt, &order.CreatedAt, &order.UpdatedAt)
+	`, id), &order.ID, &order.ShopifyOrderID, &order.OrderID, &order.ShopDomain, &order.OrderNumber, &order.CustomerName, &order.CustomerEmail, &order.TotalCents, &order.Status, &order.SyncedAt, &order.CreatedAt, &order.UpdatedAt)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -151,7 +151,7 @@ func (r *ShopifyRepository) ListOrders(ctx context.Context, processed *bool, lim
 	var orders []model.ShopifyOrder
 	for rows.Next() {
 		var order model.ShopifyOrder
-		if err := rows.Scan(&order.ID, &order.ShopifyOrderID, &order.OrderID, &order.ShopDomain, &order.OrderNumber, &order.CustomerName, &order.CustomerEmail, &order.TotalCents, &order.Status, &order.SyncedAt, &order.CreatedAt, &order.UpdatedAt); err != nil {
+		if err := scanRow(rows, &order.ID, &order.ShopifyOrderID, &order.OrderID, &order.ShopDomain, &order.OrderNumber, &order.CustomerName, &order.CustomerEmail, &order.TotalCents, &order.Status, &order.SyncedAt, &order.CreatedAt, &order.UpdatedAt); err != nil {
 			return nil, err
 		}
 		orders = append(orders, order)
@@ -201,7 +201,7 @@ func (r *ShopifyRepository) GetOrderItems(ctx context.Context, shopifyOrderID uu
 	var items []model.ShopifyOrderItem
 	for rows.Next() {
 		var item model.ShopifyOrderItem
-		if err := rows.Scan(&item.ID, &item.ShopifyOrderID, &item.ShopifyLineItemID, &item.SKU, &item.Title, &item.Quantity, &item.PriceCents, &item.CreatedAt); err != nil {
+		if err := scanRow(rows, &item.ID, &item.ShopifyOrderID, &item.ShopifyLineItemID, &item.SKU, &item.Title, &item.Quantity, &item.PriceCents, &item.CreatedAt); err != nil {
 			return nil, err
 		}
 		items = append(items, item)
@@ -248,7 +248,7 @@ func (r *ShopifyRepository) GetProductTemplatesBySKU(ctx context.Context, sku st
 	var links []model.ShopifyProductProject
 	for rows.Next() {
 		var link model.ShopifyProductProject
-		if err := rows.Scan(&link.ID, &link.ShopifyProductID, &link.ProjectID, &link.SKU, &link.CreatedAt); err != nil {
+		if err := scanRow(rows, &link.ID, &link.ShopifyProductID, &link.ProjectID, &link.SKU, &link.CreatedAt); err != nil {
 			return nil, err
 		}
 		links = append(links, link)
@@ -270,7 +270,7 @@ func (r *ShopifyRepository) GetTemplatesForProduct(ctx context.Context, productI
 	var links []model.ShopifyProductProject
 	for rows.Next() {
 		var link model.ShopifyProductProject
-		if err := rows.Scan(&link.ID, &link.ShopifyProductID, &link.ProjectID, &link.SKU, &link.CreatedAt); err != nil {
+		if err := scanRow(rows, &link.ID, &link.ShopifyProductID, &link.ProjectID, &link.SKU, &link.CreatedAt); err != nil {
 			return nil, err
 		}
 		links = append(links, link)
