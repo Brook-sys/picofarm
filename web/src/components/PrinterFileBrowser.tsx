@@ -17,7 +17,7 @@ export function PrinterFileBrowser({ printerId, connectionType }: PrinterFileBro
   const [uploading, setUploading] = useState(false)
   const [selected, setSelected] = useState<string[]>([])
   const [previewFile, setPreviewFile] = useState<PrinterFileEntry | null>(null)
-  const [moveRequest, setMoveRequest] = useState<string[] | null>(null)
+  const [moveRequest, setMoveRequest] = useState<PrinterFileEntry[] | null>(null)
   const [toast, setToast] = useState<AppToastState | null>(null)
 
   const showToast = (next: AppToastState) => {
@@ -107,18 +107,21 @@ export function PrinterFileBrowser({ printerId, connectionType }: PrinterFileBro
   }
 
   const openMoveDialog = (paths: string[]) => {
-    if (!paths.length) return
-    setMoveRequest(paths)
+    const files = paths.map(path => fileByPath.get(path)).filter(Boolean) as PrinterFileEntry[]
+    if (!files.length) return
+    setMoveRequest(files)
   }
 
-  const moveEntries = async (paths: string[], targetDir: string) => {
-    for (const filePath of paths) {
-      const file = fileByPath.get(filePath)
-      if (!file) continue
-      await moveMutation.mutateAsync({ path: file.path, newPath: joinPath(targetDir, file.name) })
+  const moveEntries = async (files: PrinterFileEntry[], targetDir: string) => {
+    try {
+      for (const file of files) {
+        await moveMutation.mutateAsync({ path: file.path, newPath: joinPath(targetDir, file.name) })
+      }
+      setMoveRequest(null)
+      showToast({ title: 'Moved', message: `${files.length} item${files.length === 1 ? '' : 's'} moved successfully.`, tone: 'success' })
+    } catch (err) {
+      showToast({ title: 'Move failed', message: err instanceof Error ? err.message : 'Failed to move file', tone: 'error' })
     }
-    setMoveRequest(null)
-    showToast({ title: 'Moved', message: `${paths.length} item${paths.length === 1 ? '' : 's'} moved successfully.`, tone: 'success' })
   }
 
   const deleteEntries = async (paths: string[]) => {
@@ -271,7 +274,7 @@ export function PrinterFileBrowser({ printerId, connectionType }: PrinterFileBro
         <MoveFilesModal
           printerId={printerId}
           currentPath={currentPath}
-          files={moveRequest.map(path => fileByPath.get(path)).filter(Boolean) as PrinterFileEntry[]}
+          files={moveRequest}
           onClose={() => setMoveRequest(null)}
           onMove={(targetDir) => moveEntries(moveRequest, targetDir)}
           busy={moveMutation.isPending}
