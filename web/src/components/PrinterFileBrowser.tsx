@@ -17,6 +17,7 @@ export function PrinterFileBrowser({ printerId, connectionType }: PrinterFileBro
   const [uploading, setUploading] = useState(false)
   const [selected, setSelected] = useState<string[]>([])
   const [previewFile, setPreviewFile] = useState<PrinterFileEntry | null>(null)
+  const [moveRequest, setMoveRequest] = useState<string[] | null>(null)
   const [toast, setToast] = useState<AppToastState | null>(null)
 
   const showToast = (next: AppToastState) => {
@@ -105,14 +106,19 @@ export function PrinterFileBrowser({ printerId, connectionType }: PrinterFileBro
     await renameMutation.mutateAsync({ path: file.path, newPath: joinPath(parentPath(file.path), name) })
   }
 
-  const moveEntries = async (paths: string[]) => {
-    const targetDir = prompt('Move to folder path', currentPath)?.trim()
-    if (targetDir === undefined || targetDir === null) return
+  const openMoveDialog = (paths: string[]) => {
+    if (!paths.length) return
+    setMoveRequest(paths)
+  }
+
+  const moveEntries = async (paths: string[], targetDir: string) => {
     for (const filePath of paths) {
       const file = fileByPath.get(filePath)
       if (!file) continue
       await moveMutation.mutateAsync({ path: file.path, newPath: joinPath(targetDir, file.name) })
     }
+    setMoveRequest(null)
+    showToast({ title: 'Moved', message: `${paths.length} item${paths.length === 1 ? '' : 's'} moved successfully.`, tone: 'success' })
   }
 
   const deleteEntries = async (paths: string[]) => {
@@ -137,7 +143,7 @@ export function PrinterFileBrowser({ printerId, connectionType }: PrinterFileBro
           {selected.length > 0 && (
             <>
               <span className="text-xs text-surface-400">{selected.length} selected</span>
-              <button onClick={() => moveEntries(selected)} className="btn btn-secondary text-xs"><MoveRight className="h-3.5 w-3.5 mr-1.5" />Move</button>
+              <button onClick={() => openMoveDialog(selected)} className="btn btn-secondary text-xs"><MoveRight className="h-3.5 w-3.5 mr-1.5" />Move</button>
               <button onClick={() => deleteEntries(selected)} className="btn btn-secondary text-xs text-red-300"><Trash2 className="h-3.5 w-3.5 mr-1.5" />Delete</button>
             </>
           )}
@@ -199,7 +205,7 @@ export function PrinterFileBrowser({ printerId, connectionType }: PrinterFileBro
                         </>
                       )}
                       <button onClick={() => renameEntry(file)} className="p-1.5 text-surface-300 hover:bg-surface-700 rounded" title="Rename"><Pencil className="h-4 w-4" /></button>
-                      <button onClick={() => moveEntries([file.path])} className="p-1.5 text-surface-300 hover:bg-surface-700 rounded" title="Move"><MoveRight className="h-4 w-4" /></button>
+                      <button onClick={() => openMoveDialog([file.path])} className="p-1.5 text-surface-300 hover:bg-surface-700 rounded" title="Move"><MoveRight className="h-4 w-4" /></button>
                       <button onClick={() => deleteEntries([file.path])} className="p-1.5 text-red-400 hover:bg-red-500/10 rounded" title="Delete"><Trash2 className="h-4 w-4" /></button>
                     </div>
                   </td>
@@ -261,7 +267,111 @@ export function PrinterFileBrowser({ printerId, connectionType }: PrinterFileBro
           )}
         </div>
       </div>
+      {moveRequest && (
+        <MoveFilesModal
+          printerId={printerId}
+          currentPath={currentPath}
+          files={moveRequest.map(path => fileByPath.get(path)).filter(Boolean) as PrinterFileEntry[]}
+          onClose={() => setMoveRequest(null)}
+          onMove={(targetDir) => moveEntries(moveRequest, targetDir)}
+          busy={moveMutation.isPending}
+        />
+      )}
       {toast && <AppToast toast={toast} onClose={() => setToast(null)} />}
+    </div>
+  )
+}
+
+function MoveFilesModal({ printerId, currentPath, files, busy, onClose, onMove }: { printerId: string; currentPath: string; files: PrinterFileEntry[]; busy: boolean; onClose: () => void; onMove: (targetDir: string) => void }) {
+  const [browsePath, setBrowsePath] = useState(currentPath)
+  const [manualPath, setManualPath] = useState(currentPath)
+  const { data, isLoading } = useQuery({
+    queryKey: ['printer-files-move-folders', printerId, browsePath],
+    queryFn: () => printersApi.listFiles(printerId, browsePath),
+  })
+  const folders = (data?.files || []).filter(file => file.type === 'dir').sort((a, b) => a.name.localeCompare(b.name))
+  const parts = browsePath.split('/').filter(Boolean)
+  const goUp = () => {
+    const next = parts.slice(0, -1).join('/')
+    setBrowsePath(next)
+    setManualPath(next)
+  }
+  const chooseFolder = (folder: PrinterFileEntry) => {
+    const next = [browsePath, folder.name].filter(Boolean).join('/')
+    setBrowsePath(next)
+    setManualPath(next)
+  }
+  const chooseCrumb = (index: number) => {
+    const next = parts.slice(0, index + 1).join('/')
+    setBrowsePath(next)
+    setManualPath(next)
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+      <div className="w-full max-w-2xl overflow-hidden rounded-2xl border border-surface-800 bg-surface-950 shadow-2xl shadow-black/40">
+        <div className="border-b border-surface-800 bg-surface-900/80 p-5">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h2 className="text-xl font-semibold text-surface-100">Move files</h2>
+              <p className="mt-1 text-sm text-surface-500">Choose the destination folder inside the printer storage.</p>
+            </div>
+            <button onClick={onClose} className="rounded-lg px-2 py-1 text-surface-500 hover:bg-surface-800 hover:text-surface-100">×</button>
+          </div>
+        </div>
+
+        <div className="grid gap-0 md:grid-cols-[1fr_260px]">
+          <div className="p-5">
+            <div className="mb-3 flex flex-wrap items-center gap-2 text-sm">
+              <button onClick={() => { setBrowsePath(''); setManualPath('') }} className="rounded-lg border border-surface-700 bg-surface-900 px-2.5 py-1 text-surface-300 hover:bg-surface-800">gcodes</button>
+              {parts.map((part, index) => (
+                <button key={`${part}-${index}`} onClick={() => chooseCrumb(index)} className="rounded-lg border border-surface-700 bg-surface-900 px-2.5 py-1 text-surface-300 hover:bg-surface-800">/{part}</button>
+              ))}
+            </div>
+
+            <div className="mb-3 flex gap-2">
+              <button disabled={!browsePath} onClick={goUp} className="btn btn-secondary text-xs disabled:opacity-40"><ArrowLeft className="mr-1.5 h-3.5 w-3.5" />Up</button>
+              <input value={manualPath} onChange={e => setManualPath(e.target.value)} className="input flex-1 text-sm" placeholder="Destination folder" />
+            </div>
+
+            <div className="h-72 overflow-y-auto rounded-xl border border-surface-800 bg-surface-900/40">
+              {isLoading ? (
+                <div className="p-6 text-center text-sm text-surface-500">Loading folders...</div>
+              ) : folders.length === 0 ? (
+                <div className="p-6 text-center text-sm text-surface-500">No subfolders here. You can move directly to this folder.</div>
+              ) : (
+                folders.map(folder => (
+                  <button key={folder.path} onClick={() => chooseFolder(folder)} className="flex w-full items-center gap-3 border-b border-surface-800 px-4 py-3 text-left text-sm text-surface-200 last:border-b-0 hover:bg-surface-800/70">
+                    <Folder className="h-4 w-4 text-blue-400" />
+                    <span className="truncate">{folder.name}</span>
+                  </button>
+                ))
+              )}
+            </div>
+          </div>
+
+          <div className="border-t border-surface-800 bg-surface-900/50 p-5 md:border-l md:border-t-0">
+            <div className="mb-3 text-xs font-semibold uppercase tracking-wide text-surface-500">Moving {files.length} item{files.length === 1 ? '' : 's'}</div>
+            <div className="mb-5 max-h-48 space-y-2 overflow-y-auto">
+              {files.map(file => (
+                <div key={file.path} className="flex items-center gap-2 rounded-lg border border-surface-800 bg-surface-950/60 px-3 py-2 text-xs text-surface-300">
+                  {file.type === 'dir' ? <Folder className="h-3.5 w-3.5 text-blue-400" /> : <FileText className="h-3.5 w-3.5 text-accent-300" />}
+                  <span className="truncate">{file.name}</span>
+                </div>
+              ))}
+            </div>
+            <div className="rounded-lg border border-surface-800 bg-surface-950/70 p-3 text-xs text-surface-500">
+              Destination
+              <div className="mt-1 break-all font-mono text-surface-200">gcodes/{manualPath || ''}</div>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex justify-end gap-2 border-t border-surface-800 bg-surface-900/80 p-4">
+          <button onClick={onClose} className="btn btn-secondary">Cancel</button>
+          <button disabled={busy} onClick={() => onMove(manualPath.trim())} className="btn btn-primary"><MoveRight className="mr-2 h-4 w-4" />{busy ? 'Moving...' : 'Move here'}</button>
+        </div>
+      </div>
     </div>
   )
 }
