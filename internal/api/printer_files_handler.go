@@ -56,11 +56,28 @@ func (h *PrinterFileHandler) Upload(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *PrinterFileHandler) Delete(w http.ResponseWriter, r *http.Request) {
-	printerID, filePath, ok := h.parseFileAction(w, r)
-	if !ok {
+	printerID, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		respondError(w, http.StatusBadRequest, "invalid printer ID")
 		return
 	}
-	if err := h.service.Delete(r.Context(), printerID, filePath); err != nil {
+	var req struct {
+		Path string `json:"path"`
+		Type string `json:"type"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Path == "" {
+		respondError(w, http.StatusBadRequest, "path is required")
+		return
+	}
+	if req.Type == "dir" {
+		if err := h.service.DeleteDirectory(r.Context(), printerID, req.Path); err != nil {
+			respondError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	if err := h.service.Delete(r.Context(), printerID, req.Path); err != nil {
 		respondError(w, http.StatusBadRequest, err.Error())
 		return
 	}

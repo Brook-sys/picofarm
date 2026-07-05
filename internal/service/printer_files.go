@@ -59,6 +59,14 @@ func (s *PrinterFileService) Delete(ctx context.Context, printerID uuid.UUID, fi
 	return client.DeleteFile(ctx, cleanPrinterPath(filePath))
 }
 
+func (s *PrinterFileService) DeleteDirectory(ctx context.Context, printerID uuid.UUID, dirPath string) error {
+	client, err := s.client(ctx, printerID)
+	if err != nil {
+		return err
+	}
+	return client.DeleteDirectory(ctx, cleanPrinterPath(dirPath))
+}
+
 func (s *PrinterFileService) CreateDirectory(ctx context.Context, printerID uuid.UUID, dirPath string) error {
 	client, err := s.client(ctx, printerID)
 	if err != nil {

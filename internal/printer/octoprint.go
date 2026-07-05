@@ -151,6 +151,10 @@ func (c *OctoPrintClient) DeleteFile(ctx context.Context, filePath string) error
 	return err
 }
 
+func (c *OctoPrintClient) DeleteDirectory(ctx context.Context, dirPath string) error {
+	return c.DeleteFile(ctx, dirPath)
+}
+
 func (c *OctoPrintClient) CreateDirectory(ctx context.Context, dirPath string) error {
 	_ = ctx
 	// OctoPrint creates folders via POST /api/files/local

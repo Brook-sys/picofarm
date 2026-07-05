@@ -44,7 +44,7 @@ export function PrinterFileBrowser({ printerId, connectionType }: PrinterFileBro
   }
 
   const uploadMutation = useMutation({ mutationFn: (file: File) => printersApi.uploadFile(printerId, currentPath, file), onSuccess: invalidateFiles })
-  const deleteMutation = useMutation({ mutationFn: (path: string) => printersApi.deleteFile(printerId, path), onSuccess: invalidateFiles })
+  const deleteMutation = useMutation({ mutationFn: (file: PrinterFileEntry) => printersApi.deleteFile(printerId, file.path, file.type), onSuccess: invalidateFiles })
   const mkdirMutation = useMutation({ mutationFn: (path: string) => printersApi.createDirectory(printerId, path), onSuccess: invalidateFiles })
   const renameMutation = useMutation({ mutationFn: ({ path, newPath }: { path: string; newPath: string }) => printersApi.renameFile(printerId, path, newPath), onSuccess: invalidateFiles })
   const moveMutation = useMutation({ mutationFn: ({ path, newPath }: { path: string; newPath: string }) => printersApi.moveFile(printerId, path, newPath), onSuccess: invalidateFiles })
@@ -129,8 +129,14 @@ export function PrinterFileBrowser({ printerId, connectionType }: PrinterFileBro
   }
 
   const deleteEntries = async (paths: string[]) => {
-    if (!paths.length || !confirm(`Delete ${paths.length} item(s)?`)) return
-    for (const filePath of paths) await deleteMutation.mutateAsync(filePath)
+    const files = paths.map(path => fileByPath.get(path)).filter(Boolean) as PrinterFileEntry[]
+    if (!files.length || !confirm(`Delete ${files.length} item(s)?`)) return
+    try {
+      for (const file of files) await deleteMutation.mutateAsync(file)
+      showToast({ title: 'Deleted', message: `${files.length} item${files.length === 1 ? '' : 's'} deleted.`, tone: 'success' })
+    } catch (err) {
+      showToast({ title: 'Delete failed', message: err instanceof Error ? err.message : 'Failed to delete item', tone: 'error' })
+    }
   }
 
   const toggleSelect = (path: string) => {
