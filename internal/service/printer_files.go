@@ -157,7 +157,8 @@ func printerUploadDir(dir string, filename string) string {
 func cleanPrinterPath(value string) string {
 	value = strings.TrimSpace(value)
 	value = strings.TrimPrefix(value, "/")
-	if value == "" || value == "." {
+	value = strings.TrimPrefix(value, "gcodes/")
+	if value == "gcodes" || value == "" || value == "." {
 		return ""
 	}
 	return path.Clean(value)

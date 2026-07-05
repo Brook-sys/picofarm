@@ -13,7 +13,7 @@ interface PrinterFileBrowserProps {
 
 export function PrinterFileBrowser({ printerId, connectionType }: PrinterFileBrowserProps) {
   const queryClient = useQueryClient()
-  const [currentPath, setCurrentPath] = useState('')
+  const [currentPath, setCurrentPath] = useState(connectionType === 'moonraker' ? 'sda1' : '')
   const [uploading, setUploading] = useState(false)
   const [selected, setSelected] = useState<string[]>([])
   const [previewFile, setPreviewFile] = useState<PrinterFileEntry | null>(null)
@@ -150,7 +150,7 @@ export function PrinterFileBrowser({ printerId, connectionType }: PrinterFileBro
           <button disabled={!currentPath} onClick={navigateUp} className="p-1.5 rounded-md hover:bg-surface-700 disabled:opacity-30">
             <ArrowLeft className="h-4 w-4" />
           </button>
-          <span className="text-sm font-medium text-surface-300 truncate">gcodes/{currentPath}</span>
+          <span className="text-sm font-medium text-surface-300 truncate">/{currentPath || 'root'}</span>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {selected.length > 0 && (

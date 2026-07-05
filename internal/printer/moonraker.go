@@ -338,10 +338,17 @@ func (c *MoonrakerClient) ListFiles(ctx context.Context, dir string) ([]model.Pr
 			return entries, nil
 		}
 	}
+	fallbackEntries, fallbackErr := c.listFilesRecursiveFallback(cleanDir)
+	if fallbackErr == nil && len(fallbackEntries) > 0 {
+		return fallbackEntries, nil
+	}
 	if firstEntries != nil {
 		return firstEntries, nil
 	}
-	return nil, firstErr
+	if firstErr != nil {
+		return nil, firstErr
+	}
+	return nil, fallbackErr
 }
 
 func (c *MoonrakerClient) listFilesEndpoint(endpoint string, baseDir string) ([]model.PrinterFileEntry, error) {
@@ -366,6 +373,63 @@ func (c *MoonrakerClient) listFilesEndpoint(endpoint string, baseDir string) ([]
 		entries = append(entries, item.toModel("file", baseDir))
 	}
 	return entries, nil
+}
+
+func (c *MoonrakerClient) listFilesRecursiveFallback(baseDir string) ([]model.PrinterFileEntry, error) {
+	resp, err := c.doRequest("GET", "/server/files/list?root=gcodes", nil)
+	if err != nil {
+		return nil, err
+	}
+	var raw struct {
+		Result json.RawMessage `json:"result"`
+	}
+	if err := json.Unmarshal(resp, &raw); err != nil {
+		return nil, err
+	}
+	files := []moonrakerFileEntry{}
+	if err := json.Unmarshal(raw.Result, &files); err != nil {
+		var wrapped struct {
+			Files []moonrakerFileEntry `json:"files"`
+		}
+		if err := json.Unmarshal(raw.Result, &wrapped); err != nil {
+			return nil, err
+		}
+		files = wrapped.Files
+	}
+	entries := []model.PrinterFileEntry{}
+	seenDirs := map[string]bool{}
+	for _, item := range files {
+		filePath := normalizeMoonrakerGCodeRelativePath(item.Path)
+		if filePath == "" {
+			filePath = normalizeMoonrakerGCodeRelativePath(item.Filename)
+		}
+		if filePath == "" || !isDirectMoonrakerChild(filePath, baseDir) {
+			continue
+		}
+		relative := strings.TrimPrefix(filePath, strings.TrimSuffix(baseDir, "/")+"/")
+		if baseDir == "" {
+			relative = filePath
+		}
+		parts := strings.Split(relative, "/")
+		if len(parts) > 1 {
+			dirPath := path.Join(baseDir, parts[0])
+			if !seenDirs[dirPath] {
+				seenDirs[dirPath] = true
+				entries = append(entries, model.PrinterFileEntry{Path: dirPath, Name: parts[0], Type: "dir"})
+			}
+			continue
+		}
+		item.Path = filePath
+		entries = append(entries, item.toModel("file", baseDir))
+	}
+	return entries, nil
+}
+
+func isDirectMoonrakerChild(filePath string, baseDir string) bool {
+	if baseDir == "" {
+		return filePath != ""
+	}
+	return filePath != baseDir && strings.HasPrefix(filePath, strings.TrimSuffix(baseDir, "/")+"/")
 }
 
 func (c *MoonrakerClient) UploadFile(ctx context.Context, dir string, filename string, file io.Reader) error {
