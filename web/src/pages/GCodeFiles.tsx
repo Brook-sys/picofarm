@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { FileCode, Grid3X3, Info as InfoIcon, Link2Off, List, Loader2, Plus, Search, Star, Upload, Send } from 'lucide-react'
+import { AlertTriangle, FileCode, Grid3X3, Info as InfoIcon, Link2Off, List, Loader2, Plus, Search, Star, Upload, Send } from 'lucide-react'
 import { fileLibraryApi, gcodeLibraryApi, printersApi, slicerApi, stlLibraryApi } from '../api/client'
 import AppToast, { type AppToastState } from '../components/AppToast'
 import type { GCodeLibraryFile, STLLibraryFile, Tag } from '../types'
@@ -758,6 +758,23 @@ function SendToPrinterModal({ file, printers, busy, onClose, onSend }: { file: G
   const [printerId, setPrinterId] = useState(moonrakerPrinters[0]?.id || '')
   const [remotePath, setRemotePath] = useState('')
   const [startPrint, setStartPrint] = useState(false)
+  const [printerStatus, setPrinterStatus] = useState<string>('')
+  const selectedPrinter = moonrakerPrinters.find(printer => printer.id === printerId)
+  const isOffline = printerStatus === 'offline'
+
+  useEffect(() => {
+    let active = true
+    if (!printerId) {
+      setPrinterStatus('')
+      return
+    }
+    printersApi.getState(printerId).then(state => {
+      if (active) setPrinterStatus(state.status)
+    }).catch(() => {
+      if (active) setPrinterStatus('offline')
+    })
+    return () => { active = false }
+  }, [printerId])
 
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
@@ -778,6 +795,14 @@ function SendToPrinterModal({ file, printers, busy, onClose, onSend }: { file: G
               {moonrakerPrinters.map(printer => <option key={printer.id} value={printer.id}>{printer.name}</option>)}
             </select>
           </label>
+          {selectedPrinter && (
+            <div className={cn('rounded-lg border p-3 text-sm', isOffline ? 'border-red-500/30 bg-red-500/10 text-red-200' : 'border-surface-800 bg-surface-900/70 text-surface-400')}>
+              <div className="flex items-center gap-2">
+                {isOffline && <AlertTriangle className="h-4 w-4 text-red-300" />}
+                <span>{isOffline ? `${selectedPrinter.name} is offline. Sending is disabled until it comes back online.` : `${selectedPrinter.name} is ${printerStatus || 'checking status...'}.`}</span>
+              </div>
+            </div>
+          )}
           <label className="block">
             <span className="text-xs text-surface-500 mb-1 block">Remote folder under gcodes</span>
             <input className="input" value={remotePath} onChange={e => setRemotePath(e.target.value)} placeholder="Optional, e.g. projects/calibration" />
@@ -791,7 +816,7 @@ function SendToPrinterModal({ file, printers, busy, onClose, onSend }: { file: G
           </label>
           <div className="flex justify-end gap-2">
             <button onClick={onClose} className="btn btn-secondary">Cancel</button>
-            <button disabled={!printerId || busy} onClick={() => onSend(printerId, remotePath, startPrint)} className="btn btn-primary">
+            <button disabled={!printerId || busy || isOffline} onClick={() => onSend(printerId, remotePath, startPrint)} className="btn btn-primary">
               <Send className="h-4 w-4 mr-2" />{busy ? 'Sending...' : startPrint ? 'Send & Print' : 'Send'}
             </button>
           </div>
