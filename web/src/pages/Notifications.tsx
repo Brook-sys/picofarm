@@ -32,23 +32,75 @@ const templateStyles: Array<{ id: TemplateStyle; label: string; description: str
 ]
 
 function templatePreset(channelId: string, eventType: string, format: NotificationTemplate['format'], style: TemplateStyle = 'clean'): NotificationTemplate {
-  const event = eventMeta(eventType)
-  const title = style === 'compact' ? event.label : '{{title}}'
-  const lines = style === 'compact'
-    ? ['{{message}}']
-    : style === 'detailed'
-      ? ['{{message}}', '', 'Printer: {{printer_name}}', 'File: {{file_name}}', 'Progress: {{progress}}%', 'Duration: {{duration}}', 'Filament: {{filament_grams}}g', 'Notes: {{notes}}']
-      : ['{{message}}', '', 'Printer: {{printer_name}}', 'File: {{file_name}}']
+  const content = templateContent(eventType, style)
   if (format === 'telegram_html') {
-    return { channel_id: channelId, event_type: eventType, format, title_template: `<b>${title}</b>`, body_template: lines.map(line => line ? line : '').join('\n'), payload_template: '', enabled: true }
-  }
-  if (format === 'discord_embed') {
-    return { channel_id: channelId, event_type: eventType, format, title_template: title, body_template: lines.join('\n'), payload_template: '', enabled: true }
+    return { channel_id: channelId, event_type: eventType, format, title_template: `<b>${content.title}</b>`, body_template: toTelegramBody(content.lines), payload_template: '', enabled: true }
   }
   if (format === 'json') {
-    return { channel_id: channelId, event_type: eventType, format, title_template: title, body_template: '{{message}}', payload_template: '{\n  "event": "{{event}}",\n  "severity": "{{severity}}",\n  "title": "{{title}}",\n  "message": "{{message}}",\n  "printer": "{{printer_name}}",\n  "file": "{{file_name}}",\n  "progress": "{{progress}}",\n  "timestamp": "{{timestamp}}"\n}', enabled: true }
+    return { channel_id: channelId, event_type: eventType, format, title_template: content.title, body_template: content.summary, payload_template: jsonPayloadTemplate(eventType), enabled: true }
   }
-  return { channel_id: channelId, event_type: eventType, format, title_template: title, body_template: lines.join('\n'), payload_template: '', enabled: true }
+  return { channel_id: channelId, event_type: eventType, format, title_template: content.title, body_template: content.lines.join('\n'), payload_template: '', enabled: true }
+}
+
+type TemplateContent = { title: string; summary: string; lines: string[] }
+
+function templateContent(eventType: string, style: TemplateStyle): TemplateContent {
+  const compact = style === 'compact'
+  const detailed = style === 'detailed'
+  switch (eventType) {
+    case 'print.started':
+      return buildContent('Print started: {{file_name}}', 'Started {{file_name}} on {{printer_name}}.', compact ? ['{{printer_name}} started {{file_name}}.'] : ['Print started successfully.', '', 'Printer: {{printer_name}}', 'File: {{file_name}}', ...(detailed ? ['Estimated time: {{duration}}', 'Filament: {{filament_grams}}g', 'Started at: {{timestamp}}'] : ['Estimated time: {{duration}}'])])
+    case 'print.completed':
+      return buildContent('Print finished: {{file_name}}', '{{file_name}} finished successfully on {{printer_name}}.', compact ? ['{{file_name}} finished on {{printer_name}}.'] : ['Print completed successfully.', '', 'Printer: {{printer_name}}', 'File: {{file_name}}', 'Duration: {{duration}}', ...(detailed ? ['Filament used: {{filament_grams}}g', 'Completed at: {{timestamp}}'] : [])])
+    case 'print.failed':
+      return buildContent('Print failed: {{file_name}}', '{{file_name}} failed on {{printer_name}}.', compact ? ['{{file_name}} failed on {{printer_name}}.'] : ['Print failed and needs attention.', '', 'Printer: {{printer_name}}', 'File: {{file_name}}', 'Last progress: {{progress}}%', ...(detailed ? ['Estimated waste: {{wasted_grams}}g', 'Notes: {{notes}}', 'Failed at: {{timestamp}}'] : ['Notes: {{notes}}'])])
+    case 'print.cancelled':
+      return buildContent('Print cancelled: {{file_name}}', '{{file_name}} was cancelled on {{printer_name}}.', compact ? ['{{file_name}} was cancelled.'] : ['Print was cancelled before completion.', '', 'Printer: {{printer_name}}', 'File: {{file_name}}', 'Stopped at: {{progress}}%', ...(detailed ? ['Possible waste: {{wasted_grams}}g', 'Notes: {{notes}}'] : [])])
+    case 'printer.offline':
+      return buildContent('Printer offline: {{printer_name}}', '{{printer_name}} is offline.', compact ? ['{{printer_name}} is offline.'] : ['Printer connection was lost.', '', 'Printer: {{printer_name}}', 'Model: {{printer_model}}', ...(detailed ? ['Status: {{status}}', 'Detected at: {{timestamp}}', 'Notes: {{notes}}'] : ['Status: {{status}}'])])
+    case 'printer.online':
+      return buildContent('Printer online: {{printer_name}}', '{{printer_name}} is back online.', compact ? ['{{printer_name}} is online.'] : ['Printer is connected and ready.', '', 'Printer: {{printer_name}}', 'Model: {{printer_model}}', ...(detailed ? ['Status: {{status}}', 'Detected at: {{timestamp}}'] : [])])
+    case 'printer.error':
+      return buildContent('Printer error: {{printer_name}}', '{{printer_name}} reported an error.', compact ? ['{{printer_name}} reported an error.'] : ['Printer reported an error state.', '', 'Printer: {{printer_name}}', 'Status: {{status}}', ...(detailed ? ['Message: {{message}}', 'Notes: {{notes}}', 'Timestamp: {{timestamp}}'] : ['Message: {{message}}'])])
+    case 'emergency.stop':
+      return buildContent('Emergency stop: {{printer_name}}', 'Emergency stop triggered on {{printer_name}}.', compact ? ['Emergency stop triggered on {{printer_name}}.'] : ['Emergency stop was triggered.', '', 'Printer: {{printer_name}}', 'Status: {{status}}', 'Message: {{message}}', ...(detailed ? ['Timestamp: {{timestamp}}', 'Notes: {{notes}}'] : [])])
+    case 'queue.blocked':
+      return buildContent('Queue blocked: {{file_name}}', '{{file_name}} cannot be dispatched.', compact ? ['Queue blocked: {{file_name}}.'] : ['A queued item needs attention before printing.', '', 'File: {{file_name}}', 'Printer: {{printer_name}}', 'Reason: {{message}}', ...(detailed ? ['Notes: {{notes}}', 'Checked at: {{timestamp}}'] : [])])
+    case 'spool.low':
+      return buildContent('Spool low: {{printer_name}}', 'Material is running low for {{printer_name}}.', compact ? ['Spool is low on {{printer_name}}.'] : ['Material is running low.', '', 'Printer: {{printer_name}}', 'Remaining estimate: {{filament_grams}}g', 'Status: {{status}}', ...(detailed ? ['Notes: {{notes}}', 'Detected at: {{timestamp}}'] : [])])
+    default:
+      return buildContent('{{title}}', '{{message}}', compact ? ['{{message}}'] : ['{{message}}', '', 'Printer: {{printer_name}}', 'Status: {{status}}'])
+  }
+}
+
+function buildContent(title: string, summary: string, lines: string[]): TemplateContent {
+  return { title, summary, lines }
+}
+
+function toTelegramBody(lines: string[]) {
+  return lines.map(line => {
+    const match = line.match(/^([^:]+):\s(.+)$/)
+    return match ? `<b>${match[1]}:</b> ${match[2]}` : line
+  }).join('\n')
+}
+
+function jsonPayloadTemplate(eventType: string) {
+  const base = ['  "event": "{{event}}"', '  "severity": "{{severity}}"', '  "title": "{{title}}"', '  "message": "{{message}}"', '  "timestamp": "{{timestamp}}"']
+  const fieldsByEvent: Record<string, string[]> = {
+    'print.started': ['  "printer": "{{printer_name}}"', '  "file": "{{file_name}}"', '  "estimated_duration": "{{duration}}"', '  "filament_grams": "{{filament_grams}}"'],
+    'print.completed': ['  "printer": "{{printer_name}}"', '  "file": "{{file_name}}"', '  "duration": "{{duration}}"', '  "filament_grams": "{{filament_grams}}"'],
+    'print.failed': ['  "printer": "{{printer_name}}"', '  "file": "{{file_name}}"', '  "progress": "{{progress}}"', '  "wasted_grams": "{{wasted_grams}}"', '  "notes": "{{notes}}"'],
+    'print.cancelled': ['  "printer": "{{printer_name}}"', '  "file": "{{file_name}}"', '  "progress": "{{progress}}"', '  "wasted_grams": "{{wasted_grams}}"'],
+    'printer.offline': ['  "printer": "{{printer_name}}"', '  "printer_model": "{{printer_model}}"', '  "status": "{{status}}"'],
+    'printer.online': ['  "printer": "{{printer_name}}"', '  "printer_model": "{{printer_model}}"', '  "status": "{{status}}"'],
+    'printer.error': ['  "printer": "{{printer_name}}"', '  "status": "{{status}}"', '  "notes": "{{notes}}"'],
+    'emergency.stop': ['  "printer": "{{printer_name}}"', '  "status": "{{status}}"', '  "notes": "{{notes}}"'],
+    'queue.blocked': ['  "file": "{{file_name}}"', '  "printer": "{{printer_name}}"', '  "notes": "{{notes}}"'],
+    'spool.low': ['  "printer": "{{printer_name}}"', '  "remaining_grams": "{{filament_grams}}"', '  "status": "{{status}}"'],
+  }
+  return `{
+${[...base, ...(fieldsByEvent[eventType] || [])].join(',\n')}
+}`
 }
 
 function eventMeta(eventType: string) {
