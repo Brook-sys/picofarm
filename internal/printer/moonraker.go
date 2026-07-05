@@ -310,9 +310,11 @@ func (c *MoonrakerClient) parseState(resp []byte) *model.PrinterState {
 
 func (c *MoonrakerClient) ListFiles(ctx context.Context, dir string) ([]model.PrinterFileEntry, error) {
 	_ = ctx
+	cleanDir := strings.TrimPrefix(strings.TrimSpace(dir), "/")
+	cleanDir = strings.TrimPrefix(cleanDir, "gcodes/")
 	endpoint := "/server/files/directory?root=gcodes"
-	if strings.TrimSpace(dir) != "" {
-		endpoint += "&path=" + url.QueryEscape(dir)
+	if cleanDir != "" {
+		endpoint = "/server/files/directory?path=" + url.QueryEscape("gcodes/"+cleanDir)
 	}
 	resp, err := c.doRequest("GET", endpoint, nil)
 	if err != nil {
@@ -328,7 +330,7 @@ func (c *MoonrakerClient) ListFiles(ctx context.Context, dir string) ([]model.Pr
 		return nil, err
 	}
 	entries := make([]model.PrinterFileEntry, 0, len(payload.Result.Dirs)+len(payload.Result.Files))
-	baseDir := strings.TrimPrefix(dir, "/")
+	baseDir := cleanDir
 	for _, item := range payload.Result.Dirs {
 		entries = append(entries, item.toModel("dir", baseDir))
 	}
@@ -505,9 +507,17 @@ func (c *MoonrakerClient) StartPrint(ctx context.Context, filePath string) error
 }
 
 func moonrakerGCodePath(filePath string) string {
+	cleanPath := normalizeMoonrakerGCodeRelativePath(filePath)
+	return "gcodes/" + cleanPath
+}
+
+func normalizeMoonrakerGCodeRelativePath(filePath string) string {
 	cleanPath := strings.TrimPrefix(strings.TrimSpace(filePath), "/")
 	cleanPath = strings.TrimPrefix(cleanPath, "gcodes/")
-	return "gcodes/" + cleanPath
+	if cleanPath == "gcodes" {
+		return ""
+	}
+	return cleanPath
 }
 
 func escapeMoonrakerPath(filePath string) string {
@@ -538,9 +548,9 @@ func (e moonrakerFileEntry) toModel(entryType string, baseDir string) model.Prin
 	if name == "" || name == "." {
 		name = "gcodes"
 	}
-	fullPath := e.Path
+	fullPath := normalizeMoonrakerGCodeRelativePath(e.Path)
 	if fullPath == "" {
-		fullPath = name
+		fullPath = normalizeMoonrakerGCodeRelativePath(name)
 	}
 	if fullPath != "" && baseDir != "" && !strings.HasPrefix(fullPath, baseDir+"/") && fullPath != baseDir {
 		fullPath = path.Join(baseDir, fullPath)
