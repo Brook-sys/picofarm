@@ -103,6 +103,7 @@ func (s *QueueService) SetNotificationService(notifications *NotificationService
 }
 
 func (s *QueueService) List(ctx context.Context) (*QueueResponse, error) {
+	s.reconcileStaleActiveItems(ctx)
 	items, err := s.repo.List(ctx)
 	if err != nil {
 		return nil, err
@@ -480,6 +481,27 @@ func queueItemAttemptWaste(item model.QueueItem) float64 {
 		progress = 100
 	}
 	return *item.FilamentGrams * progress / 100
+}
+
+func (s *QueueService) reconcileStaleActiveItems(ctx context.Context) {
+	if s.printerMgr == nil {
+		return
+	}
+	items, err := s.repo.List(ctx)
+	if err != nil {
+		return
+	}
+	for _, item := range items {
+		if item.AssignedPrinterID == nil || (item.Status != model.QueueItemStatusPrinting && item.Status != model.QueueItemStatusPaused) {
+			continue
+		}
+		state, err := s.printerMgr.GetState(*item.AssignedPrinterID)
+		if err != nil || state == nil || state.Status == model.PrinterStatusPrinting || state.Status == model.PrinterStatusPaused {
+			continue
+		}
+		oldState := &model.PrinterState{PrinterID: *item.AssignedPrinterID, Status: model.PrinterStatusPrinting, Progress: item.Progress}
+		s.handlePrinterStatus(state, oldState)
+	}
 }
 
 func (s *QueueService) handlePrinterStatus(newState *model.PrinterState, oldState *model.PrinterState) {
