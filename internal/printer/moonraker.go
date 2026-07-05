@@ -310,12 +310,41 @@ func (c *MoonrakerClient) parseState(resp []byte) *model.PrinterState {
 
 func (c *MoonrakerClient) ListFiles(ctx context.Context, dir string) ([]model.PrinterFileEntry, error) {
 	_ = ctx
-	cleanDir := strings.TrimPrefix(strings.TrimSpace(dir), "/")
-	cleanDir = strings.TrimPrefix(cleanDir, "gcodes/")
-	endpoint := "/server/files/directory?root=gcodes"
-	if cleanDir != "" {
-		endpoint = "/server/files/directory?path=" + url.QueryEscape("gcodes/"+cleanDir)
+	cleanDir := normalizeMoonrakerGCodeRelativePath(dir)
+	endpoints := []string{
+		"/server/files/directory?root=gcodes",
+		"/server/files/directory?path=" + url.QueryEscape("gcodes"),
 	}
+	if cleanDir != "" {
+		endpoints = []string{
+			"/server/files/directory?path=" + url.QueryEscape("gcodes/"+cleanDir),
+			"/server/files/directory?root=gcodes&path=" + url.QueryEscape(cleanDir),
+		}
+	}
+	var firstEntries []model.PrinterFileEntry
+	var firstErr error
+	for _, endpoint := range endpoints {
+		entries, err := c.listFilesEndpoint(endpoint, cleanDir)
+		if err != nil {
+			if firstErr == nil {
+				firstErr = err
+			}
+			continue
+		}
+		if firstEntries == nil {
+			firstEntries = entries
+		}
+		if len(entries) > 0 {
+			return entries, nil
+		}
+	}
+	if firstEntries != nil {
+		return firstEntries, nil
+	}
+	return nil, firstErr
+}
+
+func (c *MoonrakerClient) listFilesEndpoint(endpoint string, baseDir string) ([]model.PrinterFileEntry, error) {
 	resp, err := c.doRequest("GET", endpoint, nil)
 	if err != nil {
 		return nil, err
@@ -330,7 +359,6 @@ func (c *MoonrakerClient) ListFiles(ctx context.Context, dir string) ([]model.Pr
 		return nil, err
 	}
 	entries := make([]model.PrinterFileEntry, 0, len(payload.Result.Dirs)+len(payload.Result.Files))
-	baseDir := cleanDir
 	for _, item := range payload.Result.Dirs {
 		entries = append(entries, item.toModel("dir", baseDir))
 	}
