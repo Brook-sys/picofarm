@@ -94,7 +94,7 @@ func (c *MoonrakerClient) StartJob(filename string, filePath string) error {
 		remoteName = filename
 	}
 
-	_, err = c.doRequest("POST", "/printer/print/start?filename="+url.QueryEscape(remoteName), nil)
+	_, err = c.doRequest("POST", "/printer/print/start?filename="+escapeMoonrakerPath(remoteName), nil)
 	if err != nil {
 		return fmt.Errorf("failed to start print: %w", err)
 	}
@@ -313,12 +313,12 @@ func (c *MoonrakerClient) ListFiles(ctx context.Context, dir string) ([]model.Pr
 	cleanDir := normalizeMoonrakerGCodeRelativePath(dir)
 	endpoints := []string{
 		"/server/files/directory?root=gcodes",
-		"/server/files/directory?path=" + url.QueryEscape("gcodes"),
+		"/server/files/directory?path=" + escapeMoonrakerPath("gcodes"),
 	}
 	if cleanDir != "" {
 		endpoints = []string{
-			"/server/files/directory?path=" + url.QueryEscape("gcodes/"+cleanDir),
-			"/server/files/directory?root=gcodes&path=" + url.QueryEscape(cleanDir),
+			"/server/files/directory?path=" + escapeMoonrakerPath("gcodes/"+cleanDir),
+			"/server/files/directory?root=gcodes&path=" + escapeMoonrakerPath(cleanDir),
 		}
 		if cleanDir == "sda1" || strings.HasPrefix(cleanDir, "sda1/") {
 			sdaPath := strings.TrimPrefix(cleanDir, "sda1")
@@ -326,12 +326,12 @@ func (c *MoonrakerClient) ListFiles(ctx context.Context, dir string) ([]model.Pr
 			if sdaPath == "" {
 				endpoints = append(endpoints,
 					"/server/files/directory?root=sda1",
-					"/server/files/directory?path="+url.QueryEscape("sda1"),
+					"/server/files/directory?path="+escapeMoonrakerPath("sda1"),
 				)
 			} else {
 				endpoints = append(endpoints,
-					"/server/files/directory?root=sda1&path="+url.QueryEscape(sdaPath),
-					"/server/files/directory?path="+url.QueryEscape("sda1/"+sdaPath),
+					"/server/files/directory?root=sda1&path="+escapeMoonrakerPath(sdaPath),
+					"/server/files/directory?path="+escapeMoonrakerPath("sda1/"+sdaPath),
 				)
 			}
 		}
@@ -397,7 +397,7 @@ func (c *MoonrakerClient) listFilesEndpoint(endpoint string, baseDir string) ([]
 }
 
 func (c *MoonrakerClient) listFilesRecursiveFallback(baseDir string, root string) ([]model.PrinterFileEntry, error) {
-	resp, err := c.doRequest("GET", "/server/files/list?root="+url.QueryEscape(root), nil)
+	resp, err := c.doRequest("GET", "/server/files/list?root="+escapeMoonrakerPath(root), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -503,13 +503,13 @@ func (c *MoonrakerClient) DeleteFile(ctx context.Context, filePath string) error
 
 func (c *MoonrakerClient) DeleteDirectory(ctx context.Context, dirPath string) error {
 	_ = ctx
-	_, err := c.doRequest("DELETE", "/server/files/directory?path="+url.QueryEscape("gcodes/"+strings.TrimPrefix(dirPath, "/")), nil)
+	_, err := c.doRequest("DELETE", "/server/files/directory?path="+escapeMoonrakerPath("gcodes/"+strings.TrimPrefix(dirPath, "/")), nil)
 	return err
 }
 
 func (c *MoonrakerClient) CreateDirectory(ctx context.Context, dirPath string) error {
 	_ = ctx
-	_, err := c.doRequest("POST", "/server/files/directory?root=gcodes&path="+url.QueryEscape(strings.TrimPrefix(dirPath, "/")), nil)
+	_, err := c.doRequest("POST", "/server/files/directory?root=gcodes&path="+escapeMoonrakerPath(strings.TrimPrefix(dirPath, "/")), nil)
 	return err
 }
 
@@ -560,7 +560,7 @@ func (c *MoonrakerClient) DownloadFile(ctx context.Context, filePath string) (io
 
 func (c *MoonrakerClient) GetFileMetadata(ctx context.Context, filePath string) (*model.PrinterFileMetadata, error) {
 	_ = ctx
-	resp, err := c.doRequest("GET", "/server/files/metadata?filename="+url.QueryEscape(strings.TrimPrefix(filePath, "/")), nil)
+	resp, err := c.doRequest("GET", "/server/files/metadata?filename="+escapeMoonrakerPath(strings.TrimPrefix(filePath, "/")), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -618,7 +618,7 @@ func (c *MoonrakerClient) DownloadThumbnail(ctx context.Context, thumbPath strin
 
 func (c *MoonrakerClient) StartPrint(ctx context.Context, filePath string) error {
 	_ = ctx
-	_, err := c.doRequest("POST", "/printer/print/start?filename="+url.QueryEscape(strings.TrimPrefix(filePath, "/")), nil)
+	_, err := c.doRequest("POST", "/printer/print/start?filename="+escapeMoonrakerPath(strings.TrimPrefix(filePath, "/")), nil)
 	return err
 }
 
