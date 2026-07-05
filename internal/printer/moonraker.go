@@ -385,7 +385,7 @@ func (c *MoonrakerClient) DeleteFile(ctx context.Context, filePath string) error
 
 func (c *MoonrakerClient) DeleteDirectory(ctx context.Context, dirPath string) error {
 	_ = ctx
-	_, err := c.doRequest("DELETE", "/server/files/directory?root=gcodes&path="+url.QueryEscape(strings.TrimPrefix(dirPath, "/")), nil)
+	_, err := c.doRequest("DELETE", "/server/files/directory?path="+url.QueryEscape("gcodes/"+strings.TrimPrefix(dirPath, "/")), nil)
 	return err
 }
 
