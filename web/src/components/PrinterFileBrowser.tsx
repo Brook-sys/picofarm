@@ -131,7 +131,7 @@ export function PrinterFileBrowser({ printerId, connectionType }: PrinterFileBro
       setPreviewFile(null)
       setCurrentPath(targetDir)
       queryClient.invalidateQueries({ queryKey: ['printer-files', printerId] })
-      showToast({ title: 'Moved', message: `${files.length} item${files.length === 1 ? '' : 's'} moved to gcodes/${targetDir}.`, tone: 'success' })
+      showToast({ title: 'Moved', message: `${files.length} item${files.length === 1 ? '' : 's'} moved to /${targetDir}.`, tone: 'success' })
     } catch (err) {
       showToast({ title: 'Move failed', message: err instanceof Error ? err.message : 'Failed to move file', tone: 'error' })
     }
@@ -345,7 +345,7 @@ function MoveFilesModal({ printerId, currentPath, files, busy, onClose, onMove }
         <div className="grid gap-0 md:grid-cols-[1fr_260px]">
           <div className="p-5">
             <div className="mb-3 flex flex-wrap items-center gap-2 text-sm">
-              <button onClick={() => { setBrowsePath(''); setManualPath('') }} className="rounded-lg border border-surface-700 bg-surface-900 px-2.5 py-1 text-surface-300 hover:bg-surface-800">gcodes</button>
+              <button onClick={() => { setBrowsePath(''); setManualPath('') }} className="rounded-lg border border-surface-700 bg-surface-900 px-2.5 py-1 text-surface-300 hover:bg-surface-800">root</button>
               {parts.map((part, index) => (
                 <button key={`${part}-${index}`} onClick={() => chooseCrumb(index)} className="rounded-lg border border-surface-700 bg-surface-900 px-2.5 py-1 text-surface-300 hover:bg-surface-800">/{part}</button>
               ))}
