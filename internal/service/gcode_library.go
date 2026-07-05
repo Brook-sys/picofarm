@@ -263,13 +263,14 @@ func (s *GCodeLibraryService) SendToPrinter(ctx context.Context, id uuid.UUID, o
 		return "", err
 	}
 	defer reader.Close()
-	remoteDir := printerUploadDir(opts.RemotePath, file.OriginalName)
+	remoteDir := opts.RemotePath
 	if err := s.printerFiles.UploadReader(ctx, opts.PrinterID, remoteDir, file.OriginalName, reader); err != nil {
 		return "", err
 	}
+	actualDir := PrinterUploadDir(remoteDir, file.OriginalName)
 	remotePath := file.OriginalName
-	if remoteDir != "" {
-		remotePath = remoteDir + "/" + file.OriginalName
+	if actualDir != "" {
+		remotePath = actualDir + "/" + file.OriginalName
 	}
 	if opts.StartPrint {
 		if err := s.printerFiles.StartPrint(ctx, opts.PrinterID, remotePath); err != nil {
