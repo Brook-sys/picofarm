@@ -534,11 +534,19 @@ func (c *MoonrakerClient) GetFileMetadata(ctx context.Context, filePath string) 
 		return nil, err
 	}
 	metadata := &model.PrinterFileMetadata{Path: strings.TrimPrefix(filePath, "/"), Size: payload.Result.Size, Modified: int64(payload.Result.Modified), EstimatedTime: payload.Result.EstimatedTime, FilamentTotal: payload.Result.FilamentTotal, LayerHeight: payload.Result.LayerHeight, ObjectHeight: payload.Result.ObjectHeight, FirstLayerHeight: payload.Result.FirstLayerHeight, FirstLayerBedTemp: payload.Result.FirstLayerBedTemp, FirstLayerExtrTemp: payload.Result.FirstLayerExtrTemp, Slicer: payload.Result.Slicer, SlicerVersion: payload.Result.SlicerVersion}
+	fileDir := path.Dir(strings.TrimPrefix(filePath, "/"))
+	if fileDir == "." {
+		fileDir = ""
+	}
 	for _, thumb := range payload.Result.Thumbnails {
 		if thumb.RelativePath == "" {
 			continue
 		}
-		metadata.Thumbnails = append(metadata.Thumbnails, thumb.RelativePath)
+		thumbPath := strings.TrimPrefix(thumb.RelativePath, "/")
+		if fileDir != "" && !strings.HasPrefix(thumbPath, fileDir+"/") {
+			thumbPath = path.Join(fileDir, thumbPath)
+		}
+		metadata.Thumbnails = append(metadata.Thumbnails, thumbPath)
 	}
 	if len(metadata.Thumbnails) > 0 {
 		metadata.ThumbnailRelative = metadata.Thumbnails[len(metadata.Thumbnails)-1]
