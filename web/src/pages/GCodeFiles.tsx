@@ -897,7 +897,7 @@ function FileCard({ file, busy, confirmDelete, onView, onRename, onAdd, onSend, 
       <div className="flex gap-2">
         <button onClick={onView} className="btn btn-secondary text-sm flex-1" title="Details"><InfoIcon className="h-4 w-4" /></button>
         <button onClick={onAdd} disabled={busy} className="btn btn-primary text-sm flex-1"><Plus className="h-4 w-4 mr-2" />{busy ? 'Adding...' : 'Add to Queue'}</button>
-        <button onClick={onSend} disabled={busy} className="btn btn-secondary text-sm"><Send className="h-4 w-4" /></button>
+        <button onClick={onSend} disabled={busy} className="btn btn-secondary text-sm flex-1"><Send className="h-4 w-4 mr-2" />Send to Printer</button>
         {confirmDelete ? (
           <button onClick={onDelete} disabled={busy} className="btn btn-secondary text-sm text-red-400">Confirm</button>
         ) : (
@@ -972,7 +972,7 @@ function FileRow({ file, busy, confirmDelete, indented = false, matched = false,
       <div className="flex gap-2 justify-end">
         <button onClick={onView} className="btn btn-secondary text-xs" title="Details"><InfoIcon className="h-3.5 w-3.5" /></button>
         <button onClick={onAdd} disabled={busy} className="btn btn-primary text-xs">{busy ? 'Adding...' : 'Queue'}</button>
-        <button onClick={onSend} disabled={busy} className="btn btn-secondary text-xs"><Send className="h-3.5 w-3.5" /></button>
+        <button onClick={onSend} disabled={busy} className="btn btn-secondary text-xs"><Send className="h-3.5 w-3.5 mr-1" />Send</button>
         <button onClick={onDelete} disabled={busy} className={cn('btn text-xs', confirmDelete ? 'btn-secondary text-red-400' : 'btn-ghost text-red-400')}>{confirmDelete ? 'Confirm' : 'Delete'}</button>
       </div>
     </div>
