@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Folder, FileText, Upload, Trash2, HardDrive, PlaySquare, ArrowLeft, FolderPlus, Pencil, Download, MoveRight, CheckSquare, Square, Save } from 'lucide-react'
 import { printersApi, gcodeLibraryApi } from '../api/client'
@@ -24,6 +24,12 @@ export function PrinterFileBrowser({ printerId, connectionType }: PrinterFileBro
     setToast(next)
     window.setTimeout(() => setToast(null), 3500)
   }
+
+  useEffect(() => {
+    setCurrentPath(connectionType === 'moonraker' ? 'sda1' : '')
+    setSelected([])
+    setPreviewFile(null)
+  }, [printerId, connectionType])
 
   const { data: fileList, isLoading } = useQuery({
     queryKey: ['printer-files', printerId, currentPath],
@@ -75,7 +81,10 @@ export function PrinterFileBrowser({ printerId, connectionType }: PrinterFileBro
 
   const joinPath = (dir: string, name: string) => [dir, name].filter(Boolean).join('/')
   const parentPath = (filePath: string) => filePath.split('/').slice(0, -1).join('/')
-  const navigateUp = () => setCurrentPath(currentPath.split('/').filter(Boolean).slice(0, -1).join('/'))
+  const navigateUp = () => {
+    const parent = currentPath.split('/').filter(Boolean).slice(0, -1).join('/')
+    setCurrentPath(connectionType === 'moonraker' && parent === '' ? 'sda1' : parent)
+  }
   const navigateTo = (dirName: string) => {
     setSelected([])
     setPreviewFile(null)
@@ -147,7 +156,7 @@ export function PrinterFileBrowser({ printerId, connectionType }: PrinterFileBro
     <div className="flex h-full min-h-[620px] flex-col overflow-hidden rounded-xl border border-surface-800 bg-surface-900 shadow-inner shadow-black/20">
       <div className="flex flex-wrap items-center justify-between gap-3 p-3 border-b border-surface-800 bg-surface-800/30">
         <div className="flex items-center gap-2 min-w-0">
-          <button disabled={!currentPath} onClick={navigateUp} className="p-1.5 rounded-md hover:bg-surface-700 disabled:opacity-30">
+          <button disabled={!currentPath || (connectionType === 'moonraker' && currentPath === 'sda1')} onClick={navigateUp} className="p-1.5 rounded-md hover:bg-surface-700 disabled:opacity-30">
             <ArrowLeft className="h-4 w-4" />
           </button>
           <span className="text-sm font-medium text-surface-300 truncate">/{currentPath || 'root'}</span>

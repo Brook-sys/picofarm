@@ -320,6 +320,21 @@ func (c *MoonrakerClient) ListFiles(ctx context.Context, dir string) ([]model.Pr
 			"/server/files/directory?path=" + url.QueryEscape("gcodes/"+cleanDir),
 			"/server/files/directory?root=gcodes&path=" + url.QueryEscape(cleanDir),
 		}
+		if cleanDir == "sda1" || strings.HasPrefix(cleanDir, "sda1/") {
+			sdaPath := strings.TrimPrefix(cleanDir, "sda1")
+			sdaPath = strings.TrimPrefix(sdaPath, "/")
+			if sdaPath == "" {
+				endpoints = append(endpoints,
+					"/server/files/directory?root=sda1",
+					"/server/files/directory?path="+url.QueryEscape("sda1"),
+				)
+			} else {
+				endpoints = append(endpoints,
+					"/server/files/directory?root=sda1&path="+url.QueryEscape(sdaPath),
+					"/server/files/directory?path="+url.QueryEscape("sda1/"+sdaPath),
+				)
+			}
+		}
 	}
 	var firstEntries []model.PrinterFileEntry
 	var firstErr error
@@ -338,9 +353,15 @@ func (c *MoonrakerClient) ListFiles(ctx context.Context, dir string) ([]model.Pr
 			return entries, nil
 		}
 	}
-	fallbackEntries, fallbackErr := c.listFilesRecursiveFallback(cleanDir)
+	fallbackEntries, fallbackErr := c.listFilesRecursiveFallback(cleanDir, "gcodes")
 	if fallbackErr == nil && len(fallbackEntries) > 0 {
 		return fallbackEntries, nil
+	}
+	if cleanDir == "sda1" || strings.HasPrefix(cleanDir, "sda1/") {
+		sdaEntries, sdaErr := c.listFilesRecursiveFallback(cleanDir, "sda1")
+		if sdaErr == nil && len(sdaEntries) > 0 {
+			return sdaEntries, nil
+		}
 	}
 	if firstEntries != nil {
 		return firstEntries, nil
@@ -375,8 +396,8 @@ func (c *MoonrakerClient) listFilesEndpoint(endpoint string, baseDir string) ([]
 	return entries, nil
 }
 
-func (c *MoonrakerClient) listFilesRecursiveFallback(baseDir string) ([]model.PrinterFileEntry, error) {
-	resp, err := c.doRequest("GET", "/server/files/list?root=gcodes", nil)
+func (c *MoonrakerClient) listFilesRecursiveFallback(baseDir string, root string) ([]model.PrinterFileEntry, error) {
+	resp, err := c.doRequest("GET", "/server/files/list?root="+url.QueryEscape(root), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -402,6 +423,9 @@ func (c *MoonrakerClient) listFilesRecursiveFallback(baseDir string) ([]model.Pr
 		filePath := normalizeMoonrakerGCodeRelativePath(item.Path)
 		if filePath == "" {
 			filePath = normalizeMoonrakerGCodeRelativePath(item.Filename)
+		}
+		if root == "sda1" && filePath != "" && filePath != "sda1" && !strings.HasPrefix(filePath, "sda1/") {
+			filePath = path.Join("sda1", filePath)
 		}
 		if filePath == "" || !isDirectMoonrakerChild(filePath, baseDir) {
 			continue
