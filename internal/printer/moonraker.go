@@ -397,15 +397,25 @@ func (c *MoonrakerClient) CreateDirectory(ctx context.Context, dirPath string) e
 
 func (c *MoonrakerClient) RenameFile(ctx context.Context, oldPath string, newPath string) error {
 	_ = ctx
+	sourcePath := moonrakerGCodePath(oldPath)
+	destPath := moonrakerGCodePath(newPath)
 	payload, err := json.Marshal(map[string]string{
-		"source": "gcodes/" + strings.TrimPrefix(oldPath, "/"),
-		"dest":   "gcodes/" + strings.TrimPrefix(newPath, "/"),
+		"source": sourcePath,
+		"dest":   destPath,
 	})
 	if err != nil {
 		return err
 	}
-	_, err = c.doRequest("POST", "/server/files/move", payload)
-	return err
+	if _, err = c.doRequest("POST", "/server/files/move", payload); err != nil {
+		return err
+	}
+	verifyPath := strings.TrimPrefix(destPath, "gcodes/")
+	if path.Ext(verifyPath) != "" {
+		if _, err := c.GetFileMetadata(ctx, verifyPath); err != nil {
+			return fmt.Errorf("file was moved but destination could not be verified: %w", err)
+		}
+	}
+	return nil
 }
 
 func (c *MoonrakerClient) MoveFile(ctx context.Context, sourcePath string, destPath string) error {
@@ -492,6 +502,12 @@ func (c *MoonrakerClient) StartPrint(ctx context.Context, filePath string) error
 	_ = ctx
 	_, err := c.doRequest("POST", "/printer/print/start?filename="+url.QueryEscape(strings.TrimPrefix(filePath, "/")), nil)
 	return err
+}
+
+func moonrakerGCodePath(filePath string) string {
+	cleanPath := strings.TrimPrefix(strings.TrimSpace(filePath), "/")
+	cleanPath = strings.TrimPrefix(cleanPath, "gcodes/")
+	return "gcodes/" + cleanPath
 }
 
 func escapeMoonrakerPath(filePath string) string {
