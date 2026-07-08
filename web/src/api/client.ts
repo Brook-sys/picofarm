@@ -582,7 +582,7 @@ export const printersApi = {
 
 // Cameras API
 export const camerasApi = {
-  list: () => fetchApi<import('../types').Camera[]>('/cameras'),
+  list: (printerId?: string) => fetchApi<import('../types').Camera[]>(`/cameras${printerId ? `?printer_id=${printerId}` : ''}`),
   create: (data: Partial<import('../types').Camera>) =>
     fetchApi<import('../types').Camera>('/cameras', { method: 'POST', body: JSON.stringify(data) }),
   delete: (id: string) => fetchApi<void>(`/cameras/${id}`, { method: 'DELETE' }),

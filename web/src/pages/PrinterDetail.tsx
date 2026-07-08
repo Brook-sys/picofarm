@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, Wifi, Thermometer, Fan, Gauge, Info, AlertTriangle, Lightbulb, Box, History, CheckCircle, XCircle, Printer as PrinterIcon, Clock, DollarSign, Check, X, Activity, TrendingUp, Target, Heart, ExternalLink, RefreshCw, Trash2 } from 'lucide-react'
+import { ArrowLeft, Wifi, Thermometer, Fan, Gauge, Info, AlertTriangle, Lightbulb, Box, History, CheckCircle, XCircle, Printer as PrinterIcon, Clock, DollarSign, Check, X, Activity, TrendingUp, Target, Heart, ExternalLink, RefreshCw, Trash2, Camera as CameraIcon } from 'lucide-react'
 import { usePrinter, usePrinterState, usePrinterJobs, usePrinterStats, useUpdatePrinter, usePrinterAnalytics } from '../hooks/usePrinters'
-import { printJobsApi, printersApi, queueApi } from '../api/client'
+import { camerasApi, printJobsApi, printersApi, queueApi } from '../api/client'
 import { cn, getStatusBadge, formatDuration, formatRelativeTime } from '../lib/utils'
 import { ExpandableJobEvents } from '../components/JobEventTimeline'
 import AutoDispatchSettings from '../components/AutoDispatchSettings'
@@ -94,6 +94,11 @@ export default function PrinterDetail() {
     retry: false,
   })
   const { data: analytics } = usePrinterAnalytics(id!)
+  const { data: cameras = [], isLoading: camerasLoading } = useQuery({
+    queryKey: ['cameras', id],
+    queryFn: () => camerasApi.list(id!),
+    enabled: !!id,
+  })
   const updatePrinter = useUpdatePrinter()
   const [controlError, setControlError] = useState('')
   const [controlBusy, setControlBusy] = useState('')
@@ -302,6 +307,40 @@ export default function PrinterDetail() {
             </div>
           </div>
         )}
+
+        {/* CAMERAS */}
+        <div className="card overflow-hidden p-5">
+          <h2 className="mb-4 flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-surface-400">
+            <CameraIcon className="h-4 w-4" />
+            Cameras
+          </h2>
+          {camerasLoading ? (
+            <p className="text-sm text-surface-500">Loading cameras...</p>
+          ) : cameras.length === 0 ? (
+            <p className="text-sm text-surface-500">No cameras configured for this printer.</p>
+          ) : (
+            <div className="space-y-3">
+              {cameras.map(camera => (
+                <div key={camera.id} className="overflow-hidden rounded-xl border border-surface-800 bg-surface-950/80">
+                  {camera.type === 'mjpeg' || camera.type === 'snapshot' ? (
+                    <img src={camera.url} alt={camera.name} className="aspect-video w-full bg-black object-contain" />
+                  ) : (
+                    <div className="flex aspect-video items-center justify-center bg-black/40 p-4 text-center text-sm text-surface-500">
+                      Preview unavailable for {camera.type.toUpperCase()} streams.
+                    </div>
+                  )}
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-t border-surface-800 px-3 py-2 text-xs">
+                    <div>
+                      <div className="font-medium text-surface-200">{camera.name}</div>
+                      <div className="max-w-full truncate text-surface-500">{camera.url}</div>
+                    </div>
+                    <span className={cn('badge', camera.enabled ? 'bg-emerald-500/20 text-emerald-300' : 'bg-surface-800 text-surface-400')}>{camera.enabled ? 'Enabled' : 'Disabled'}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
 
         {/* DEVICE INFO */}
         <div className="card p-5">
