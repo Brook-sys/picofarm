@@ -36,7 +36,7 @@ Use this matrix to decide what to manually verify or automate when changing Pico
 - Frontend API client change: run `cd web && npm run lint`, `cd web && npm run build`, and manually exercise the affected page.
 - Printer control or queue change: use fake/manual printers only unless the user explicitly asks for real hardware testing.
 - Upload/delete/backup change: test in temp directories and verify cleanup behavior.
-- Security/CORS change: add router tests and document expected local/self-hosted behavior.
+- Security/CORS/endpoint-policy change: add router tests and document expected local/self-hosted behavior, including `docs/SECURITY_ENDPOINTS.md` for sensitive routes.
 
 ## Current automation gaps to close
 

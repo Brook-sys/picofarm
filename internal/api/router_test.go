@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 
@@ -131,6 +132,33 @@ func TestRouterSetsSecurityHeaders(t *testing.T) {
 	for header, want := range expected {
 		if got := response.Header().Get(header); got != want {
 			t.Fatalf("expected %s header %q, got %q", header, want, got)
+		}
+	}
+}
+
+func TestSensitiveEndpointInventoryDocumentsHighRiskRoutes(t *testing.T) {
+	doc, err := os.ReadFile("../../docs/SECURITY_ENDPOINTS.md")
+	if err != nil {
+		t.Fatalf("read sensitive endpoint inventory: %v", err)
+	}
+	text := string(doc)
+
+	required := []string{
+		"POST /api/printers/emergency-stop",
+		"POST /api/printers/{id}/files/print",
+		"POST /api/print-jobs/{id}/start",
+		"POST /api/queue/{id}/start",
+		"POST /api/gcode-library/{id}/send-to-printer",
+		"POST /api/backups/{name}/restore",
+		"PUT /api/settings/{key}",
+		"POST /api/bambu-cloud/login",
+		"POST /api/integrations/etsy/webhook",
+		"POST /api/integrations/shopify/sync",
+		"GET /api/public/quotes/{token}",
+	}
+	for _, route := range required {
+		if !strings.Contains(text, route) {
+			t.Fatalf("expected sensitive endpoint inventory to document %s", route)
 		}
 	}
 }

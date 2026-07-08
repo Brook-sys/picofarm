@@ -64,6 +64,8 @@ These headers reduce browser-side exposure for the local UI and API without intr
 
 ## Sensitive endpoint classes
 
+See [Sensitive endpoint inventory](SECURITY_ENDPOINTS.md) for the current route-level classification. Keep that inventory aligned with `internal/api/router.go` whenever routes are added, removed, or materially changed.
+
 When changing these areas, add tests and update this document if behavior changes:
 
 | Class | Examples | Risk |
@@ -101,7 +103,8 @@ Backup/restore work should verify:
 - [x] CORS restricted by explicit allowed origins for self-hosted browser access.
 - [x] Baseline browser hardening headers applied to all routes.
 - [ ] Authentication/authorization model documented and implemented or clearly delegated to a trusted reverse proxy.
-- [ ] Sensitive printer/file/backup endpoints reviewed.
+- [x] Sensitive printer/file/backup endpoints inventoried and risk-classified.
+- [ ] Sensitive printer/file/backup endpoints protected by auth middleware or a documented trusted reverse proxy boundary.
 - [ ] Webhook signature verification documented and tested for each provider.
 - [ ] Secrets loaded from environment/config, not stored in source or logs.
 - [ ] Backup/restore tested in an isolated temporary environment.

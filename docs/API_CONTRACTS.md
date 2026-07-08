@@ -7,12 +7,13 @@ This document records the current HTTP/JSON contract conventions between the Go 
 | Layer | Source |
 | --- | --- |
 | Route table | `internal/api/router.go` |
+| Sensitive endpoint risk inventory | `docs/SECURITY_ENDPOINTS.md` |
 | Backend JSON shapes | `internal/model/*.go` plus handler-local request/response structs |
 | Frontend API calls | `web/src/api/client.ts` |
 | Frontend domain/API types | `web/src/types/index.ts` |
 | Database schema | `migrations/*.sql` plus compatibility logic in `internal/database/sqlite.go` |
 
-When an endpoint or JSON shape changes, update the backend model/handler, frontend API client, frontend type, tests, and this document in the same cycle.
+When an endpoint or JSON shape changes, update the backend model/handler, frontend API client, frontend type, tests, and this document in the same cycle. If the route can read private data, mutate state, touch files, control hardware, change settings, use credentials, or interact with an external service, update `docs/SECURITY_ENDPOINTS.md` too.
 
 ## Base URLs and protocol
 
@@ -304,3 +305,4 @@ Before merging an API/data-contract change:
 6. Run `cd web && npm run lint`.
 7. Run `cd web && npm run build`.
 8. Update this document and `docs/REGRESSION_MATRIX.md` if the affected workflow is critical.
+9. Update `docs/SECURITY_ENDPOINTS.md` if the route is security-sensitive.

@@ -9,6 +9,7 @@ This directory contains the operational documentation for PicoFarm. Prefer updat
 - [API and data contracts](API_CONTRACTS.md) — HTTP/JSON conventions, route groups, shared enum values, and Go/TypeScript synchronization rules.
 - [Regression matrix](REGRESSION_MATRIX.md) — critical user flows to validate manually or automate as tests.
 - [Security model](SECURITY_MODEL.md) — current assumptions and hardening work for local/self-hosted operation.
+- [Sensitive endpoint inventory](SECURITY_ENDPOINTS.md) — route-level risk classes for printer control, files, backups, settings, public routes, and integrations.
 
 ## Documentation policy for humans and agents
 
@@ -20,7 +21,7 @@ When changing PicoFarm, keep docs close to the code change:
 | Backend route, JSON response, or domain model | `docs/API_CONTRACTS.md`, `docs/ARCHITECTURE.md` |
 | Database migration or storage behavior | `docs/ARCHITECTURE.md`, `docs/PROJECT_BASELINE.md` |
 | Critical workflow behavior | `docs/REGRESSION_MATRIX.md` |
-| Self-hosted, CORS, auth, backups, uploads, printer control | `docs/SECURITY_MODEL.md` |
+| Self-hosted, CORS, auth, backups, uploads, printer control | `docs/SECURITY_MODEL.md`, `docs/SECURITY_ENDPOINTS.md` |
 | Agent workflow or validation policy | `AGENTS.md`, `docs/PROJECT_BASELINE.md` |
 
 Keep documentation practical and current. Do not describe planned behavior as already implemented. Use placeholders such as `[REDACTED]` instead of secrets, tokens, API keys, printer credentials, or connection strings.
