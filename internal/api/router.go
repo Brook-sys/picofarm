@@ -41,6 +41,7 @@ func NewRouterWithOptions(services *service.Services, hub *realtime.Hub, opts Ro
 	sentryMiddleware := sentryhttp.New(sentryhttp.Options{Repanic: true})
 	r.Use(sentryMiddleware.Handle)
 	r.Use(RequestLogger) // Custom structured logging with request IDs and timing
+	r.Use(SecurityHeaders)
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.RealIP)
 	allowedOrigins := corsAllowedOrigins(opts.AllowedOrigins)

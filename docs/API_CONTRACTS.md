@@ -25,6 +25,7 @@ When an endpoint or JSON shape changes, update the backend model/handler, fronte
   - otherwise the browser window origin;
   - otherwise `http://localhost:8084` for non-browser fallback.
 - Browser CORS origins are configured by backend `ALLOWED_ORIGINS`; when unset, only local development origins are allowed.
+- All routes include baseline browser hardening headers from `internal/api/middleware.go`; clients should not depend on these headers for application-level auth.
 
 ## JSON conventions
 

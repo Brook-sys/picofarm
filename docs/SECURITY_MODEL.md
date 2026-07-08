@@ -50,6 +50,18 @@ ALLOWED_ORIGINS="https://picofarm.example.com,http://10.0.0.5:8084"
 
 Do not use wildcard origins for deployments that expose printer controls, customer/order data, backups, credentials, or integrations to browsers outside the local machine. Router tests cover allowed and blocked origins.
 
+## HTTP browser hardening headers
+
+`internal/api/middleware.go` adds conservative response headers to every route:
+
+- `X-Content-Type-Options: nosniff`
+- `X-Frame-Options: DENY`
+- `Referrer-Policy: no-referrer`
+- `Cross-Origin-Resource-Policy: same-origin`
+- `Permissions-Policy: camera=(), microphone=(), geolocation=()`
+
+These headers reduce browser-side exposure for the local UI and API without introducing authentication or changing JSON contracts. They are not a substitute for an authentication/authorization model when exposing PicoFarm outside a trusted local environment.
+
 ## Sensitive endpoint classes
 
 When changing these areas, add tests and update this document if behavior changes:
@@ -87,6 +99,7 @@ Backup/restore work should verify:
 ## Minimum hardening checklist before remote/self-hosted exposure
 
 - [x] CORS restricted by explicit allowed origins for self-hosted browser access.
+- [x] Baseline browser hardening headers applied to all routes.
 - [ ] Authentication/authorization model documented and implemented or clearly delegated to a trusted reverse proxy.
 - [ ] Sensitive printer/file/backup endpoints reviewed.
 - [ ] Webhook signature verification documented and tested for each provider.

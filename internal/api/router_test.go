@@ -112,6 +112,29 @@ func TestRouterOptionsFromEnvParsesAllowedOrigins(t *testing.T) {
 	}
 }
 
+func TestRouterSetsSecurityHeaders(t *testing.T) {
+	services := createTestServices()
+	hub := realtime.NewHub()
+	handler := NewRouterWithOptions(services, hub, RouterOptions{})
+
+	request := httptest.NewRequest(http.MethodGet, "/health", nil)
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+
+	expected := map[string]string{
+		"X-Content-Type-Options":       "nosniff",
+		"X-Frame-Options":              "DENY",
+		"Referrer-Policy":              "no-referrer",
+		"Cross-Origin-Resource-Policy": "same-origin",
+		"Permissions-Policy":           "camera=(), microphone=(), geolocation=()",
+	}
+	for header, want := range expected {
+		if got := response.Header().Get(header); got != want {
+			t.Fatalf("expected %s header %q, got %q", header, want, got)
+		}
+	}
+}
+
 func TestRouterRegistersAllExpectedRoutes(t *testing.T) {
 	services := createTestServices()
 	hub := realtime.NewHub()
