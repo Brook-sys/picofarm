@@ -42,6 +42,8 @@ type QueueResponse struct {
 	Summary QueueSummary     `json:"summary"`
 }
 
+const queueStartStatusGrace = 30 * time.Second
+
 type QueueCreateOptions struct {
 	DisplayName            string     `json:"display_name"`
 	AssignedPrinterID      *uuid.UUID `json:"assigned_printer_id,omitempty"`
@@ -379,6 +381,10 @@ func (s *QueueService) Start(ctx context.Context, id uuid.UUID) error {
 		_ = s.repo.Update(ctx, item)
 		return err
 	}
+	return s.markStarted(ctx, item)
+}
+
+func (s *QueueService) markStarted(ctx context.Context, item *model.QueueItem) error {
 	item.Status = model.QueueItemStatusPrinting
 	item.Progress = 0
 	if err := s.repo.Update(ctx, item); err != nil {
@@ -389,6 +395,17 @@ func (s *QueueService) Start(ctx context.Context, id uuid.UUID) error {
 	}
 	s.dispatchQueueNotification(ctx, item, "print.started", "info", "Print started")
 	return nil
+}
+
+func (s *QueueService) recoverFalseFailedStart(ctx context.Context, item *model.QueueItem) error {
+	if item.FailedAttempts > 0 {
+		item.FailedAttempts--
+	}
+	item.WastedGrams = 0
+	if strings.Contains(item.Notes, "Cancelled on printer") {
+		item.Notes = strings.TrimSpace(strings.ReplaceAll(item.Notes, "Cancelled on printer", ""))
+	}
+	return s.markStarted(ctx, item)
 }
 
 func (s *QueueService) SetStatus(ctx context.Context, id uuid.UUID, status model.QueueItemStatus) error {
@@ -493,6 +510,14 @@ func (s *QueueService) dispatchPrinterStatusNotification(ctx context.Context, ne
 	s.notifications.Dispatch(ctx, model.NotificationEvent{Type: eventType, Severity: severity, Title: title, Message: fmt.Sprintf("Printer status changed to %s", newState.Status), Timestamp: time.Now().UTC(), PrinterID: &printerID, Data: data})
 }
 
+func currentFileMatchesQueueItem(state *model.PrinterState, item model.QueueItem) bool {
+	currentFile := filepath.Base(strings.TrimSpace(state.CurrentFile))
+	if currentFile == "" {
+		return false
+	}
+	return currentFile == filepath.Base(strings.TrimSpace(item.FileName))
+}
+
 func queueItemAttemptWaste(item model.QueueItem) float64 {
 	if item.FilamentGrams == nil {
 		return 0
@@ -526,6 +551,9 @@ func (s *QueueService) reconcileStaleActiveItems(ctx context.Context) {
 		if err != nil || state == nil || state.Status == model.PrinterStatusPrinting || state.Status == model.PrinterStatusPaused {
 			continue
 		}
+		if time.Since(item.UpdatedAt) <= queueStartStatusGrace {
+			continue
+		}
 		oldState := &model.PrinterState{PrinterID: *item.AssignedPrinterID, Status: model.PrinterStatusPrinting, Progress: item.Progress}
 		s.handlePrinterStatus(state, oldState)
 	}
@@ -549,6 +577,11 @@ func (s *QueueService) handlePrinterStatus(newState *model.PrinterState, oldStat
 	for _, item := range items {
 		if item.AssignedPrinterID == nil || *item.AssignedPrinterID != newState.PrinterID {
 			continue
+		}
+		if item.Status == model.QueueItemStatusFailed && isActive && currentFileMatchesQueueItem(newState, item) && time.Since(item.UpdatedAt) <= queueStartStatusGrace {
+			if err := s.recoverFalseFailedStart(ctx, &item); err == nil {
+				continue
+			}
 		}
 		if item.Status != model.QueueItemStatusPrinting && item.Status != model.QueueItemStatusPaused {
 			continue
