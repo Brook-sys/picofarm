@@ -151,7 +151,13 @@ func PrinterUploadDir(dir string, filename string) string {
 		}
 		return path.Join("sda1", cleanDir)
 	}
-	return cleanDir
+	if cleanDir == "" || cleanDir == "." {
+		return "sda1"
+	}
+	if cleanDir == "sda1" || strings.HasPrefix(cleanDir, "sda1/") {
+		return cleanDir
+	}
+	return path.Join("sda1", cleanDir)
 }
 
 func cleanPrinterPath(value string) string {
