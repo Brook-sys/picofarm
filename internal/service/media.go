@@ -53,10 +53,24 @@ func (s *CameraService) List(ctx context.Context, printerID *uuid.UUID, enabled 
 	if err != nil {
 		return nil, err
 	}
-	if printerID == nil || s.printerRepo == nil {
+	if s.printerRepo == nil {
 		return cameras, nil
 	}
-	return s.withDiscoveredMoonrakerWebcams(ctx, cameras, *printerID, enabled)
+	if printerID != nil {
+		return s.withDiscoveredMoonrakerWebcams(ctx, cameras, *printerID, enabled)
+	}
+
+	printers, err := s.printerRepo.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for _, printer := range printers {
+		cameras, err = s.withDiscoveredMoonrakerWebcams(ctx, cameras, printer.ID, enabled)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return cameras, nil
 }
 
 func (s *CameraService) Update(ctx context.Context, c *model.Camera) error {
