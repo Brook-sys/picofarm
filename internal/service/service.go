@@ -93,6 +93,8 @@ func NewServices(repos *repository.Repositories, store storage.Storage, printerM
 
 	// Initialize Squarespace
 	services.Squarespace = NewSquarespaceService(repos.Squarespace)
+	services.Queue = NewQueueService(repos, store, printerMgr, hub)
+
 	// Initialize Dispatcher service
 	services.Dispatcher = NewDispatcherService(
 		repos.Dispatch,
@@ -103,6 +105,7 @@ func NewServices(repos *repository.Repositories, store storage.Storage, printerM
 		printerMgr,
 		hub,
 		services.Settings,
+		services.Queue,
 	)
 	services.Dispatcher.Init()
 
@@ -119,7 +122,6 @@ func NewServices(repos *repository.Repositories, store storage.Storage, printerM
 	services.Cameras = &CameraService{repo: repos.Cameras, printerRepo: repos.Printers}
 	services.Timelapses = &TimelapseService{repo: repos.Timelapses}
 	services.PrintArchives = &PrintArchiveService{repo: repos.PrintArchives}
-	services.Queue = NewQueueService(repos, store, printerMgr, hub)
 	services.GCodeLibrary = NewGCodeLibraryService(repos, store, services.Queue)
 	services.STLLibrary = NewSTLLibraryService(repos, store)
 	services.Notifications = NewNotificationService(repos.Notifications)

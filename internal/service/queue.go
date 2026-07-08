@@ -278,6 +278,33 @@ func (s *QueueService) UpdatePriority(ctx context.Context, id uuid.UUID, priorit
 	return s.repo.UpdatePriority(ctx, id, priority)
 }
 
+// FindNextReadyForPrinter returns the highest-priority queued file that can be started on the printer.
+func (s *QueueService) FindNextReadyForPrinter(ctx context.Context, printerID uuid.UUID) (*model.QueueItem, error) {
+	items, err := s.repo.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, item := range items {
+		if item.AssignedPrinterID == nil || *item.AssignedPrinterID != printerID {
+			continue
+		}
+		if item.Status != model.QueueItemStatusQueued && item.Status != model.QueueItemStatusReady {
+			continue
+		}
+
+		preflight, err := s.PreflightCheck(ctx, item.ID)
+		if err != nil {
+			return nil, err
+		}
+		if preflight.Ready {
+			return &item, nil
+		}
+	}
+
+	return nil, nil
+}
+
 func (s *QueueService) PreflightCheck(ctx context.Context, id uuid.UUID) (*PreflightCheckResult, error) {
 	item, err := s.repo.GetByID(ctx, id)
 	if err != nil {

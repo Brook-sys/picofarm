@@ -5,13 +5,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/Brook-sys/picofarm/internal/database"
 	"github.com/Brook-sys/picofarm/internal/model"
 	"github.com/Brook-sys/picofarm/internal/printer"
 	"github.com/Brook-sys/picofarm/internal/realtime"
 	"github.com/Brook-sys/picofarm/internal/repository"
 	"github.com/Brook-sys/picofarm/internal/storage"
+	"github.com/google/uuid"
 )
 
 // setupDispatcherTestEnv creates a test environment with all necessary services.
@@ -513,6 +513,50 @@ func TestDispatcherService_ListPending(t *testing.T) {
 		if req.Printer == nil {
 			t.Errorf("Request %d should have Printer populated", i)
 		}
+	}
+}
+
+type fakeQueueDispatchService struct {
+	itemToReturn *model.QueueItem
+	findCalls    int
+	startedID    uuid.UUID
+}
+
+func (f *fakeQueueDispatchService) FindNextReadyForPrinter(ctx context.Context, printerID uuid.UUID) (*model.QueueItem, error) {
+	f.findCalls++
+	return f.itemToReturn, nil
+}
+
+func (f *fakeQueueDispatchService) Start(ctx context.Context, id uuid.UUID) error {
+	f.startedID = id
+	return nil
+}
+
+func TestDispatcherService_OnPrinterIdleMacro_StartsQueuedFileItemBeforeEmptyQueueFallback(t *testing.T) {
+	dispatcher, repos, _ := setupDispatcherTestEnv(t)
+	ctx := context.Background()
+
+	printerObj := createTestPrinter(t, repos, "Test Printer")
+	queueItem := &model.QueueItem{ID: uuid.New(), AssignedPrinterID: &printerObj.ID, FileName: "queued.gcode"}
+	queueSvc := &fakeQueueDispatchService{itemToReturn: queueItem}
+	dispatcher.queueSvc = queueSvc
+
+	if err := dispatcher.SetGlobalEnabled(ctx, true); err != nil {
+		t.Fatal(err)
+	}
+
+	settings := &model.AutoDispatchSettings{
+		PrinterID:            printerObj.ID,
+		MacroEmptyQueueGcode: "PERSO_TUNE",
+	}
+	if err := dispatcher.OnPrinterIdleMacro(printerObj.ID, settings); err != nil {
+		t.Fatalf("OnPrinterIdleMacro failed: %v", err)
+	}
+	if queueSvc.findCalls != 1 {
+		t.Fatalf("expected queue lookup to run once, got %d", queueSvc.findCalls)
+	}
+	if queueSvc.startedID != queueItem.ID {
+		t.Fatalf("expected macro dispatch to start queue item %s, got %s", queueItem.ID, queueSvc.startedID)
 	}
 }
 

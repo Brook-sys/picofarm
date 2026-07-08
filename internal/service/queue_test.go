@@ -9,6 +9,7 @@ import (
 
 	"github.com/Brook-sys/picofarm/internal/gcode"
 	"github.com/Brook-sys/picofarm/internal/model"
+	"github.com/Brook-sys/picofarm/internal/printer"
 	"github.com/Brook-sys/picofarm/internal/repository"
 	"github.com/Brook-sys/picofarm/internal/storage"
 )
@@ -17,7 +18,7 @@ func TestQueueService_saveThumbnail_repairsMissingPhysicalFile(t *testing.T) {
 	db, _ := openFileTestDB(t)
 	repos := repository.NewRepositories(db)
 	store := storage.NewLocalStorage(t.TempDir())
-	service := NewQueueService(repos, store, nil, nil)
+	service := NewQueueService(repos, store, printer.NewManager(), nil)
 	ctx := context.Background()
 
 	thumbnail := &gcode.Thumbnail{MimeType: "image/png", Data: []byte("png-data")}
@@ -55,11 +56,57 @@ func TestQueueService_saveThumbnail_repairsMissingPhysicalFile(t *testing.T) {
 	}
 }
 
+func TestQueueService_FindNextReadyForPrinter_ReturnsQueuedLibraryItem(t *testing.T) {
+	db, _ := openFileTestDB(t)
+	repos := repository.NewRepositories(db)
+	store := storage.NewLocalStorage(t.TempDir())
+	service := NewQueueService(repos, store, printer.NewManager(), nil)
+	ctx := context.Background()
+
+	printerObj := &model.Printer{Name: "Macro Printer"}
+	if err := repos.Printers.Create(ctx, printerObj); err != nil {
+		t.Fatal(err)
+	}
+	otherPrinter := &model.Printer{Name: "Other Printer"}
+	if err := repos.Printers.Create(ctx, otherPrinter); err != nil {
+		t.Fatal(err)
+	}
+
+	file := &model.File{Hash: "queued-hash", OriginalName: "queued.gcode", ContentType: "text/x-gcode", SizeBytes: 128, StoragePath: "queued.gcode"}
+	if err := repos.Files.Create(ctx, file); err != nil {
+		t.Fatal(err)
+	}
+
+	doneItem := &model.QueueItem{SourceType: model.QueueSourceLibrary, FileID: file.ID, FileName: "done.gcode", DisplayName: "Done", Status: model.QueueItemStatusDone, AssignedPrinterID: &printerObj.ID, Priority: 100}
+	if err := repos.QueueItems.Create(ctx, doneItem); err != nil {
+		t.Fatal(err)
+	}
+	otherPrinterItem := &model.QueueItem{SourceType: model.QueueSourceLibrary, FileID: file.ID, FileName: "other.gcode", DisplayName: "Other", Status: model.QueueItemStatusQueued, AssignedPrinterID: &otherPrinter.ID, Priority: 90}
+	if err := repos.QueueItems.Create(ctx, otherPrinterItem); err != nil {
+		t.Fatal(err)
+	}
+	readyItem := &model.QueueItem{SourceType: model.QueueSourceLibrary, FileID: file.ID, FileName: "ready.gcode", DisplayName: "Ready", Status: model.QueueItemStatusQueued, AssignedPrinterID: &printerObj.ID, Priority: 80}
+	if err := repos.QueueItems.Create(ctx, readyItem); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := service.FindNextReadyForPrinter(ctx, printerObj.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got == nil {
+		t.Fatal("expected a queued library item for the macro printer")
+	}
+	if got.ID != readyItem.ID {
+		t.Fatalf("expected ready item %s, got %s", readyItem.ID, got.ID)
+	}
+}
+
 func TestQueueService_saveThumbnail_reusesExistingWhenSamePath(t *testing.T) {
 	db, _ := openFileTestDB(t)
 	repos := repository.NewRepositories(db)
 	store := storage.NewLocalStorage(t.TempDir())
-	service := NewQueueService(repos, store, nil, nil)
+	service := NewQueueService(repos, store, printer.NewManager(), nil)
 	ctx := context.Background()
 
 	thumbnail := &gcode.Thumbnail{MimeType: "image/png", Data: []byte("png-data")}
