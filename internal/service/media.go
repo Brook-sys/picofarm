@@ -4,18 +4,22 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
+	"log/slog"
+	"net/http"
 	"net/url"
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/Brook-sys/picofarm/internal/model"
 	"github.com/Brook-sys/picofarm/internal/repository"
+	"github.com/google/uuid"
 )
 
 type CameraService struct {
-	repo *repository.CameraRepository
+	repo        *repository.CameraRepository
+	printerRepo *repository.PrinterRepository
 }
 
 func (s *CameraService) Create(ctx context.Context, c *model.Camera) error {
@@ -45,7 +49,14 @@ func (s *CameraService) Create(ctx context.Context, c *model.Camera) error {
 }
 
 func (s *CameraService) List(ctx context.Context, printerID *uuid.UUID, enabled *bool) ([]model.Camera, error) {
-	return s.repo.List(ctx, printerID, enabled)
+	cameras, err := s.repo.List(ctx, printerID, enabled)
+	if err != nil {
+		return nil, err
+	}
+	if printerID == nil || s.printerRepo == nil {
+		return cameras, nil
+	}
+	return s.withDiscoveredMoonrakerWebcams(ctx, cameras, *printerID, enabled)
 }
 
 func (s *CameraService) Update(ctx context.Context, c *model.Camera) error {
@@ -68,6 +79,147 @@ func (s *CameraService) MintToken(ctx context.Context, camera *model.Camera, day
 	camera.Token = hex.EncodeToString(buf)
 	camera.TokenExpiresAt = &expires
 	return s.repo.Update(ctx, camera)
+}
+
+func (s *CameraService) withDiscoveredMoonrakerWebcams(ctx context.Context, cameras []model.Camera, printerID uuid.UUID, enabled *bool) ([]model.Camera, error) {
+	printer, err := s.printerRepo.GetByID(ctx, printerID)
+	if err != nil || printer == nil || printer.ConnectionType != model.ConnectionTypeMoonraker || printer.ConnectionURI == "" {
+		return cameras, err
+	}
+
+	discovered, err := s.discoverMoonrakerWebcams(ctx, printer)
+	if err != nil {
+		slog.Debug("CameraService: failed to discover Moonraker webcams", "printer_id", printerID, "error", err)
+		return cameras, nil
+	}
+
+	existingURLs := make(map[string]struct{}, len(cameras))
+	for _, camera := range cameras {
+		existingURLs[strings.TrimRight(camera.URL, "/")] = struct{}{}
+	}
+
+	for _, camera := range discovered {
+		if enabled != nil && camera.Enabled != *enabled {
+			continue
+		}
+		key := strings.TrimRight(camera.URL, "/")
+		if _, exists := existingURLs[key]; exists {
+			continue
+		}
+		existingURLs[key] = struct{}{}
+		cameras = append(cameras, camera)
+	}
+
+	return cameras, nil
+}
+
+func (s *CameraService) discoverMoonrakerWebcams(ctx context.Context, printer *model.Printer) ([]model.Camera, error) {
+	endpoint, err := url.JoinPath(strings.TrimRight(printer.ConnectionURI, "/"), "/server/webcams/list")
+	if err != nil {
+		return nil, err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	client := &http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= http.StatusBadRequest {
+		return nil, fmt.Errorf("moonraker webcams list failed: %s", resp.Status)
+	}
+
+	var payload moonrakerWebcamsResponse
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		return nil, err
+	}
+
+	webcams := payload.Result.Webcams
+	if webcams == nil {
+		webcams = payload.Webcams
+	}
+
+	cameras := make([]model.Camera, 0, len(webcams))
+	now := time.Now()
+	for _, webcam := range webcams {
+		streamURL := firstNonEmptyCamera(webcam.StreamURL, webcam.URL, webcam.SnapshotURL)
+		if strings.TrimSpace(streamURL) == "" {
+			continue
+		}
+		resolvedURL := resolveCameraURL(streamURL, printer)
+		if resolvedURL == "" {
+			continue
+		}
+		name := strings.TrimSpace(webcam.Name)
+		if name == "" {
+			name = "Moonraker webcam"
+		}
+		typ := strings.TrimSpace(webcam.Type)
+		if typ == "" {
+			typ = "mjpeg"
+		}
+		cameraPrinterID := printer.ID
+		cameras = append(cameras, model.Camera{
+			ID:        uuid.New(),
+			PrinterID: &cameraPrinterID,
+			Name:      name,
+			Type:      typ,
+			URL:       resolvedURL,
+			Enabled:   webcam.Enabled == nil || *webcam.Enabled,
+			CreatedAt: now,
+			UpdatedAt: now,
+		})
+	}
+	return cameras, nil
+}
+
+func resolveCameraURL(raw string, printer *model.Printer) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+	parsed, err := url.Parse(raw)
+	if err != nil {
+		return ""
+	}
+	if parsed.IsAbs() && parsed.Host != "" {
+		return parsed.String()
+	}
+	baseRaw := firstNonEmptyCamera(printer.FluiddURL, printer.ConnectionURI)
+	base, err := url.Parse(baseRaw)
+	if err != nil || base.Host == "" {
+		return ""
+	}
+	return base.ResolveReference(parsed).String()
+}
+
+func firstNonEmptyCamera(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+type moonrakerWebcamsResponse struct {
+	Result struct {
+		Webcams []moonrakerWebcam `json:"webcams"`
+	} `json:"result"`
+	Webcams []moonrakerWebcam `json:"webcams"`
+}
+
+type moonrakerWebcam struct {
+	Name        string `json:"name"`
+	Type        string `json:"type"`
+	StreamURL   string `json:"stream_url"`
+	SnapshotURL string `json:"snapshot_url"`
+	URL         string `json:"url"`
+	Enabled     *bool  `json:"enabled"`
 }
 
 type TimelapseService struct {

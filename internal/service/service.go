@@ -116,7 +116,7 @@ func NewServices(repos *repository.Repositories, store storage.Storage, printerM
 	services.Feedback = &FeedbackService{repo: repos.Feedback}
 	services.Customers = NewCustomerService(repos.Customers, hub)
 	services.Quotes = NewQuoteService(repos.Quotes, repos.Customers, repos.Orders, repos, hub)
-	services.Cameras = &CameraService{repo: repos.Cameras}
+	services.Cameras = &CameraService{repo: repos.Cameras, printerRepo: repos.Printers}
 	services.Timelapses = &TimelapseService{repo: repos.Timelapses}
 	services.PrintArchives = &PrintArchiveService{repo: repos.PrintArchives}
 	services.Queue = NewQueueService(repos, store, printerMgr, hub)
