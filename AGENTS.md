@@ -43,6 +43,18 @@ Use `scripts/dev.sh test` before finishing feature work when both backend and fr
 
 Use `scripts/dev.sh logs` when backend health fails.
 
+## Documentation map
+
+When changing behavior, operations, validation, API contracts, storage, security, or agent workflow, check the documentation under `docs/`:
+
+- `docs/PROJECT_BASELINE.md` — canonical stack/runtime defaults and validation gates.
+- `docs/ARCHITECTURE.md` — code layout, boundaries, and where to make common changes.
+- `docs/REGRESSION_MATRIX.md` — critical workflows to validate or automate.
+- `docs/SECURITY_MODEL.md` — CORS, secrets, uploads, backups, integrations, and sensitive endpoint guidance.
+- `docs/README.md` — documentation maintenance policy.
+
+Keep docs factual and operational. Do not document planned behavior as current behavior.
+
 ## Git policy
 
 The user requested that code changes be committed from now on.

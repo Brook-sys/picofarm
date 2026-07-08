@@ -14,7 +14,9 @@ yarn-error.log*
 
 uploads/
 
+# Local agent/session artifacts
 .ai/
+.hermes/
 
 printfarm
 printfarm.cp

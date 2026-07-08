@@ -1,10 +1,18 @@
-# Picofarm
+# PicoFarm
 
 **Print Farm Management + Order Fulfillment Platform**
 
 A comprehensive platform for makers and small 3D print farms. Manage your product catalog, track orders from multiple sales channels, and coordinate print jobs across your printer fleet.
 
-Runs as a **desktop app** (macOS/Windows via [Wails](https://wails.io)) or as a **self-hosted web app** (Docker).
+Runs as a self-hosted/local web app. Some legacy desktop/Wails and Daedalus references may still exist in older project files; use the docs below as the current operational baseline.
+
+## Documentation
+
+- [Project baseline](docs/PROJECT_BASELINE.md) — stack, runtime defaults, validation commands, known warnings, and commit/push policy.
+- [Architecture](docs/ARCHITECTURE.md) — backend/frontend/database layout and where to make common changes.
+- [Regression matrix](docs/REGRESSION_MATRIX.md) — critical workflows to manually verify or automate.
+- [Security model](docs/SECURITY_MODEL.md) — local/self-hosted assumptions, CORS, secrets, uploads, backups, and sensitive endpoints.
+- [Docs index](docs/README.md) — documentation maintenance policy for humans and agents.
 
 ## Features
 
