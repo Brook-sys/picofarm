@@ -20,6 +20,7 @@ import (
 // development and self-hosted deployments.
 type RouterOptions struct {
 	AllowedOrigins []string
+	ApiToken       string
 }
 
 // NewRouter creates the HTTP router with all routes.
@@ -30,7 +31,10 @@ func NewRouter(services *service.Services, hub *realtime.Hub) http.Handler {
 // RouterOptionsFromEnv loads router configuration from environment variables.
 // ALLOWED_ORIGINS is a comma-separated list of browser origins allowed by CORS.
 func RouterOptionsFromEnv() RouterOptions {
-	return RouterOptions{AllowedOrigins: splitCSV(os.Getenv("ALLOWED_ORIGINS"))}
+	return RouterOptions{
+		AllowedOrigins: splitCSV(os.Getenv("ALLOWED_ORIGINS")),
+		ApiToken:       os.Getenv("API_TOKEN"),
+	}
 }
 
 // NewRouterWithOptions creates the HTTP router with all routes.
@@ -92,6 +96,7 @@ func NewRouterWithOptions(services *service.Services, hub *realtime.Hub, opts Ro
 
 	// API routes
 	r.Route("/api", func(r chi.Router) {
+		r.Use(ApiTokenAuth(opts.ApiToken))
 		// Projects (Product Catalog)
 		projectHandler := &ProjectHandler{service: services.Projects}
 		projectPrintJobHandler := &PrintJobHandler{service: services.PrintJobs}

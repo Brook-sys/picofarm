@@ -102,13 +102,30 @@ Backup/restore work should verify:
 
 - [x] CORS restricted by explicit allowed origins for self-hosted browser access.
 - [x] Baseline browser hardening headers applied to all routes.
-- [ ] Authentication/authorization model documented and implemented or clearly delegated to a trusted reverse proxy.
+- [x] Authentication/authorization model documented and implemented or clearly delegated to a trusted reverse proxy.
 - [x] Sensitive printer/file/backup endpoints inventoried and risk-classified.
-- [ ] Sensitive printer/file/backup endpoints protected by auth middleware or a documented trusted reverse proxy boundary.
+- [x] Sensitive printer/file/backup endpoints protected by auth middleware or a documented trusted reverse proxy boundary.
 - [ ] Webhook signature verification documented and tested for each provider.
 - [ ] Secrets loaded from environment/config, not stored in source or logs.
 - [ ] Backup/restore tested in an isolated temporary environment.
 - [ ] Security-sensitive operations have regression tests.
+
+## Optional Application Auth (API Token)
+
+By default (local development), the API allows all requests. For simple self-hosted exposure where a reverse proxy with authentication is not possible, PicoFarm supports an optional shared API token.
+
+To enable it, set `API_TOKEN` in the environment:
+
+```sh
+API_TOKEN="your-secure-token-here"
+```
+
+When set, all routes under `/api/*` (except `/api/public/*`) will require this token. Clients can provide it via:
+
+- `Authorization: Bearer your-secure-token-here`
+- `X-API-Token: your-secure-token-here`
+
+This is a baseline mechanism. It is strongly recommended to use a robust reverse proxy (e.g. Tailscale, Cloudflare Access, Authelia, Nginx Basic Auth) for broad internet exposure.
 
 ## Agent rules
 

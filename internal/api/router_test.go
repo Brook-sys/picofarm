@@ -105,11 +105,63 @@ func TestRouterCORSDefaultsToLocalDevelopmentOrigins(t *testing.T) {
 
 func TestRouterOptionsFromEnvParsesAllowedOrigins(t *testing.T) {
 	t.Setenv("ALLOWED_ORIGINS", "https://farm.example.test, http://10.0.0.5:8084, ")
+	t.Setenv("API_TOKEN", "secret-token")
 
-	got := RouterOptionsFromEnv().AllowedOrigins
-	want := []string{"https://farm.example.test", "http://10.0.0.5:8084"}
-	if strings.Join(got, "|") != strings.Join(want, "|") {
-		t.Fatalf("expected parsed origins %v, got %v", want, got)
+	opts := RouterOptionsFromEnv()
+
+	gotOrigins := opts.AllowedOrigins
+	wantOrigins := []string{"https://farm.example.test", "http://10.0.0.5:8084"}
+	if strings.Join(gotOrigins, "|") != strings.Join(wantOrigins, "|") {
+		t.Fatalf("expected parsed origins %v, got %v", wantOrigins, gotOrigins)
+	}
+
+	if opts.ApiToken != "secret-token" {
+		t.Fatalf("expected ApiToken %q, got %q", "secret-token", opts.ApiToken)
+	}
+}
+
+func TestRouterOptionalAuth(t *testing.T) {
+	services := createTestServices()
+	hub := realtime.NewHub()
+	handler := NewRouterWithOptions(services, hub, RouterOptions{
+		ApiToken: "test-secret-token",
+	})
+
+	// Public routes should not require auth
+	publicReq := httptest.NewRequest(http.MethodGet, "/health", nil)
+	publicResp := httptest.NewRecorder()
+	handler.ServeHTTP(publicResp, publicReq)
+	if publicResp.Code != http.StatusOK {
+		t.Errorf("expected health check to be 200, got %d", publicResp.Code)
+	}
+
+	// Protected routes should require auth
+	protectedReq := httptest.NewRequest(http.MethodGet, "/api/projects/", nil)
+	protectedResp := httptest.NewRecorder()
+	handler.ServeHTTP(protectedResp, protectedReq)
+	if protectedResp.Code != http.StatusUnauthorized {
+		t.Errorf("expected protected route to be 401 without token, got %d", protectedResp.Code)
+	}
+
+	// Protected routes should succeed with Bearer token
+	authReq := httptest.NewRequest(http.MethodGet, "/api/projects/", nil)
+	authReq.Header.Set("Authorization", "Bearer test-secret-token")
+	authResp := httptest.NewRecorder()
+	handler.ServeHTTP(authResp, authReq)
+	// We expect 200 since mock services are used and projectHandler returns empty array or similar.
+	// Wait, projectHandler.List might return 200 or 500 if DB is nil.
+	// Let's just check it is not 401.
+	if authResp.Code == http.StatusUnauthorized {
+		t.Errorf("expected protected route to accept valid token, got 401")
+	}
+
+	// Protected routes should succeed with X-API-Token
+	authReq2 := httptest.NewRequest(http.MethodGet, "/api/projects/", nil)
+	authReq2.Header.Set("X-API-Token", "test-secret-token")
+	authResp2 := httptest.NewRecorder()
+	handler.ServeHTTP(authResp2, authReq2)
+	if authResp2.Code == http.StatusUnauthorized {
+		t.Errorf("expected protected route to accept valid X-API-Token, got 401")
 	}
 }
 

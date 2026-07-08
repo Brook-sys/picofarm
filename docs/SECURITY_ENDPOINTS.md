@@ -9,7 +9,7 @@ PicoFarm currently has CORS restrictions and baseline browser security headers, 
 Before exposing PicoFarm outside a trusted local network, protect these routes with one of:
 
 1. a documented trusted reverse proxy with authentication and TLS; or
-2. an application-level auth middleware with explicit route policy tests.
+2. the optional application-level auth middleware (set `API_TOKEN` in the environment).
 
 ## Risk classes
 

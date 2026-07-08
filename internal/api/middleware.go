@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -164,4 +165,32 @@ func LogWarn(ctx context.Context, msg string, args ...any) {
 	}
 	allArgs = append(allArgs, args...)
 	slog.Warn(msg, allArgs...)
+}
+
+// ApiTokenAuth validates the API token if one is configured in router options.
+// If no token is configured (local dev), it allows all requests.
+func ApiTokenAuth(expectedToken string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if expectedToken == "" {
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			token := r.Header.Get("X-API-Token")
+			if token == "" {
+				authHeader := r.Header.Get("Authorization")
+				if strings.HasPrefix(authHeader, "Bearer ") {
+					token = strings.TrimPrefix(authHeader, "Bearer ")
+				}
+			}
+
+			if token != expectedToken {
+				http.Error(w, "Unauthorized", http.StatusUnauthorized)
+				return
+			}
+
+			next.ServeHTTP(w, r)
+		})
+	}
 }
