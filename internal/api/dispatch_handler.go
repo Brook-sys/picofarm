@@ -4,10 +4,10 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/go-chi/chi/v5"
-	"github.com/google/uuid"
 	"github.com/Brook-sys/picofarm/internal/model"
 	"github.com/Brook-sys/picofarm/internal/service"
+	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 )
 
 // DispatchHandler handles dispatch-related endpoints.
@@ -147,15 +147,45 @@ func (h *DispatchHandler) UpdatePrinterSettings(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	var settings model.AutoDispatchSettings
-	if err := json.NewDecoder(r.Body).Decode(&settings); err != nil {
+	var req struct {
+		Enabled                  *bool   `json:"enabled"`
+		RequireConfirmation      *bool   `json:"require_confirmation"`
+		AutoStart                *bool   `json:"auto_start"`
+		TimeoutMinutes           *int    `json:"timeout_minutes"`
+		MacroAutoDispatchEnabled *bool   `json:"macro_auto_dispatch_enabled"`
+		MacroEmptyQueueGcode     *string `json:"macro_empty_queue_gcode"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		respondError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
 
-	settings.PrinterID = printerID
+	settings, err := h.service.GetSettings(r.Context(), printerID)
+	if err != nil {
+		respondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
 
-	if err := h.service.UpdateSettings(r.Context(), &settings); err != nil {
+	if req.Enabled != nil {
+		settings.Enabled = *req.Enabled
+	}
+	if req.RequireConfirmation != nil {
+		settings.RequireConfirmation = *req.RequireConfirmation
+	}
+	if req.AutoStart != nil {
+		settings.AutoStart = *req.AutoStart
+	}
+	if req.TimeoutMinutes != nil {
+		settings.TimeoutMinutes = *req.TimeoutMinutes
+	}
+	if req.MacroAutoDispatchEnabled != nil {
+		settings.MacroAutoDispatchEnabled = *req.MacroAutoDispatchEnabled
+	}
+	if req.MacroEmptyQueueGcode != nil {
+		settings.MacroEmptyQueueGcode = *req.MacroEmptyQueueGcode
+	}
+
+	if err := h.service.UpdateSettings(r.Context(), settings); err != nil {
 		respondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}

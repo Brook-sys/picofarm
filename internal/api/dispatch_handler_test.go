@@ -9,8 +9,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/google/uuid"
 	"github.com/Brook-sys/picofarm/internal/model"
+	"github.com/google/uuid"
 )
 
 func TestDispatchHandler_ListPending_Empty(t *testing.T) {
@@ -370,6 +370,58 @@ func TestDispatchHandler_UpdatePrinterSettings(t *testing.T) {
 	}
 	if settings.TimeoutMinutes != 60 {
 		t.Errorf("TimeoutMinutes = %d, want 60", settings.TimeoutMinutes)
+	}
+}
+
+func TestDispatchHandler_UpdatePrinterSettings_PartialUpdatePreservesExistingValues(t *testing.T) {
+	env := newTestEnv(t)
+	ctx := context.Background()
+
+	printer := &model.Printer{Name: "Test Printer"}
+	env.services.Printers.Create(ctx, printer)
+
+	initial := &model.AutoDispatchSettings{
+		PrinterID:                printer.ID,
+		Enabled:                  true,
+		RequireConfirmation:      true,
+		AutoStart:                true,
+		TimeoutMinutes:           30,
+		MacroAutoDispatchEnabled: true,
+		MacroEmptyQueueGcode:     "M117 Old",
+	}
+	if err := env.services.Dispatcher.UpdateSettings(ctx, initial); err != nil {
+		t.Fatalf("UpdateSettings initial: %v", err)
+	}
+
+	body := bytes.NewBufferString(`{"macro_empty_queue_gcode":"M117 Queue Empty"}`)
+	req := httptest.NewRequest(http.MethodPut, "/api/printers/"+printer.ID.String()+"/dispatch-settings", body)
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+
+	env.handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("Status = %d, want %d. Body: %s", rr.Code, http.StatusOK, rr.Body.String())
+	}
+
+	settings, err := env.services.Dispatcher.GetSettings(ctx, printer.ID)
+	if err != nil {
+		t.Fatalf("GetSettings: %v", err)
+	}
+	if !settings.MacroAutoDispatchEnabled {
+		t.Error("MacroAutoDispatchEnabled should stay true after updating only empty queue G-code")
+	}
+	if !settings.Enabled {
+		t.Error("Enabled should stay true after partial update")
+	}
+	if !settings.AutoStart {
+		t.Error("AutoStart should stay true after partial update")
+	}
+	if settings.TimeoutMinutes != 30 {
+		t.Errorf("TimeoutMinutes = %d, want 30", settings.TimeoutMinutes)
+	}
+	if settings.MacroEmptyQueueGcode != "M117 Queue Empty" {
+		t.Errorf("MacroEmptyQueueGcode = %q, want %q", settings.MacroEmptyQueueGcode, "M117 Queue Empty")
 	}
 }
 
