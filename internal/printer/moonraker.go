@@ -281,12 +281,15 @@ func (c *MoonrakerClient) listenWebsocket() {
 		}
 
 		ctx, cancel := context.WithCancel(context.Background())
-		
-		conn, _, err := websocket.Dial(ctx, wsURL, &websocket.DialOptions{
+
+		conn, resp, err := websocket.Dial(ctx, wsURL, &websocket.DialOptions{
 			HTTPClient: c.httpClient,
 		})
-		
+
 		if err != nil {
+			if resp != nil && resp.Body != nil {
+				_ = resp.Body.Close()
+			}
 			cancel()
 			select {
 			case <-time.After(5 * time.Second): // reconnect delay
@@ -296,6 +299,10 @@ func (c *MoonrakerClient) listenWebsocket() {
 			continue
 		}
 
+		if resp != nil && resp.Body != nil {
+			_ = resp.Body.Close()
+		}
+
 		slog.Debug("MoonrakerClient: WebSocket connected", "printer_id", c.printerID)
 
 		// Start a goroutine to wait for stop signal and close the connection
@@ -303,7 +310,7 @@ func (c *MoonrakerClient) listenWebsocket() {
 			select {
 			case <-c.stopPolling:
 				cancel()
-				conn.Close(websocket.StatusNormalClosure, "shutting down")
+				_ = conn.Close(websocket.StatusNormalClosure, "shutting down")
 			case <-ctx.Done():
 			}
 		}()
@@ -317,26 +324,25 @@ func (c *MoonrakerClient) listenWebsocket() {
 			err := wsjson.Read(ctx, conn, &msg)
 			if err != nil {
 				slog.Debug("MoonrakerClient: WebSocket read error", "printer_id", c.printerID, "error", err)
+				cancel()
+				_ = conn.Close(websocket.StatusAbnormalClosure, "")
 				break
 			}
 
-			// We are looking for: notify_gcode_response
 			if msg.Method == "notify_gcode_response" && len(msg.Params) > 0 {
 				if responseStr, ok := msg.Params[0].(string); ok {
 					if strings.Contains(responseStr, "AUTOMATION_EVENT:READY_FOR_NEXT_JOB") {
-						slog.Info("MoonrakerClient: Macro automation event received", "printer_id", c.printerID)
+						slog.Info("MoonrakerClient: Received automation macro event", "printer_id", c.printerID)
 						if c.macroAutomationCallback != nil {
-							// Fire the callback
 							go c.macroAutomationCallback(c.printerID)
 						}
 					}
 				}
 			}
 		}
-		
-		cancel()
-		conn.Close(websocket.StatusAbnormalClosure, "")
-		
+
+		_ = conn.Close(websocket.StatusAbnormalClosure, "")
+
 		// Backoff before reconnecting
 		select {
 		case <-time.After(2 * time.Second):

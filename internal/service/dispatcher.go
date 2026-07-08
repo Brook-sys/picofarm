@@ -113,10 +113,10 @@ func (s *DispatcherService) handlePrinterStatusChange(newState, oldState *model.
 	}
 }
 
-// OnPrinterIdleMacro handles the specific case of an empty bed signalled by macro.
+// OnPrinterIdleMacro handles the specific case of an empty bed signaled by macro.
 func (s *DispatcherService) OnPrinterIdleMacro(printerID uuid.UUID, settings *model.AutoDispatchSettings) error {
 	ctx := context.Background()
-	
+
 	// Skip if global dispatch is off, as it governs all automated assignments
 	if !s.IsGloballyEnabled(ctx) {
 		slog.Debug("DispatcherService: auto-dispatch globally disabled (macro ignored)")
