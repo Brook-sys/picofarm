@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { FileText, Plus, ChevronRight, Send, CheckCircle, XCircle, Clock, Edit3, Trash2 } from 'lucide-react'
 import { quotesApi, customersApi } from '../api/client'
@@ -23,7 +23,7 @@ export default function Quotes() {
   const [statusFilter, setStatusFilter] = useState<string>('')
   const [showCreateModal, setShowCreateModal] = useState(false)
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     try {
       const [quotesData, customersData] = await Promise.all([
         quotesApi.list({ status: statusFilter || undefined }),
@@ -36,11 +36,11 @@ export default function Quotes() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [statusFilter])
 
   useEffect(() => {
     loadData()
-  }, [statusFilter])
+  }, [loadData])
 
   const handleCreate = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()

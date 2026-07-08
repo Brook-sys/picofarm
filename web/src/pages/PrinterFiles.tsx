@@ -15,7 +15,6 @@ export default function PrinterFiles() {
 
   useEffect(() => {
     let cancelled = false
-    setLoading(true)
     printersApi.list()
       .then(items => {
         if (cancelled) return
@@ -36,16 +35,22 @@ export default function PrinterFiles() {
 
   useEffect(() => {
     if (!selectedPrinterId) {
-      setPrinterState(null)
-      return
+      const timeout = window.setTimeout(() => setPrinterState(null), 0)
+      return () => window.clearTimeout(timeout)
     }
     let cancelled = false
-    setStateLoading(true)
-    printersApi.getState(selectedPrinterId)
-      .then(state => { if (!cancelled) setPrinterState(state) })
-      .catch(() => { if (!cancelled) setPrinterState(null) })
-      .finally(() => { if (!cancelled) setStateLoading(false) })
-    return () => { cancelled = true }
+    const timeout = window.setTimeout(() => {
+      if (cancelled) return
+      setStateLoading(true)
+      printersApi.getState(selectedPrinterId)
+        .then(state => { if (!cancelled) setPrinterState(state) })
+        .catch(() => { if (!cancelled) setPrinterState(null) })
+        .finally(() => { if (!cancelled) setStateLoading(false) })
+    }, 0)
+    return () => {
+      cancelled = true
+      window.clearTimeout(timeout)
+    }
   }, [selectedPrinterId])
 
   const effectiveConnection = selectedPrinter?.connection_type === 'moonraker' && selectedPrinter.connection_uri && !/:\d+($|\/)/.test(selectedPrinter.connection_uri.replace(/^https?:\/\//, ''))

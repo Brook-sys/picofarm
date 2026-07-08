@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { ArrowLeft, Clock, Play, CheckCircle, XCircle, Package, Printer, AlertCircle, CalendarDays, Square, CheckSquare, DollarSign } from 'lucide-react'
 import { useQueryClient } from '@tanstack/react-query'
@@ -219,13 +219,7 @@ export function TaskDetail() {
   const [actionLoading, setActionLoading] = useState(false)
   const [showCompleteModal, setShowCompleteModal] = useState(false)
 
-  useEffect(() => {
-    if (id) {
-      loadTask()
-    }
-  }, [id])
-
-  const loadTask = async () => {
+  const loadTask = useCallback(async () => {
     if (!id) return
     setLoading(true)
     try {
@@ -236,7 +230,13 @@ export function TaskDetail() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [id])
+
+  useEffect(() => {
+    if (id) {
+      loadTask()
+    }
+  }, [id, loadTask])
 
   const handleStart = async () => {
     if (!id) return

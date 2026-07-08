@@ -765,8 +765,13 @@ function SendToPrinterModal({ file, printers, busy, onClose, onSend }: { file: G
   useEffect(() => {
     let active = true
     if (!printerId) {
-      setPrinterStatus('')
-      return
+      const timeout = window.setTimeout(() => {
+        if (active) setPrinterStatus('')
+      }, 0)
+      return () => {
+        active = false
+        window.clearTimeout(timeout)
+      }
     }
     printersApi.getState(printerId).then(state => {
       if (active) setPrinterStatus(state.status)

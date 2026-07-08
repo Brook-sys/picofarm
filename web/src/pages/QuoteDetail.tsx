@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import {
   ArrowLeft, Send, CheckCircle, XCircle, Plus, Trash2, Clock, Edit3,
@@ -101,7 +101,7 @@ export default function QuoteDetail() {
     projectsApi.list().then(setProjects).catch(() => {})
   }, [])
 
-  const loadQuote = async () => {
+  const loadQuote = useCallback(async () => {
     if (!id) return
     try {
       const data = await quotesApi.get(id)
@@ -111,11 +111,11 @@ export default function QuoteDetail() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [id])
 
   useEffect(() => {
     loadQuote()
-  }, [id])
+  }, [loadQuote])
 
   const handleUpdateQuote = async (updates: Record<string, unknown>) => {
     if (!id) return

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Package, Plus, Clock, CheckCircle, Truck, XCircle, ChevronRight, RefreshCw } from 'lucide-react'
 import { ordersApi } from '../api/client'
@@ -27,11 +27,7 @@ export function Orders() {
   const [sourceFilter, setSourceFilter] = useState<OrderSource | ''>('')
   const [showCreateModal, setShowCreateModal] = useState(false)
 
-  useEffect(() => {
-    loadOrders()
-  }, [statusFilter, sourceFilter])
-
-  const loadOrders = async () => {
+  const loadOrders = useCallback(async () => {
     setLoading(true)
     try {
       const params: { status?: string; source?: string } = {}
@@ -44,7 +40,11 @@ export function Orders() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [sourceFilter, statusFilter])
+
+  useEffect(() => {
+    loadOrders()
+  }, [loadOrders])
 
   const formatDate = (dateStr?: string) => {
     if (!dateStr) return '-'

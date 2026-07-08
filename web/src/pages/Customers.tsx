@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Users, Plus, ChevronRight, Search, Building2, Mail, Trash2 } from 'lucide-react'
 import { customersApi } from '../api/client'
@@ -10,7 +10,7 @@ export default function Customers() {
   const [search, setSearch] = useState('')
   const [showCreateModal, setShowCreateModal] = useState(false)
 
-  const loadCustomers = async () => {
+  const loadCustomers = useCallback(async () => {
     try {
       const data = await customersApi.list({ search: search || undefined })
       setCustomers(data)
@@ -19,11 +19,11 @@ export default function Customers() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [search])
 
   useEffect(() => {
     loadCustomers()
-  }, [search])
+  }, [loadCustomers])
 
   const handleDelete = async (customerId: string) => {
     if (!confirm('Delete this customer? This cannot be undone.')) return

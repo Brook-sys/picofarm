@@ -200,8 +200,11 @@ export function useWebSocket() {
   }, [])
 
   useEffect(() => {
-    connect()
-    return () => disconnect()
+    const timeout = window.setTimeout(connect, 0)
+    return () => {
+      window.clearTimeout(timeout)
+      disconnect()
+    }
   }, [connect, disconnect])
 
   return { status, reconnect: connect }

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Mail, Building2, Phone, FileText, Package, Trash2, Plus, MapPin } from 'lucide-react'
 import { customersApi, quotesApi, ordersApi } from '../api/client'
@@ -17,7 +17,7 @@ export default function CustomerDetail() {
   const [billingAddr, setBillingAddr] = useState<Address>({})
   const [shippingAddr, setShippingAddr] = useState<Address>({})
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     if (!id) return
     try {
       const customerData = await customersApi.get(id)
@@ -31,11 +31,11 @@ export default function CustomerDetail() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [id])
 
   useEffect(() => {
     loadData()
-  }, [id])
+  }, [loadData])
 
   const handleDelete = async () => {
     if (!id || !confirm('Delete this customer? This cannot be undone.')) return

@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react'
+import { useCallback, useEffect, useState, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { Calendar, ChevronLeft, ChevronRight, Package, ListTodo, Printer } from 'lucide-react'
 import { timelineApi } from '../api/client'
@@ -36,11 +36,7 @@ export function Timeline() {
   })
   const [daysToShow, setDaysToShow] = useState(14)
 
-  useEffect(() => {
-    loadTimeline()
-  }, [startDate, daysToShow])
-
-  const loadTimeline = async () => {
+  const loadTimeline = useCallback(async () => {
     setLoading(true)
     try {
       const endDate = new Date(startDate)
@@ -55,7 +51,11 @@ export function Timeline() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [daysToShow, startDate])
+
+  useEffect(() => {
+    loadTimeline()
+  }, [loadTimeline])
 
   const dateRange = useMemo(() => {
     const dates: Date[] = []

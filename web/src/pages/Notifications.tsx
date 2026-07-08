@@ -184,7 +184,10 @@ function TemplatesTab({ channels, templates, onError }: { channels: Notification
   const previewMutation = useMutation({ mutationFn: notificationsApi.previewTemplate, onSuccess: setPreview, onError: err => onError(err instanceof Error ? err.message : 'Failed to preview template') })
 
   useEffect(() => {
-    if (!channelId && firstChannel) setChannelId(firstChannel)
+    if (!channelId && firstChannel) {
+      const timeout = window.setTimeout(() => setChannelId(firstChannel), 0)
+      return () => window.clearTimeout(timeout)
+    }
   }, [channelId, firstChannel])
 
   const reloadDraft = (nextChannelId: string, nextEventType: string) => {

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ListTodo, Plus, Clock, Play, CheckCircle, XCircle, ChevronRight, RefreshCw, CalendarDays } from 'lucide-react'
 import { tasksApi, projectsApi } from '../api/client'
@@ -20,12 +20,7 @@ export function Tasks() {
   const [projectFilter, setProjectFilter] = useState('')
   const [showCreateModal, setShowCreateModal] = useState(false)
 
-  useEffect(() => {
-    loadTasks()
-    loadProjects()
-  }, [statusFilter, projectFilter])
-
-  const loadTasks = async () => {
+  const loadTasks = useCallback(async () => {
     setLoading(true)
     try {
       const filters: { status?: string; project_id?: string } = {}
@@ -38,16 +33,21 @@ export function Tasks() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [projectFilter, statusFilter])
 
-  const loadProjects = async () => {
+  const loadProjects = useCallback(async () => {
     try {
       const data = await projectsApi.list()
       setProjects(data || [])
     } catch (err) {
       console.error('Failed to load projects:', err)
     }
-  }
+  }, [])
+
+  useEffect(() => {
+    loadTasks()
+    loadProjects()
+  }, [loadProjects, loadTasks])
 
   const formatDate = (dateStr?: string) => {
     if (!dateStr) return '-'

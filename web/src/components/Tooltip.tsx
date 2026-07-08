@@ -8,22 +8,25 @@ interface TooltipProps {
 
 export function Tooltip({ text, children }: TooltipProps) {
   const [show, setShow] = useState(false)
+  const [position, setPosition] = useState<'top' | 'bottom'>('bottom')
   const ref = useRef<HTMLDivElement>(null)
 
-  // Calculate position on-demand when rendering, not in an effect
-  const getPosition = () => {
-    if (!ref.current) return 'bottom'
+  const handleMouseEnter = () => {
+    if (!ref.current) {
+      setPosition('bottom')
+      setShow(true)
+      return
+    }
     const rect = ref.current.getBoundingClientRect()
-    return rect.bottom + 80 > window.innerHeight ? 'top' : 'bottom'
+    setPosition(rect.bottom + 80 > window.innerHeight ? 'top' : 'bottom')
+    setShow(true)
   }
-
-  const position = show ? getPosition() : 'bottom'
 
   return (
     <div
       className="relative inline-flex"
       ref={ref}
-      onMouseEnter={() => setShow(true)}
+      onMouseEnter={handleMouseEnter}
       onMouseLeave={() => setShow(false)}
     >
       {children || <Info className="h-3.5 w-3.5 text-surface-600 hover:text-surface-400 cursor-help transition-colors" />}

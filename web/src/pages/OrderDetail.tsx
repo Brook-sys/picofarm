@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import {
   ArrowLeft,
@@ -33,13 +33,7 @@ export function OrderDetail() {
   const [processingItem, setProcessingItem] = useState<string | null>(null)
   const [updatingStatus, setUpdatingStatus] = useState(false)
 
-  useEffect(() => {
-    if (id) {
-      loadOrder()
-    }
-  }, [id])
-
-  const loadOrder = async () => {
+  const loadOrder = useCallback(async () => {
     if (!id) return
     setLoading(true)
     try {
@@ -54,7 +48,13 @@ export function OrderDetail() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [id])
+
+  useEffect(() => {
+    if (id) {
+      loadOrder()
+    }
+  }, [id, loadOrder])
 
   const handleStatusChange = async (newStatus: OrderStatus) => {
     if (!id || !order) return
