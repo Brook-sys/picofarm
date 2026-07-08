@@ -249,6 +249,7 @@ Primary response types:
 
 Representative route groups:
 
+- Target generic sales-channel routes: `/api/sales-channels/*` (see `docs/SALES_CHANNELS.md`)
 - `/api/integrations/etsy/*`
 - `/api/integrations/squarespace/*`
 - `/api/integrations/shopify/*`
@@ -262,6 +263,8 @@ Primary contracts live in:
 - matching TypeScript types in `web/src/types/index.ts`
 
 Integration endpoints must be testable without real credentials. Use fake clients or conversion tests for CI.
+
+Sales-channel work should move toward provider descriptors, capabilities, generic connection status, external orders/products, product links, sync runs, and optional webhook events as documented in `docs/SALES_CHANNELS.md`. Keep legacy integration route contracts working until a dedicated migration/deprecation cycle explicitly changes them.
 
 ### Notifications, alerts, backups, settings, and feedback
 

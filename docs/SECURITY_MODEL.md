@@ -31,6 +31,8 @@ Never commit or print real credentials. Examples include:
 
 Use `[REDACTED]` in docs, issues, plans, and logs shared with agents.
 
+Sales-channel integrations add OAuth tokens, API keys, webhook secrets, signed callback/query parameters, and external API error payloads. Follow `docs/SALES_CHANNELS.md` for provider contracts and never expose raw credential material through generic `/api/sales-channels/*` responses, sync-run records, frontend state, logs, fixtures, or documentation.
+
 ## CORS and browser origins
 
 `internal/api/router.go` restricts browser CORS origins through the `ALLOWED_ORIGINS` environment variable.
@@ -73,7 +75,7 @@ When changing these areas, add tests and update this document if behavior change
 | Printer control | start, pause, resume, cancel, emergency stop, upload/send file | Physical device control and material waste |
 | File operations | upload, download, delete, thumbnail generation | Arbitrary file handling, data leakage, disk usage |
 | Backup/restore | create backup, restore database, retention cleanup | Data loss or rollback to stale state |
-| Integrations | Etsy/Squarespace sync, webhooks, OAuth callbacks | External account access and spoofed events |
+| Integrations | Etsy/Squarespace/Shopify sync, generic sales-channel providers, webhooks, OAuth callbacks | External account access and spoofed events |
 | Notifications | template rendering, test delivery, channel config | Data leakage to external channels |
 | Admin/settings | credentials, runtime config, dispatch settings | Persistent unsafe configuration |
 

@@ -39,6 +39,7 @@ Runtime files such as uploads, generated thumbnails, backups, and downloaded/pro
 | `internal/bambu/` | Bambu-specific integration logic |
 | `internal/etsy/` | Etsy API/OAuth/webhook-facing logic |
 | `internal/squarespace/` | Squarespace API logic |
+| `internal/saleschannel/` | Target home for generic sales-channel provider contracts, registry, adapters, and canonical conversions |
 | `internal/threemf/` | 3MF parsing and metadata extraction |
 | `internal/receipt/` | Receipt parsing/OCR-adjacent behavior |
 | `internal/validation/` | Shared validation helpers |
@@ -87,10 +88,13 @@ Recommended migration policy:
 
 External integrations should not be required for the normal test suite.
 
+Sales channels have a dedicated architecture guide in `docs/SALES_CHANNELS.md`. Use that document before adding or changing Etsy, Squarespace, Shopify, product/listing sync, external order processing, product links, or future marketplace/storefront providers. The target direction is a provider registry with capability-driven adapters and generic `/api/sales-channels/*` contracts while legacy `/api/integrations/{provider}` routes remain compatible during migration.
+
 | Integration | Area |
 | --- | --- |
 | Etsy | OAuth, listings, receipts/orders, webhooks, inventory/template linking |
 | Squarespace | Orders/products sync |
+| Shopify | OAuth/orders/product links; existing support is partial and should be represented by capabilities |
 | Bambu Lab | Cloud/LAN printer integration and status/control |
 | OctoPrint | Printer control/file/status integration |
 | Moonraker/Klipper | Printer control/status integration |
@@ -108,6 +112,7 @@ Use mocks/fakes or isolated unit tests when adding regression coverage for exter
 | Printer behavior | `internal/printer/`, relevant service | safety docs, regression matrix, mocks |
 | Upload/file behavior | `internal/storage/`, API handlers | security model, cleanup/retention behavior |
 | Notifications | notification service/API/types/pages | test delivery, templates, regression matrix |
+| Sales channel/provider | `docs/SALES_CHANNELS.md`, `internal/saleschannel/` | provider client/adapters, repository migrations, API contracts, frontend feature types/components, security docs |
 | Build/dev command | `Makefile`, `web/package.json`, scripts | `README.md`, `docs/PROJECT_BASELINE.md`, `AGENTS.md` |
 
 ## Architectural guardrails for future agents
