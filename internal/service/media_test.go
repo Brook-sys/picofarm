@@ -137,3 +137,40 @@ func TestCameraService_ListKeepsManualCameraAndSkipsDuplicateMoonrakerURL(t *tes
 		t.Fatalf("expected manual camera to win, got %q", cameras[0].Name)
 	}
 }
+
+func TestCameraService_ListDiscoversMoonrakerWebcamsWithoutPrinterFilter(t *testing.T) {
+	_, repos, svc := newCameraServiceTest(t)
+
+	moonraker := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/server/webcams/list" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"result":{"webcams":[{"name":"USB","enabled":true,"stream_url":"/webcam?action=stream"}]}}`))
+	}))
+	t.Cleanup(moonraker.Close)
+
+	printer := &model.Printer{
+		Name:           "NP4",
+		ConnectionType: model.ConnectionTypeMoonraker,
+		ConnectionURI:  moonraker.URL,
+		FluiddURL:      "http://100.84.153.105",
+	}
+	if err := repos.Printers.Create(context.Background(), printer); err != nil {
+		t.Fatalf("create printer: %v", err)
+	}
+
+	cameras, err := svc.List(context.Background(), nil, nil)
+	if err != nil {
+		t.Fatalf("list cameras: %v", err)
+	}
+	if len(cameras) != 1 {
+		t.Fatalf("expected 1 discovered camera in global list, got %d", len(cameras))
+	}
+	if cameras[0].PrinterID == nil || *cameras[0].PrinterID != printer.ID {
+		t.Fatalf("expected global discovered camera linked to printer %s, got %#v", printer.ID, cameras[0].PrinterID)
+	}
+	if cameras[0].URL != "http://100.84.153.105/webcam?action=stream" {
+		t.Fatalf("unexpected global resolved stream url: %q", cameras[0].URL)
+	}
+}
