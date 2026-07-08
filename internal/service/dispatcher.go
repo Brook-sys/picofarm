@@ -14,6 +14,11 @@ import (
 	"github.com/google/uuid"
 )
 
+type queueDispatchService interface {
+	FindNextReadyForPrinter(ctx context.Context, printerID uuid.UUID) (*model.QueueItem, error)
+	Start(ctx context.Context, id uuid.UUID) error
+}
+
 // DispatcherService orchestrates auto-dispatch of jobs to printers.
 type DispatcherService struct {
 	dispatchRepo    *repository.DispatchRepository
@@ -24,6 +29,7 @@ type DispatcherService struct {
 	printerMgr      *printer.Manager
 	hub             *realtime.Hub
 	settingsService *SettingsService
+	queueSvc        queueDispatchService
 
 	mu              sync.Mutex
 	cleanupStopCh   chan struct{}
@@ -40,6 +46,7 @@ func NewDispatcherService(
 	printerMgr *printer.Manager,
 	hub *realtime.Hub,
 	settingsService *SettingsService,
+	queueSvc queueDispatchService,
 ) *DispatcherService {
 	return &DispatcherService{
 		dispatchRepo:    dispatchRepo,
@@ -50,6 +57,7 @@ func NewDispatcherService(
 		printerMgr:      printerMgr,
 		hub:             hub,
 		settingsService: settingsService,
+		queueSvc:        queueSvc,
 		cleanupInterval: 1 * time.Minute,
 	}
 }
@@ -123,34 +131,45 @@ func (s *DispatcherService) OnPrinterIdleMacro(printerID uuid.UUID, settings *mo
 		return nil
 	}
 
+	if s.queueSvc != nil {
+		item, err := s.queueSvc.FindNextReadyForPrinter(ctx, printerID)
+		if err != nil {
+			return fmt.Errorf("failed to find next queue item: %w", err)
+		}
+		if item != nil {
+			slog.Info("DispatcherService: starting macro queue item", "queue_item_id", item.ID, "printer_id", printerID)
+			return s.queueSvc.Start(ctx, item.ID)
+		}
+	}
+
 	job, err := s.FindNextJob(ctx, printerID)
 	if err != nil {
 		return fmt.Errorf("failed to find next job: %w", err)
 	}
 
-	if job == nil {
-		slog.Info("DispatcherService: macro queue empty", "printer_id", printerID)
-		if settings.MacroEmptyQueueGcode != "" {
-			slog.Info("DispatcherService: sending empty queue G-code", "printer_id", printerID, "gcode", settings.MacroEmptyQueueGcode)
-			// Run macro/G-code
-			if err := s.printerMgr.RunMacro(printerID, settings.MacroEmptyQueueGcode); err != nil {
-				slog.Error("DispatcherService: failed to run empty queue G-code", "printer_id", printerID, "error", err)
-			}
+	if job != nil {
+		// Create and auto-start the dispatch request because this was triggered explicitly by macro (implies operator confirmed empty)
+		request, err := s.CreateDispatchRequest(ctx, job.ID, printerID)
+		if err != nil {
+			return fmt.Errorf("failed to create dispatch request: %w", err)
 		}
-		return nil
+
+		slog.Info("DispatcherService: created macro dispatch request", "request_id", request.ID, "job_id", job.ID, "printer_id", printerID)
+		s.broadcastDispatchRequest(request)
+
+		// In Macro Mode we assume the bed is clean, so we immediately confirm to trigger print
+		return s.ConfirmDispatch(ctx, request.ID)
 	}
 
-	// Create and auto-start the dispatch request because this was triggered explicitly by macro (implies operator confirmed empty)
-	request, err := s.CreateDispatchRequest(ctx, job.ID, printerID)
-	if err != nil {
-		return fmt.Errorf("failed to create dispatch request: %w", err)
+	slog.Info("DispatcherService: macro queue empty", "printer_id", printerID)
+	if settings.MacroEmptyQueueGcode != "" {
+		slog.Info("DispatcherService: sending empty queue G-code", "printer_id", printerID, "gcode", settings.MacroEmptyQueueGcode)
+		// Run macro/G-code
+		if err := s.printerMgr.RunMacro(printerID, settings.MacroEmptyQueueGcode); err != nil {
+			slog.Error("DispatcherService: failed to run empty queue G-code", "printer_id", printerID, "error", err)
+		}
 	}
-
-	slog.Info("DispatcherService: created macro dispatch request", "request_id", request.ID, "job_id", job.ID, "printer_id", printerID)
-	s.broadcastDispatchRequest(request)
-
-	// In Macro Mode we assume the bed is clean, so we immediately confirm to trigger print
-	return s.ConfirmDispatch(ctx, request.ID)
+	return nil
 }
 
 // OnPrinterIdle is called when a printer transitions to idle state.
