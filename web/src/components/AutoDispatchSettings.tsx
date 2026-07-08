@@ -166,6 +166,60 @@ export default function AutoDispatchSettings({ printerId }: AutoDispatchSettings
             <option value={120}>2 hours</option>
           </select>
         </div>
+        {/* Macro Automations setting */}
+        <div className="pt-4 mt-4 border-t border-surface-700/50 space-y-4">
+          <div className="flex items-center gap-2 mb-2">
+            <Zap className="h-4 w-4 text-accent-500" />
+            <h3 className="text-md font-medium text-surface-200">Hardware Macro Automation</h3>
+          </div>
+
+          <div className="flex items-center justify-between p-3 rounded-lg bg-surface-800/50">
+            <div className="flex items-center gap-3">
+              <Play className="h-4 w-4 text-surface-400" />
+              <div>
+                <div className="text-surface-200">Hardware Macro Auto-Dispatch</div>
+                <div className="text-sm text-surface-500">
+                  Allow printer physical button macros to trigger next job in queue (Klipper/Moonraker only)
+                </div>
+              </div>
+            </div>
+            <button
+              onClick={() => handleToggle('macro_auto_dispatch_enabled', !settings.macro_auto_dispatch_enabled)}
+              disabled={updateMutation.isPending}
+              className={cn(
+                'relative inline-flex h-6 w-11 items-center rounded-full transition-colors',
+                settings.macro_auto_dispatch_enabled ? 'bg-accent-500' : 'bg-surface-600'
+              )}
+            >
+              <span
+                className={cn(
+                  'inline-block h-4 w-4 transform rounded-full bg-white transition-transform',
+                  settings.macro_auto_dispatch_enabled ? 'translate-x-6' : 'translate-x-1'
+                )}
+              />
+            </button>
+          </div>
+
+          <div className="p-3 rounded-lg bg-surface-800/50">
+            <div className="flex items-center gap-3 mb-3">
+              <Settings className="h-4 w-4 text-surface-400" />
+              <div>
+                <div className="text-surface-200">Empty Queue G-code</div>
+                <div className="text-sm text-surface-500">
+                  G-code sent to printer when macro is triggered but the queue is empty
+                </div>
+              </div>
+            </div>
+            <input
+              type="text"
+              value={settings.macro_empty_queue_gcode || ''}
+              onChange={(e) => updateMutation.mutate({ macro_empty_queue_gcode: e.target.value })}
+              disabled={updateMutation.isPending || !settings.macro_auto_dispatch_enabled}
+              placeholder="e.g. M117 Queue Empty"
+              className="input w-full"
+            />
+          </div>
+        </div>
       </div>
 
       {/* Status indicator */}

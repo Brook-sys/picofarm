@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"mime/multipart"
 	"net"
 	"net/http"
@@ -18,15 +19,18 @@ import (
 
 	"github.com/Brook-sys/picofarm/internal/model"
 	"github.com/google/uuid"
+	"nhooyr.io/websocket"
+	"nhooyr.io/websocket/wsjson"
 )
 
 // MoonrakerClient implements Client for Moonraker API (Klipper).
 type MoonrakerClient struct {
-	printerID      uuid.UUID
-	baseURL        string
-	httpClient     *http.Client
-	statusCallback func(*model.PrinterState)
-	stopPolling    chan struct{}
+	printerID               uuid.UUID
+	baseURL                 string
+	httpClient              *http.Client
+	statusCallback          func(*model.PrinterState)
+	macroAutomationCallback func(uuid.UUID)
+	stopPolling             chan struct{}
 }
 
 // NewMoonrakerClient creates a new Moonraker client.
@@ -61,6 +65,7 @@ func (c *MoonrakerClient) Connect() error {
 	}
 
 	go c.pollStatus()
+	go c.listenWebsocket()
 	return nil
 }
 
@@ -151,6 +156,11 @@ func (c *MoonrakerClient) RunMacro(name string) error {
 // SetStatusCallback sets the callback for status updates.
 func (c *MoonrakerClient) SetStatusCallback(cb func(*model.PrinterState)) {
 	c.statusCallback = cb
+}
+
+// SetMacroAutomationCallback sets the callback for macro automation events.
+func (c *MoonrakerClient) SetMacroAutomationCallback(cb func(printerID uuid.UUID)) {
+	c.macroAutomationCallback = cb
 }
 
 // doRequest performs an HTTP request to the Moonraker API.
@@ -253,6 +263,85 @@ func (c *MoonrakerClient) pollStatus() {
 			if err == nil && c.statusCallback != nil {
 				c.statusCallback(state)
 			}
+		}
+	}
+}
+
+// listenWebsocket maintains a WebSocket connection to Moonraker to receive JSON-RPC events.
+func (c *MoonrakerClient) listenWebsocket() {
+	wsURL := strings.Replace(c.baseURL, "http://", "ws://", 1)
+	wsURL = strings.Replace(wsURL, "https://", "wss://", 1)
+	wsURL += "/websocket"
+
+	for {
+		select {
+		case <-c.stopPolling:
+			return
+		default:
+		}
+
+		ctx, cancel := context.WithCancel(context.Background())
+		
+		conn, _, err := websocket.Dial(ctx, wsURL, &websocket.DialOptions{
+			HTTPClient: c.httpClient,
+		})
+		
+		if err != nil {
+			cancel()
+			select {
+			case <-time.After(5 * time.Second): // reconnect delay
+			case <-c.stopPolling:
+				return
+			}
+			continue
+		}
+
+		slog.Debug("MoonrakerClient: WebSocket connected", "printer_id", c.printerID)
+
+		// Start a goroutine to wait for stop signal and close the connection
+		go func() {
+			select {
+			case <-c.stopPolling:
+				cancel()
+				conn.Close(websocket.StatusNormalClosure, "shutting down")
+			case <-ctx.Done():
+			}
+		}()
+
+		// Read loop
+		for {
+			var msg struct {
+				Method string        `json:"method"`
+				Params []interface{} `json:"params"`
+			}
+			err := wsjson.Read(ctx, conn, &msg)
+			if err != nil {
+				slog.Debug("MoonrakerClient: WebSocket read error", "printer_id", c.printerID, "error", err)
+				break
+			}
+
+			// We are looking for: notify_gcode_response
+			if msg.Method == "notify_gcode_response" && len(msg.Params) > 0 {
+				if responseStr, ok := msg.Params[0].(string); ok {
+					if strings.Contains(responseStr, "AUTOMATION_EVENT:READY_FOR_NEXT_JOB") {
+						slog.Info("MoonrakerClient: Macro automation event received", "printer_id", c.printerID)
+						if c.macroAutomationCallback != nil {
+							// Fire the callback
+							go c.macroAutomationCallback(c.printerID)
+						}
+					}
+				}
+			}
+		}
+		
+		cancel()
+		conn.Close(websocket.StatusAbnormalClosure, "")
+		
+		// Backoff before reconnecting
+		select {
+		case <-time.After(2 * time.Second):
+		case <-c.stopPolling:
+			return
 		}
 	}
 }

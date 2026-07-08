@@ -180,6 +180,8 @@ func RunMigrations(db *sql.DB) error {
 		`ALTER TABLE quotes ADD COLUMN billing_address_json TEXT`,
 		`ALTER TABLE quotes ADD COLUMN shipping_address_json TEXT`,
 		`ALTER TABLE quotes ADD COLUMN share_token TEXT`,
+		`ALTER TABLE auto_dispatch_settings ADD COLUMN macro_auto_dispatch_enabled INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE auto_dispatch_settings ADD COLUMN macro_empty_queue_gcode TEXT NOT NULL DEFAULT ''`,
 		`CREATE TABLE IF NOT EXISTS notification_channels (id TEXT PRIMARY KEY, name TEXT NOT NULL, type TEXT NOT NULL, enabled BOOLEAN NOT NULL DEFAULT TRUE, config_json TEXT NOT NULL DEFAULT '{}', events_json TEXT NOT NULL DEFAULT '[]', printer_ids_json TEXT NOT NULL DEFAULT '[]', min_severity TEXT NOT NULL DEFAULT 'info', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)`,
 		`CREATE INDEX IF NOT EXISTS idx_notification_channels_type ON notification_channels(type)`,
 		`CREATE INDEX IF NOT EXISTS idx_notification_channels_enabled ON notification_channels(enabled)`,

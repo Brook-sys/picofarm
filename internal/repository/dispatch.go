@@ -141,9 +141,9 @@ func NewAutoDispatchSettingsRepository(db *sql.DB) *AutoDispatchSettingsReposito
 func (r *AutoDispatchSettingsRepository) Get(ctx context.Context, printerID uuid.UUID) (*model.AutoDispatchSettings, error) {
 	var s model.AutoDispatchSettings
 	err := scanRow(r.db.QueryRowContext(ctx, `
-		SELECT printer_id, enabled, require_confirmation, auto_start, timeout_minutes, updated_at
+		SELECT printer_id, enabled, require_confirmation, auto_start, timeout_minutes, macro_auto_dispatch_enabled, macro_empty_queue_gcode, updated_at
 		FROM auto_dispatch_settings WHERE printer_id = ?
-	`, printerID), &s.PrinterID, &s.Enabled, &s.RequireConfirmation, &s.AutoStart, &s.TimeoutMinutes, &s.UpdatedAt)
+	`, printerID), &s.PrinterID, &s.Enabled, &s.RequireConfirmation, &s.AutoStart, &s.TimeoutMinutes, &s.MacroAutoDispatchEnabled, &s.MacroEmptyQueueGcode, &s.UpdatedAt)
 	if err == sql.ErrNoRows {
 		// Return defaults if no settings exist
 		return &model.AutoDispatchSettings{
@@ -162,15 +162,17 @@ func (r *AutoDispatchSettingsRepository) Get(ctx context.Context, printerID uuid
 func (r *AutoDispatchSettingsRepository) Upsert(ctx context.Context, settings *model.AutoDispatchSettings) error {
 	settings.UpdatedAt = time.Now()
 	_, err := r.db.ExecContext(ctx, `
-		INSERT INTO auto_dispatch_settings (printer_id, enabled, require_confirmation, auto_start, timeout_minutes, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?)
+		INSERT INTO auto_dispatch_settings (printer_id, enabled, require_confirmation, auto_start, timeout_minutes, macro_auto_dispatch_enabled, macro_empty_queue_gcode, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(printer_id) DO UPDATE SET
 			enabled = excluded.enabled,
 			require_confirmation = excluded.require_confirmation,
 			auto_start = excluded.auto_start,
 			timeout_minutes = excluded.timeout_minutes,
+			macro_auto_dispatch_enabled = excluded.macro_auto_dispatch_enabled,
+			macro_empty_queue_gcode = excluded.macro_empty_queue_gcode,
 			updated_at = excluded.updated_at
-	`, settings.PrinterID, settings.Enabled, settings.RequireConfirmation, settings.AutoStart, settings.TimeoutMinutes, settings.UpdatedAt)
+	`, settings.PrinterID, settings.Enabled, settings.RequireConfirmation, settings.AutoStart, settings.TimeoutMinutes, settings.MacroAutoDispatchEnabled, settings.MacroEmptyQueueGcode, settings.UpdatedAt)
 	return err
 }
 

@@ -38,6 +38,10 @@ type MacroRunner interface {
 	RunMacro(name string) error
 }
 
+type MacroAutomationListener interface {
+	SetMacroAutomationCallback(func(printerID uuid.UUID))
+}
+
 type CapabilityProvider interface {
 	Capabilities() model.PrinterCapabilities
 }
@@ -62,11 +66,12 @@ type AdvancedController interface {
 
 // Manager manages connections to multiple printers.
 type Manager struct {
-	mu              sync.RWMutex
-	clients         map[uuid.UUID]Client
-	states          map[uuid.UUID]*model.PrinterState
-	broadcaster     model.Broadcaster
-	statusCallbacks []StatusChangeCallback
+	mu                      sync.RWMutex
+	clients                 map[uuid.UUID]Client
+	states                  map[uuid.UUID]*model.PrinterState
+	broadcaster             model.Broadcaster
+	statusCallbacks         []StatusChangeCallback
+	macroAutomationCallback func(uuid.UUID)
 }
 
 // NewManager creates a new printer manager.
@@ -89,6 +94,13 @@ func (m *Manager) OnStatusChange(cb StatusChangeCallback) {
 // SetBroadcaster sets the broadcaster for real-time updates.
 func (m *Manager) SetBroadcaster(b model.Broadcaster) {
 	m.broadcaster = b
+}
+
+// OnMacroAutomation registers a callback for printer macro automation events (e.g. queue empty / next job).
+func (m *Manager) OnMacroAutomation(cb func(printerID uuid.UUID)) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.macroAutomationCallback = cb
 }
 
 // broadcast sends an event to all connected WebSocket clients.
@@ -181,6 +193,18 @@ func (m *Manager) Connect(p *model.Printer) error {
 			cb(state, oldState)
 		}
 	})
+
+	// Set up macro automation callback if supported
+	if mal, ok := client.(MacroAutomationListener); ok {
+		mal.SetMacroAutomationCallback(func(printerID uuid.UUID) {
+			m.mu.RLock()
+			cb := m.macroAutomationCallback
+			m.mu.RUnlock()
+			if cb != nil {
+				cb(printerID)
+			}
+		})
+	}
 
 	// Connect
 	if err := client.Connect(); err != nil {

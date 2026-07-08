@@ -1415,12 +1415,14 @@ type DispatchRequest struct {
 
 // AutoDispatchSettings holds per-printer auto-dispatch configuration.
 type AutoDispatchSettings struct {
-	PrinterID           uuid.UUID `json:"printer_id"`
-	Enabled             bool      `json:"enabled"`
-	RequireConfirmation bool      `json:"require_confirmation"`
-	AutoStart           bool      `json:"auto_start"`
-	TimeoutMinutes      int       `json:"timeout_minutes"`
-	UpdatedAt           time.Time `json:"updated_at"`
+	PrinterID                uuid.UUID `json:"printer_id"`
+	Enabled                  bool      `json:"enabled"`
+	RequireConfirmation      bool      `json:"require_confirmation"`
+	AutoStart                bool      `json:"auto_start"`
+	TimeoutMinutes           int       `json:"timeout_minutes"`
+	MacroAutoDispatchEnabled bool      `json:"macro_auto_dispatch_enabled"`
+	MacroEmptyQueueGcode     string    `json:"macro_empty_queue_gcode"`
+	UpdatedAt                time.Time `json:"updated_at"`
 }
 
 // ============================================

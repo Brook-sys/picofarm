@@ -1413,6 +1413,8 @@ export interface AutoDispatchSettings {
   require_confirmation: boolean
   auto_start: boolean
   timeout_minutes: number
+  macro_auto_dispatch_enabled: boolean
+  macro_empty_queue_gcode: string
   updated_at?: string
 }
 

@@ -436,6 +436,8 @@ CREATE TABLE IF NOT EXISTS auto_dispatch_settings (
     require_confirmation INTEGER NOT NULL DEFAULT 1,
     auto_start INTEGER NOT NULL DEFAULT 0,
     timeout_minutes INTEGER NOT NULL DEFAULT 30,
+    macro_auto_dispatch_enabled INTEGER NOT NULL DEFAULT 0,
+    macro_empty_queue_gcode TEXT NOT NULL DEFAULT '',
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 

@@ -57,6 +57,7 @@ func NewDispatcherService(
 // Init registers printer status callback and starts cleanup goroutine.
 func (s *DispatcherService) Init() {
 	s.printerMgr.OnStatusChange(s.handlePrinterStatusChange)
+	s.printerMgr.OnMacroAutomation(s.handleMacroAutomationEvent)
 	slog.Info("DispatcherService: registered for printer status changes")
 
 	// Start cleanup goroutine
@@ -68,6 +69,28 @@ func (s *DispatcherService) Init() {
 func (s *DispatcherService) Stop() {
 	if s.cleanupStopCh != nil {
 		close(s.cleanupStopCh)
+	}
+}
+
+// handleMacroAutomationEvent is called when a printer receives an empty-bed/ready macro event.
+func (s *DispatcherService) handleMacroAutomationEvent(printerID uuid.UUID) {
+	ctx := context.Background()
+	settings, err := s.settingsRepo.Get(ctx, printerID)
+	if err != nil {
+		slog.Error("DispatcherService: failed to get settings for macro event", "printer_id", printerID, "error", err)
+		return
+	}
+
+	if !settings.MacroAutoDispatchEnabled {
+		slog.Debug("DispatcherService: ignoring macro event, feature disabled", "printer_id", printerID)
+		return
+	}
+
+	slog.Info("DispatcherService: handling macro automation event", "printer_id", printerID)
+
+	// In macro mode, this signal forces the idle transition
+	if err := s.OnPrinterIdleMacro(printerID, settings); err != nil {
+		slog.Error("DispatcherService: error handling macro automation idle transition", "printer_id", printerID, "error", err)
 	}
 }
 
@@ -88,6 +111,46 @@ func (s *DispatcherService) handlePrinterStatusChange(newState, oldState *model.
 			}()
 		}
 	}
+}
+
+// OnPrinterIdleMacro handles the specific case of an empty bed signalled by macro.
+func (s *DispatcherService) OnPrinterIdleMacro(printerID uuid.UUID, settings *model.AutoDispatchSettings) error {
+	ctx := context.Background()
+	
+	// Skip if global dispatch is off, as it governs all automated assignments
+	if !s.IsGloballyEnabled(ctx) {
+		slog.Debug("DispatcherService: auto-dispatch globally disabled (macro ignored)")
+		return nil
+	}
+
+	job, err := s.FindNextJob(ctx, printerID)
+	if err != nil {
+		return fmt.Errorf("failed to find next job: %w", err)
+	}
+
+	if job == nil {
+		slog.Info("DispatcherService: macro queue empty", "printer_id", printerID)
+		if settings.MacroEmptyQueueGcode != "" {
+			slog.Info("DispatcherService: sending empty queue G-code", "printer_id", printerID, "gcode", settings.MacroEmptyQueueGcode)
+			// Run macro/G-code
+			if err := s.printerMgr.RunMacro(printerID, settings.MacroEmptyQueueGcode); err != nil {
+				slog.Error("DispatcherService: failed to run empty queue G-code", "printer_id", printerID, "error", err)
+			}
+		}
+		return nil
+	}
+
+	// Create and auto-start the dispatch request because this was triggered explicitly by macro (implies operator confirmed empty)
+	request, err := s.CreateDispatchRequest(ctx, job.ID, printerID)
+	if err != nil {
+		return fmt.Errorf("failed to create dispatch request: %w", err)
+	}
+
+	slog.Info("DispatcherService: created macro dispatch request", "request_id", request.ID, "job_id", job.ID, "printer_id", printerID)
+	s.broadcastDispatchRequest(request)
+
+	// In Macro Mode we assume the bed is clean, so we immediately confirm to trigger print
+	return s.ConfirmDispatch(ctx, request.ID)
 }
 
 // OnPrinterIdle is called when a printer transitions to idle state.
