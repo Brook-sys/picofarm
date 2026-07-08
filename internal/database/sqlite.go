@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	_ "github.com/glebarez/go-sqlite"
@@ -190,13 +191,49 @@ func RunMigrations(db *sql.DB) error {
 		`CREATE INDEX IF NOT EXISTS idx_notification_templates_event ON notification_templates(event_type)`,
 	}
 	for _, stmt := range alterStatements {
-		db.Exec(stmt) // Ignore error if column already exists
+		if _, err := db.Exec(stmt); err != nil && !isExpectedCompatibilityMigrationError(stmt, err) {
+			return fmt.Errorf("%s: %w", compatibilityMigrationContext(stmt), err)
+		}
 	}
 
 	// Create indexes that may not exist
-	db.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_quotes_share_token ON quotes(share_token)`) //nolint:errcheck // best-effort index creation
+	if _, err := db.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_quotes_share_token ON quotes(share_token)`); err != nil {
+		return fmt.Errorf("create unique quote share token index: %w", err)
+	}
 
 	return nil
+}
+
+func isExpectedCompatibilityMigrationError(stmt string, err error) bool {
+	msg := strings.ToLower(err.Error())
+	if strings.Contains(msg, "duplicate column name") {
+		return true
+	}
+	if strings.Contains(msg, "no such column: template_id") {
+		return strings.Contains(stmt, "UPDATE order_items SET project_id") ||
+			strings.Contains(stmt, "UPDATE queue_items SET project_id")
+	}
+	if strings.Contains(msg, "no such column: recipe_id") {
+		return strings.Contains(stmt, "UPDATE print_jobs SET project_id")
+	}
+	return false
+}
+
+func compatibilityMigrationContext(stmt string) string {
+	switch {
+	case strings.Contains(stmt, "UPDATE gcode_files SET material_type"):
+		return "normalize gcode file material metadata"
+	case strings.Contains(stmt, "UPDATE queue_items SET material_type"):
+		return "normalize queue item material metadata"
+	case strings.Contains(stmt, "UPDATE order_items SET project_id"):
+		return "backfill order item project links"
+	case strings.Contains(stmt, "UPDATE print_jobs SET project_id"):
+		return "backfill print job project links"
+	case strings.Contains(stmt, "UPDATE queue_items SET project_id"):
+		return "backfill queue item project links"
+	default:
+		return "run compatibility migration"
+	}
 }
 
 // CreateStartupBackup creates an automatic backup before migrations run.

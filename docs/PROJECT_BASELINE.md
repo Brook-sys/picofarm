@@ -82,16 +82,14 @@ On the baseline collection pass for this plan:
 - `go test -run '^$' ./...` passed.
 - `cd web && npm run build` passed.
 - `make build` passed.
-- `cd web && npm run lint` passed with warnings and zero errors.
+- `cd web && npm run lint` passed with zero errors.
 
-Known frontend lint warnings to burn down in follow-up cycles:
+Known validation warnings to burn down in follow-up cycles:
 
-- `web/src/components/Tooltip.tsx`: reads a React ref during render.
-- `web/src/hooks/useWebSocket.ts`: state update pattern inside effect/reconnect setup.
-- Several route pages have incomplete `useEffect` dependency arrays.
-- `GCodeFiles.tsx`, `PrinterFiles.tsx`, and `Notifications.tsx` contain synchronous state updates inside effects.
+- `cd web && npm run build` reports stale Browserslist/caniuse-lite data.
+- The production frontend bundle is still larger than Vite's default warning threshold.
 
-Do not silence these warnings without fixing or documenting the underlying reason.
+Do not silence warnings without fixing or documenting the underlying reason.
 
 ## Generated/local files that must not be committed
 
