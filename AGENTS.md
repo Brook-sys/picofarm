@@ -52,7 +52,10 @@ When changing behavior, operations, validation, API contracts, storage, security
 - `docs/API_CONTRACTS.md` — HTTP/JSON conventions, route groups, and Go/TypeScript contract synchronization.
 - `docs/REGRESSION_MATRIX.md` — critical workflows to validate or automate.
 - `docs/SECURITY_MODEL.md` — CORS, secrets, uploads, backups, integrations, and sensitive endpoint guidance.
+- `docs/SALES_CHANNELS.md` — canonical guide for Etsy, Squarespace, Shopify, and future sales-channel providers/adapters.
 - `docs/README.md` — documentation maintenance policy.
+
+When changing sales channels, product/listing sync, external order processing, product links, provider OAuth/API-key flows, or marketplace/storefront integrations, read `docs/SALES_CHANNELS.md` first and keep API, security, and regression docs aligned.
 
 Keep docs factual and operational. Do not document planned behavior as current behavior.
 

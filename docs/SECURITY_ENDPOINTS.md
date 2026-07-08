@@ -128,8 +128,22 @@ Before exposing PicoFarm outside a trusted local network, protect these routes w
 
 ## Integration and webhook endpoints
 
+Sales-channel routes are designed in `docs/SALES_CHANNELS.md`. Any new generic `/api/sales-channels/*` endpoint that connects accounts, handles OAuth/API keys, syncs external data, links products, updates inventory, processes orders, or receives webhooks belongs in this section and should follow the same secret-redaction and fake-client testing rules as the provider-specific routes below.
+
 | Routes | Class | Notes |
 | --- | --- | --- |
+| `GET /api/sales-channels` | Integration/read | Provider descriptors/capabilities. Do not include secrets or private account data. |
+| `GET /api/sales-channels/status` | Integration/read | Connection/sync status. Redact credential details and external API errors. |
+| `POST /api/sales-channels/{channel}/connect` | Integration/secrets/settings | Connects external account/API. Validate provider-specific body and never log credentials. |
+| `POST /api/sales-channels/{channel}/disconnect` | Integration | Disconnects provider/connection. |
+| `GET /api/sales-channels/{channel}/auth-url` | Integration/OAuth | OAuth start. Validate redirect config and state. |
+| `GET /api/sales-channels/{channel}/callback` | Integration/OAuth | OAuth callback. Validate state and errors. |
+| `POST /api/sales-channels/{channel}/sync` | Integration/write | Imports external orders/products. Use fake clients in tests and sanitize stored errors. |
+| `POST /api/sales-channels/orders/{id}/process` | Integration/write | Converts external order into internal workflow. |
+| `POST /api/sales-channels/products/{id}/link` | Integration/write | Links external product/variant to internal project/SKU. |
+| `DELETE /api/sales-channels/products/{id}/link` | Integration/write | Unlinks external product/variant. |
+| `POST /api/sales-channels/{channel}/webhook` | Integration/webhook | Inbound webhook. Verify signatures where provider supports them. |
+| `POST /api/sales-channels/{channel}/webhook-events/{id}/reprocess` | Integration/write | Replays inbound event. Must be idempotent and auditable. |
 | `POST /api/bambu-cloud/login` | Integration/secrets | Authenticates external account; never log credentials. |
 | `POST /api/bambu-cloud/verify` | Integration/secrets | Verifies auth material. |
 | `POST /api/bambu-cloud/devices/add` | Integration/hardware | Adds device from external account. |

@@ -25,7 +25,7 @@ Use this matrix to decide what to manually verify or automate when changing Pico
 | Printer connection/status | Hardware-facing and safety-sensitive | Fake printer client tests; no real hardware in CI | Register manual/fake printer, observe state UI |
 | Notifications | Customer/operator communication | Template rendering tests and delivery recording tests | Preview/test delivery for a template |
 | Backup/restore | Data recovery | Temp DB tests for backup creation, retention, restore safety | Create backup, verify restore procedure in temp data |
-| Etsy/Squarespace sync | External source of orders/listings | Client conversion tests and fake API tests | Sync with sandbox/mock only; do not require credentials |
+| Sales-channel sync and product links | External source of orders/listings/products from Etsy, Squarespace, Shopify, and future providers | Provider registry tests, fake-client conversion/sync tests, repository idempotency tests, and handler tests for generic `/api/sales-channels/*` routes | Sync with sandbox/mock only; do not require credentials; verify the Channels page shows status/errors without secrets |
 | WebSocket status | UI freshness | Hook/unit or integration test for reconnect/cleanup when feasible | Load app, observe connected status and live updates |
 | Auth/security boundary | Prevent unsafe remote exposure | Router/CORS tests and endpoint policy tests | Verify allowed/bad origins and sensitive actions |
 
@@ -34,6 +34,7 @@ Use this matrix to decide what to manually verify or automate when changing Pico
 - Database schema or migration change: run fresh DB tests, upgrade tests if available, `go test -v ./internal/database ./internal/repository ./internal/service`, then full Go tests.
 - API route/response change: add/update handler tests and check matching TypeScript types.
 - Frontend API client change: run `cd web && npm run lint`, `cd web && npm run build`, and manually exercise the affected page.
+- Sales-channel change: read `docs/SALES_CHANNELS.md`, use fake clients/fixtures, test idempotent sync and secret redaction, then update API/security docs if routes or JSON change.
 - Printer control or queue change: use fake/manual printers only unless the user explicitly asks for real hardware testing.
 - Upload/delete/backup change: test in temp directories and verify cleanup behavior.
 - Security/CORS/endpoint-policy change: add router tests and document expected local/self-hosted behavior, including `docs/SECURITY_ENDPOINTS.md` for sensitive routes.
