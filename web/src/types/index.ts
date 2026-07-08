@@ -176,7 +176,7 @@ export interface Design {
 }
 
 // Printer types
-export type ConnectionType = 'manual' | 'octoprint' | 'bambu_lan' | 'bambu_cloud' | 'moonraker'
+export type ConnectionType = 'manual' | 'octoprint' | 'bambu_lan' | 'bambu_cloud' | 'moonraker' | 'chitu'
 export type PrinterStatus = 'idle' | 'printing' | 'paused' | 'error' | 'offline'
 
 export interface BuildVolume {
@@ -240,6 +240,7 @@ export interface Printer {
   nozzle_diameter: number
   location: string
   notes: string
+  min_material_percent: number
   cost_per_hour_cents: number // Hourly cost in cents (e.g. 150 = $1.50/hr)
   purchase_price_cents: number // Purchase price in cents for ROI tracking
   maintenance_mode?: boolean // When true, printer is out of service

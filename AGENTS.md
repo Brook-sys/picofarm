@@ -49,6 +49,7 @@ When changing behavior, operations, validation, API contracts, storage, security
 
 - `docs/PROJECT_BASELINE.md` — canonical stack/runtime defaults and validation gates.
 - `docs/ARCHITECTURE.md` — code layout, boundaries, and where to make common changes.
+- `docs/API_CONTRACTS.md` — HTTP/JSON conventions, route groups, and Go/TypeScript contract synchronization.
 - `docs/REGRESSION_MATRIX.md` — critical workflows to validate or automate.
 - `docs/SECURITY_MODEL.md` — CORS, secrets, uploads, backups, integrations, and sensitive endpoint guidance.
 - `docs/README.md` — documentation maintenance policy.

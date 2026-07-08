@@ -101,10 +101,10 @@ Use mocks/fakes or isolated unit tests when adding regression coverage for exter
 
 | Change | Start here | Also check |
 | --- | --- | --- |
-| New backend endpoint | `internal/api/` | service, repository, model, frontend API client, API docs |
+| New backend endpoint | `internal/api/` | service, repository, model, frontend API client, `docs/API_CONTRACTS.md` |
 | New business workflow | `internal/service/` | repository transactions, model tests, API handler tests |
-| New database field/table | `migrations/`, `internal/database` | repository code, fresh/upgrade tests, TS types |
-| New frontend server data | `web/src/api/`, `web/src/types/` | route/page, hooks, backend JSON tests |
+| New database field/table | `migrations/`, `internal/database` | repository code, fresh/upgrade tests, TS types, `docs/API_CONTRACTS.md` when JSON changes |
+| New frontend server data | `web/src/api/`, `web/src/types/` | route/page, hooks, backend JSON tests, `docs/API_CONTRACTS.md` |
 | Printer behavior | `internal/printer/`, relevant service | safety docs, regression matrix, mocks |
 | Upload/file behavior | `internal/storage/`, API handlers | security model, cleanup/retention behavior |
 | Notifications | notification service/API/types/pages | test delivery, templates, regression matrix |

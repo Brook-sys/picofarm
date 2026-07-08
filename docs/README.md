@@ -6,6 +6,7 @@ This directory contains the operational documentation for PicoFarm. Prefer updat
 
 - [Project baseline](PROJECT_BASELINE.md) — current stack, runtime defaults, validation commands, known warnings, and release/commit expectations.
 - [Architecture](ARCHITECTURE.md) — backend, frontend, database, realtime, integrations, and where to make common changes.
+- [API and data contracts](API_CONTRACTS.md) — HTTP/JSON conventions, route groups, shared enum values, and Go/TypeScript synchronization rules.
 - [Regression matrix](REGRESSION_MATRIX.md) — critical user flows to validate manually or automate as tests.
 - [Security model](SECURITY_MODEL.md) — current assumptions and hardening work for local/self-hosted operation.
 
@@ -16,7 +17,7 @@ When changing PicoFarm, keep docs close to the code change:
 | Change type | Docs to check |
 | --- | --- |
 | New or changed setup/build/test command | `README.md`, `docs/PROJECT_BASELINE.md`, `AGENTS.md` |
-| Backend route, JSON response, or domain model | `docs/ARCHITECTURE.md`, future API contract docs |
+| Backend route, JSON response, or domain model | `docs/API_CONTRACTS.md`, `docs/ARCHITECTURE.md` |
 | Database migration or storage behavior | `docs/ARCHITECTURE.md`, `docs/PROJECT_BASELINE.md` |
 | Critical workflow behavior | `docs/REGRESSION_MATRIX.md` |
 | Self-hosted, CORS, auth, backups, uploads, printer control | `docs/SECURITY_MODEL.md` |

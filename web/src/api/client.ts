@@ -88,17 +88,6 @@ export const projectsApi = {
       method: 'POST',
     }),
 
-  markReadyToShip: (id: string) =>
-    fetchApi<import('../types').Project>(`/projects/${id}/ready-to-ship`, {
-      method: 'POST',
-    }),
-
-  ship: (id: string, trackingNumber?: string) =>
-    fetchApi<import('../types').Project>(`/projects/${id}/ship`, {
-      method: 'POST',
-      body: JSON.stringify({ tracking_number: trackingNumber }),
-    }),
-
   // Tasks for this project
   listTasks: (id: string) =>
     fetchApi<import('../types').Task[]>(`/projects/${id}/tasks`),
