@@ -20,12 +20,43 @@ async function fetchApi<T>(
     Object.assign(headers, existingHeaders)
   }
 
+  // Inject API Token if present in localStorage
+  if (typeof window !== 'undefined') {
+    const apiToken = window.localStorage.getItem('API_TOKEN')
+    if (apiToken) {
+      headers['Authorization'] = `Bearer ${apiToken}`
+    }
+  }
+
   const response = await fetch(url, {
     ...options,
     headers,
   })
 
   console.log(`[API] Response status: ${response.status}`)
+
+  if (response.status === 401 && typeof window !== 'undefined') {
+    // Basic prompt for API token when hitting 401 Unauthorized
+    const currentToken = window.localStorage.getItem('API_TOKEN')
+    if (!currentToken) {
+      const token = window.prompt('Authentication required. Enter API Token:')
+      if (token) {
+        window.localStorage.setItem('API_TOKEN', token)
+        window.location.reload()
+      }
+    } else {
+      // Token exists but is invalid/expired
+      const token = window.prompt('Invalid API Token. Enter a new token (or leave empty to clear):')
+      if (token !== null) {
+        if (token) {
+          window.localStorage.setItem('API_TOKEN', token)
+        } else {
+          window.localStorage.removeItem('API_TOKEN')
+        }
+        window.location.reload()
+      }
+    }
+  }
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({ error: 'Unknown error' }))
