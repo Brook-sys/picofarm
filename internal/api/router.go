@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/Brook-sys/picofarm/internal/realtime"
 	"github.com/Brook-sys/picofarm/internal/service"
@@ -15,8 +16,25 @@ import (
 	"github.com/go-chi/cors"
 )
 
+// RouterOptions controls HTTP middleware behavior that differs between local
+// development and self-hosted deployments.
+type RouterOptions struct {
+	AllowedOrigins []string
+}
+
 // NewRouter creates the HTTP router with all routes.
 func NewRouter(services *service.Services, hub *realtime.Hub) http.Handler {
+	return NewRouterWithOptions(services, hub, RouterOptionsFromEnv())
+}
+
+// RouterOptionsFromEnv loads router configuration from environment variables.
+// ALLOWED_ORIGINS is a comma-separated list of browser origins allowed by CORS.
+func RouterOptionsFromEnv() RouterOptions {
+	return RouterOptions{AllowedOrigins: splitCSV(os.Getenv("ALLOWED_ORIGINS"))}
+}
+
+// NewRouterWithOptions creates the HTTP router with all routes.
+func NewRouterWithOptions(services *service.Services, hub *realtime.Hub, opts RouterOptions) http.Handler {
 	r := chi.NewRouter()
 
 	// Middleware
@@ -25,11 +43,9 @@ func NewRouter(services *service.Services, hub *realtime.Hub) http.Handler {
 	r.Use(RequestLogger) // Custom structured logging with request IDs and timing
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.RealIP)
-	// Configure CORS - allow all origins for desktop app (local API only)
+	allowedOrigins := corsAllowedOrigins(opts.AllowedOrigins)
 	r.Use(cors.Handler(cors.Options{
-		AllowOriginFunc: func(r *http.Request, origin string) bool {
-			return true // Desktop app - API is local only
-		},
+		AllowedOrigins: allowedOrigins,
 		AllowedMethods: []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
 		AllowedHeaders: []string{"Accept", "Authorization", "Content-Type", "X-Request-ID"},
 		ExposedHeaders: []string{"Link"},
@@ -713,4 +729,30 @@ func NewRouter(services *service.Services, hub *realtime.Hub) http.Handler {
 	}
 
 	return r
+}
+
+func corsAllowedOrigins(configured []string) []string {
+	if len(configured) > 0 {
+		return configured
+	}
+	return []string{
+		"http://localhost:*",
+		"http://127.0.0.1:*",
+		"http://[::1]:*",
+	}
+}
+
+func splitCSV(value string) []string {
+	if value == "" {
+		return nil
+	}
+	parts := strings.Split(value, ",")
+	items := make([]string, 0, len(parts))
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part != "" {
+			items = append(items, part)
+		}
+	}
+	return items
 }

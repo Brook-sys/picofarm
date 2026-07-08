@@ -33,15 +33,22 @@ Use `[REDACTED]` in docs, issues, plans, and logs shared with agents.
 
 ## CORS and browser origins
 
-`internal/api/router.go` currently uses permissive CORS behavior. This is convenient during local development but risky for self-hosted browser access.
+`internal/api/router.go` restricts browser CORS origins through the `ALLOWED_ORIGINS` environment variable.
 
-Recommended hardening path:
+Default behavior remains development-friendly and only allows local browser origins:
 
-1. Introduce an explicit `ALLOWED_ORIGINS` environment variable or equivalent configuration.
-2. Keep local development convenient for `localhost` origins.
-3. Require explicit origins for self-hosted/production mode.
-4. Add router tests for allowed and blocked origins.
-5. Document deployment examples after the behavior is implemented.
+- `http://localhost:*`
+- `http://127.0.0.1:*`
+- `http://[::1]:*`
+
+For self-hosted access from another hostname, set explicit comma-separated origins. Examples:
+
+```sh
+ALLOWED_ORIGINS="https://picofarm.example.com"
+ALLOWED_ORIGINS="https://picofarm.example.com,http://10.0.0.5:8084"
+```
+
+Do not use wildcard origins for deployments that expose printer controls, customer/order data, backups, credentials, or integrations to browsers outside the local machine. Router tests cover allowed and blocked origins.
 
 ## Sensitive endpoint classes
 
@@ -79,7 +86,7 @@ Backup/restore work should verify:
 
 ## Minimum hardening checklist before remote/self-hosted exposure
 
-- [ ] CORS restricted by explicit allowed origins.
+- [x] CORS restricted by explicit allowed origins for self-hosted browser access.
 - [ ] Authentication/authorization model documented and implemented or clearly delegated to a trusted reverse proxy.
 - [ ] Sensitive printer/file/backup endpoints reviewed.
 - [ ] Webhook signature verification documented and tested for each provider.

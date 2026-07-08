@@ -3,12 +3,13 @@ package api
 import (
 	"fmt"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/Brook-sys/picofarm/internal/realtime"
 	"github.com/Brook-sys/picofarm/internal/service"
+	"github.com/go-chi/chi/v5"
 )
 
 // createTestServices builds a minimal Services struct with zero-valued service
@@ -57,6 +58,58 @@ func hasRoute(routes []string, method, pattern string) bool {
 		}
 	}
 	return false
+}
+
+func TestRouterCORSAllowsOnlyConfiguredOrigins(t *testing.T) {
+	services := createTestServices()
+	hub := realtime.NewHub()
+	handler := NewRouterWithOptions(services, hub, RouterOptions{
+		AllowedOrigins: []string{"https://farm.example.test"},
+	})
+
+	allowed := httptest.NewRequest(http.MethodOptions, "/health", nil)
+	allowed.Header.Set("Origin", "https://farm.example.test")
+	allowed.Header.Set("Access-Control-Request-Method", http.MethodGet)
+	allowedRecorder := httptest.NewRecorder()
+	handler.ServeHTTP(allowedRecorder, allowed)
+	if got := allowedRecorder.Header().Get("Access-Control-Allow-Origin"); got != "https://farm.example.test" {
+		t.Fatalf("expected configured origin to be allowed, got %q", got)
+	}
+
+	blocked := httptest.NewRequest(http.MethodOptions, "/health", nil)
+	blocked.Header.Set("Origin", "https://evil.example.test")
+	blocked.Header.Set("Access-Control-Request-Method", http.MethodGet)
+	blockedRecorder := httptest.NewRecorder()
+	handler.ServeHTTP(blockedRecorder, blocked)
+	if got := blockedRecorder.Header().Get("Access-Control-Allow-Origin"); got != "" {
+		t.Fatalf("expected unconfigured origin to be blocked, got %q", got)
+	}
+}
+
+func TestRouterCORSDefaultsToLocalDevelopmentOrigins(t *testing.T) {
+	services := createTestServices()
+	hub := realtime.NewHub()
+	handler := NewRouterWithOptions(services, hub, RouterOptions{})
+
+	request := httptest.NewRequest(http.MethodOptions, "/health", nil)
+	request.Header.Set("Origin", "http://localhost:5173")
+	request.Header.Set("Access-Control-Request-Method", http.MethodGet)
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+
+	if got := response.Header().Get("Access-Control-Allow-Origin"); got != "http://localhost:5173" {
+		t.Fatalf("expected localhost dev origin to be allowed by default, got %q", got)
+	}
+}
+
+func TestRouterOptionsFromEnvParsesAllowedOrigins(t *testing.T) {
+	t.Setenv("ALLOWED_ORIGINS", "https://farm.example.test, http://10.0.0.5:8084, ")
+
+	got := RouterOptionsFromEnv().AllowedOrigins
+	want := []string{"https://farm.example.test", "http://10.0.0.5:8084"}
+	if strings.Join(got, "|") != strings.Join(want, "|") {
+		t.Fatalf("expected parsed origins %v, got %v", want, got)
+	}
 }
 
 func TestRouterRegistersAllExpectedRoutes(t *testing.T) {

@@ -24,6 +24,7 @@ When an endpoint or JSON shape changes, update the backend model/handler, fronte
   - `VITE_API_URL` when set;
   - otherwise the browser window origin;
   - otherwise `http://localhost:8084` for non-browser fallback.
+- Browser CORS origins are configured by backend `ALLOWED_ORIGINS`; when unset, only local development origins are allowed.
 
 ## JSON conventions
 

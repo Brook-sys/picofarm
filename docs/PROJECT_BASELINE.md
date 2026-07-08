@@ -32,6 +32,7 @@ Backend defaults are defined from `cmd/server/main.go` and database helpers:
 | `DATABASE_PATH` | `~/.picofarm/picofarm.db` | Used when no explicit database path is provided |
 | `UPLOAD_DIR` | `./uploads` | Runtime uploads and generated files |
 | `STATIC_DIR` | `./web/dist` | Static frontend assets in production build |
+| `ALLOWED_ORIGINS` | unset | Comma-separated CORS origins; unset allows local development origins only |
 | `SENTRY_DSN` | unset | Optional error reporting |
 | `ETSY_CLIENT_ID` | unset | Optional Etsy integration |
 | `ETSY_REDIRECT_URI` | `http://localhost:8080/api/integrations/etsy/callback` in `Makefile` | Check this before production/self-hosted use because backend defaults to port `8084` |
