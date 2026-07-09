@@ -1,12 +1,12 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Link as RouterLink } from 'react-router-dom'
 import { RefreshCw, Package, CheckCircle, Clock, ExternalLink, ShoppingBag, Store, Link, Filter } from 'lucide-react'
-import { etsyApi, squarespaceApi, templatesApi } from '../api/client'
-import type { EtsyReceipt, EtsyListing, SquarespaceOrder, SquarespaceProduct, SyncResult, Template, EtsyIntegration, SquarespaceIntegration } from '../types'
+import { etsyApi, squarespaceApi, templatesApi, salesChannelsApi } from '../api/client'
+import type { EtsyReceipt, EtsyListing, SquarespaceOrder, SquarespaceProduct, SyncResult, Template, SalesChannelID, SalesChannelSummary } from '../types'
 import { cn } from '../lib/utils'
 
 type Tab = 'orders' | 'products'
-type Channel = 'all' | 'etsy' | 'squarespace'
+type Channel = 'all' | SalesChannelID
 type OrderFilter = 'all' | 'unprocessed' | 'processed'
 
 // Unified order type for display
@@ -51,9 +51,8 @@ export default function Channels() {
   const [channel, setChannel] = useState<Channel>('all')
   const [orderFilter, setOrderFilter] = useState<OrderFilter>('all')
 
-  // Connection status
-  const [etsyStatus, setEtsyStatus] = useState<EtsyIntegration | null>(null)
-  const [squarespaceStatus, setSquarespaceStatus] = useState<SquarespaceIntegration | null>(null)
+  // Provider-neutral channel descriptors and connection status
+  const [salesChannels, setSalesChannels] = useState<SalesChannelSummary[]>([])
 
   // Data
   const [orders, setOrders] = useState<UnifiedOrder[]>([])
@@ -69,16 +68,17 @@ export default function Channels() {
   const [linkingId, setLinkingId] = useState<string | null>(null)
   const [selectedTemplate, setSelectedTemplate] = useState<Record<string, string>>({})
 
-  // Load connection status
+  const connectedSalesChannels = salesChannels.filter(({ status }) => status.connected)
+  const etsyStatus = salesChannels.find(({ descriptor }) => descriptor.id === 'etsy')?.status
+  const squarespaceStatus = salesChannels.find(({ descriptor }) => descriptor.id === 'squarespace')?.status
+  const visibleSalesChannels = salesChannels.filter(({ descriptor }) => descriptor.id === 'etsy' || descriptor.id === 'squarespace')
+
+  // Load provider-neutral connection status
   useEffect(() => {
     async function loadStatus() {
       try {
-        const [etsy, squarespace] = await Promise.all([
-          etsyApi.getStatus().catch(() => null),
-          squarespaceApi.getStatus().catch(() => null),
-        ])
-        setEtsyStatus(etsy)
-        setSquarespaceStatus(squarespace)
+        const response = await salesChannelsApi.list()
+        setSalesChannels(response.channels)
       } catch (err) {
         console.error('Failed to load channel status:', err)
       }
@@ -391,7 +391,7 @@ export default function Channels() {
     })
   }
 
-  const hasConnectedChannel = etsyStatus?.connected || squarespaceStatus?.connected
+  const hasConnectedChannel = connectedSalesChannels.length > 0
 
   return (
     <div className="p-6">
@@ -408,18 +408,26 @@ export default function Channels() {
 
         {/* Connection Status Pills */}
         <div className="flex items-center gap-2">
-          {etsyStatus?.connected && (
-            <div className="flex items-center gap-1.5 px-2 py-1 bg-orange-500/10 border border-orange-500/30 rounded-lg">
-              <Store className="h-3.5 w-3.5 text-orange-400" />
-              <span className="text-xs text-orange-300">{etsyStatus.shop_name}</span>
+          {connectedSalesChannels.map(({ descriptor, status }) => (
+            <div
+              key={descriptor.id}
+              className={cn(
+                'flex items-center gap-1.5 px-2 py-1 rounded-lg border',
+                descriptor.id === 'etsy'
+                  ? 'bg-orange-500/10 border-orange-500/30 text-orange-300'
+                  : descriptor.id === 'squarespace'
+                    ? 'bg-purple-500/10 border-purple-500/30 text-purple-300'
+                    : 'bg-sky-500/10 border-sky-500/30 text-sky-300'
+              )}
+            >
+              {descriptor.id === 'etsy' ? (
+                <Store className="h-3.5 w-3.5" />
+              ) : (
+                <ShoppingBag className="h-3.5 w-3.5" />
+              )}
+              <span className="text-xs">{status.display_name || descriptor.display_name}</span>
             </div>
-          )}
-          {squarespaceStatus?.connected && (
-            <div className="flex items-center gap-1.5 px-2 py-1 bg-purple-500/10 border border-purple-500/30 rounded-lg">
-              <ShoppingBag className="h-3.5 w-3.5 text-purple-400" />
-              <span className="text-xs text-purple-300">{squarespaceStatus.site_title}</span>
-            </div>
-          )}
+          ))}
           {!hasConnectedChannel && (
             <RouterLink
               to="/settings"
@@ -469,8 +477,11 @@ export default function Channels() {
               className="input h-auto py-1.5 w-auto"
             >
               <option value="all">All Channels</option>
-              {etsyStatus?.connected && <option value="etsy">Etsy</option>}
-              {squarespaceStatus?.connected && <option value="squarespace">Squarespace</option>}
+              {visibleSalesChannels.map(({ descriptor, status }) => (
+                status.connected && (
+                  <option key={descriptor.id} value={descriptor.id}>{descriptor.display_name}</option>
+                )
+              ))}
             </select>
           </div>
 

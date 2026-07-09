@@ -1214,6 +1214,39 @@ export interface SyncResult {
   errors: number
 }
 
+// Provider-neutral sales-channel types
+export type SalesChannelID = 'etsy' | 'squarespace' | 'shopify'
+export type SalesChannelAuthType = 'oauth' | 'api_key' | 'manual'
+export type SalesChannelCapability = 'oauth' | 'api_key' | 'orders_read' | 'products_read' | 'inventory_write' | 'webhooks'
+
+export interface SalesChannelDescriptor {
+  id: SalesChannelID
+  display_name: string
+  description?: string
+  capabilities: SalesChannelCapability[]
+  auth_type: SalesChannelAuthType
+  docs_url?: string
+}
+
+export interface SalesChannelStatus {
+  channel: SalesChannelID
+  connected: boolean
+  display_name?: string
+  account_id?: string
+  last_order_sync_at?: string
+  last_product_sync_at?: string
+  last_error?: string
+}
+
+export interface SalesChannelSummary {
+  descriptor: SalesChannelDescriptor
+  status: SalesChannelStatus
+}
+
+export interface SalesChannelsListResponse {
+  channels: SalesChannelSummary[]
+}
+
 // Bambu Cloud types
 export interface CloudDevice {
   dev_id: string

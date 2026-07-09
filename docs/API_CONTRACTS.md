@@ -63,10 +63,10 @@ Keep these literal sets synchronized between Go and TypeScript.
 | Quote status | `model.QuoteStatus` | `QuoteStatus` | `draft`, `sent`, `accepted`, `rejected`, `expired` |
 | Quote line item type | `model.QuoteLineItemType` | `QuoteLineItemType` | `printing`, `post_processing`, `consulting`, `design`, `other`, `labor`, `consumables`, `shipping`, `finishing` |
 | Discount type | `model.DiscountType` | `DiscountType` | `none`, `flat`, `percent` |
-| Sales-channel ID | `saleschannel.ChannelID` | pending feature-local type | `etsy`, `squarespace`, `shopify` |
-| Sales-channel auth type | `saleschannel.AuthType` | pending feature-local type | `oauth`, `api_key`, `manual` |
-| Sales-channel capability | `saleschannel.Capability` | pending feature-local type | `oauth`, `api_key`, `orders_read`, `products_read`, `inventory_write`, `webhooks` |
-| Sales-channel connection state | `saleschannel.ConnectionState` | pending feature-local type | `disconnected`, `connected`, `needs_attention`, `syncing` |
+| Sales-channel ID | `saleschannel.ChannelID` | `SalesChannelID` | `etsy`, `squarespace`, `shopify` |
+| Sales-channel auth type | `saleschannel.ProviderDescriptor.AuthType` | `SalesChannelAuthType` | `oauth`, `api_key`, `manual` |
+| Sales-channel capability | `saleschannel.Capability` | `SalesChannelCapability` | `oauth`, `api_key`, `orders_read`, `products_read`, `inventory_write`, `webhooks` |
+| Sales-channel connection state | `saleschannel.ConnectionState` | pending feature-local type | `disconnected`, `connected`, `needs_attention` |
 | Sales-channel sync kind | `saleschannel.SyncKind` | pending feature-local type | `orders`, `products`, `all` |
 | Sales-channel sync run status | `saleschannel.SyncRunStatus` | pending feature-local type | `pending`, `running`, `succeeded`, `failed` |
 
