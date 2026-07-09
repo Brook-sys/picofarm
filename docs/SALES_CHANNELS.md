@@ -41,6 +41,7 @@ Existing provider-specific integration code lives in these areas:
 | Shopify | `internal/repository/shopify.go`, `internal/service/shopify.go`, `internal/api/shopify_handler.go`, Shopify model shapes in `internal/model/models.go` | service-level HTTP/OAuth code | Existing support is partial and should be exposed by capabilities, not assumptions. |
 | Mercado Livre | `internal/service/sales_channel_adapters.go` provider shell, `internal/saleschannel/types.go` channel ID | `internal/mercadolivre/client.go` with injected HTTP client/fakes, `ListOrders` via `/orders/search`, and `ListItems` via `/users/{id}/items/search` + `/items/{id}` | Descriptor/capability contract and fakeable client are registered; `Sync(orders)` imports Mercado Livre orders idempotently via `UpsertExternalOrder`, and `Sync(products)` imports active listings idempotently via `UpsertExternalProduct` with SKU/stock variants for generic product linking. Live OAuth/write inventory/webhooks are follow-up ML cards. |
 | Shopee | `internal/service/sales_channel_adapters.go` provider skeleton/sync adapter, `internal/saleschannel/types.go` channel ID | `internal/shopee/signing.go` HMAC helper and `internal/shopee/types.go` normalized fakeable client DTOs; full HTTP client is a follow-up. | Descriptor is registered with OAuth, `orders_read`, and `products_read` only. Fake-client backed sync maps orders and item/model products into canonical storage idempotently. Official Open Platform docs expose signed API calls, shop authorization, order/product/stock endpoints, push notifications, and sandbox testing. Brazil/regional availability and partner access must be confirmed for the user's account before live use. |
+| OLX Brasil | Planning only after OLX-01 discovery. No provider code yet. | Official OLX integration portal documents OAuth, ad import/status/listing, highlights, leads, chat/webhooks, and partner/homologation paths. | Treat OLX as an ads/leads channel, not a traditional order marketplace. Do not use scraping. API access requires registered/homologated integrator details and category/scope confirmation before enabling live capabilities. |
 
 Current provider-specific route groups remain supported during migration:
 
@@ -322,6 +323,22 @@ Recommended implementation sequence:
 3. Product links reuse the generic link/unlink routes once Shopee products/variants are present in canonical storage; keep inventory synchronization disabled until `inventory_write` is explicitly implemented.
 4. Add inventory write and webhook replay as separate post-MVP cards after read-only flows are stable with live-client fixtures.
 5. Keep every Shopee path covered by fake-client tests and do not require real Shopee credentials in CI.
+
+### OLX Brasil API availability discovery
+
+OLX-01 validates that OLX Brasil has an official integration path, but the shape is different from Etsy/Shopee marketplace orders. The official `developers.olx.com.br` portal documents an OAuth-based integrator API for advertisement import/management and lead delivery; OLX help pages describe integrator/homologation flows for ads and leads. This is enough to continue planning, but not enough to expose a live provider without account/category-specific access.
+
+| Area | Discovery result | PicoFarm decision |
+| --- | --- | --- |
+| Official API availability | Available through the OLX integration portal for ad import, published-ad status/listing, highlights, webhooks, lead integration, chat integration, historical vehicle data, and renewal-related flows. | Proceed only through official APIs/integrator paths. No scraping or browser automation as a default integration. |
+| Access model | OAuth 2.0 web authorization is documented. Application registration requires sending client/app details, website/contact email/phone, and redirect URIs to OLX support/integrator channels to receive `client_id` and `client_secret`. | Treat OLX as gated by integrator registration/homologation. CI must use fake clients; live setup requires user/account approval and registered app credentials outside the repo. |
+| Ads/inventory | API import supports insert/edit/delete via JSON payload to OLX import endpoints with scope such as `autoupload`; payloads include ad ID, operation, category, title/body, phone, type, price, zipcode, params, images, and category-specific fields. | Potential `products_read`/ads-read and ads-write/import capability after OLX-02. It is not equivalent to product catalog sync until category requirements are modeled. |
+| Leads/messages | Lead integration is documented through a per-advertiser endpoint configured via OAuth and scope such as `autoservice`; OLX sends lead data to a configured URL and optional token/header context. | Potential webhook-style inbound lead channel, not `orders_read`. Store as webhook/lead inbox or future CRM workflow, not as an order by default. |
+| Orders/payments | Discovery found no official order lifecycle equivalent for PicoFarm fulfillment. OLX is classifieds/ad/lead oriented. | Do not advertise `orders_read` for OLX unless a later official API proves order semantics for the target segment. |
+| Security | OAuth codes, client secrets, access tokens, lead endpoint tokens, webhook/chat payloads, phone/email lead data, and ad import payloads are sensitive. | Add redaction/security docs before implementation; examples must use `[REDACTED]`. |
+| Legal/ToS | Official docs and help center point users toward integrators, import APIs, and homologation. | Avoid scraping, unofficial reverse engineering, or personal-account automation. |
+
+OLX-01 decision: OLX should continue to OLX-02 as an official-but-gated integration candidate. The likely PicoFarm MVP is an ads/leads/manual-import channel with honest capabilities, not a full marketplace order provider.
 
 ## Checklist for adding a new channel
 
