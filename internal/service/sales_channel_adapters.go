@@ -150,20 +150,32 @@ func (p *ShopeeSalesChannelProvider) UnlinkProduct(context.Context, string, uuid
 	return errSalesChannelReadModelPending(saleschannel.ChannelShopee, "unlink_product")
 }
 
+// OLXClient is the fakeable OLX Brasil client surface used for credential validation.
+type OLXClient interface {
+	ValidateAPIKey(ctx context.Context, apiKey string) (accountID, displayName string, err error)
+}
+
 // OLXSalesChannelProvider exposes the approved partial OLX Brasil MVP.
-// OLX is gated by official integrator registration, so the initial provider is
-// intentionally manual/import-oriented and does not advertise orders or stock writes.
-type OLXSalesChannelProvider struct{}
+// OLX API access is gated by official integrator registration; when the user
+// stores an API key, status validation is delegated to the injected client.
+type OLXSalesChannelProvider struct {
+	settings *SettingsService
+	client   OLXClient
+}
 
 func NewOLXSalesChannelProvider() *OLXSalesChannelProvider {
 	return &OLXSalesChannelProvider{}
+}
+
+func NewOLXSalesChannelProviderWithSettings(settings *SettingsService, client OLXClient) *OLXSalesChannelProvider {
+	return &OLXSalesChannelProvider{settings: settings, client: client}
 }
 
 func (p *OLXSalesChannelProvider) Descriptor() saleschannel.ProviderDescriptor {
 	return saleschannel.ProviderDescriptor{
 		ID:          saleschannel.ChannelOLX,
 		DisplayName: "OLX Brasil",
-		Description: "Partial OLX classifieds/lead integration. Official API access is gated by integrator registration; MVP starts as manual/import plus ads/leads planning.",
+		Description: "Partial OLX classifieds/lead integration. Official API access is gated by integrator registration; MVP supports manual API key configuration and planned ads/leads sync.",
 		Capabilities: []saleschannel.Capability{
 			saleschannel.CapabilityProductsRead,
 			saleschannel.CapabilityWebhooks,
@@ -173,11 +185,28 @@ func (p *OLXSalesChannelProvider) Descriptor() saleschannel.ProviderDescriptor {
 	}
 }
 
-func (p *OLXSalesChannelProvider) Status(context.Context) (saleschannel.ConnectionStatus, error) {
-	return saleschannel.ConnectionStatus{
-		Channel:   saleschannel.ChannelOLX,
-		LastError: "Manual/import setup pending; official OLX API access requires integrator registration.",
-	}, nil
+func (p *OLXSalesChannelProvider) Status(ctx context.Context) (saleschannel.ConnectionStatus, error) {
+	status := saleschannel.ConnectionStatus{Channel: saleschannel.ChannelOLX}
+	if p == nil || p.settings == nil || p.client == nil {
+		return status, nil
+	}
+	keySetting, err := p.settings.Get(ctx, "olx_api_key")
+	if err != nil {
+		return status, err
+	}
+	if keySetting == nil || keySetting.Value == "" {
+		status.LastError = "OLX API key not configured"
+		return status, nil
+	}
+	accountID, name, err := p.client.ValidateAPIKey(ctx, keySetting.Value)
+	if err != nil {
+		status.LastError = saleschannel.SanitizeErrorMessage(err.Error())
+		return status, nil
+	}
+	status.Connected = true
+	status.AccountID = accountID
+	status.DisplayName = name
+	return status, nil
 }
 
 func (p *OLXSalesChannelProvider) Sync(context.Context, saleschannel.SyncKind) (saleschannel.SyncResult, error) {

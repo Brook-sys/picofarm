@@ -138,6 +138,56 @@ func TestSalesChannelAdapters_StatusMapsLegacyIntegrations(t *testing.T) {
 	assertStatus(t, shopifyProvider, saleschannel.ChannelShopify, "dragon-store.myshopify.com", "dragon-store.myshopify.com")
 }
 
+func TestOLXSalesChannelProvider_StatusUsesConfiguredAPIKey(t *testing.T) {
+	repos := openSalesChannelAdapterRepos(t)
+	settings := &SettingsService{repo: repos.Settings}
+	ctx := context.Background()
+	if err := settings.Set(ctx, "olx_api_key", "fake-olx-api-key"); err != nil {
+		t.Fatalf("save OLX API key: %v", err)
+	}
+	provider := NewOLXSalesChannelProviderWithSettings(settings, fakeOLXClient{
+		accountID: "olx-account-123",
+		name:      "PicoFarm OLX",
+	})
+
+	status, err := provider.Status(ctx)
+	if err != nil {
+		t.Fatalf("status: %v", err)
+	}
+	if !status.Connected {
+		t.Fatalf("expected OLX to be connected")
+	}
+	if status.Channel != saleschannel.ChannelOLX {
+		t.Fatalf("expected channel %q, got %q", saleschannel.ChannelOLX, status.Channel)
+	}
+	if status.AccountID != "olx-account-123" || status.DisplayName != "PicoFarm OLX" {
+		t.Fatalf("unexpected OLX status: %+v", status)
+	}
+}
+
+func TestOLXSalesChannelProvider_StatusSanitizesClientErrors(t *testing.T) {
+	repos := openSalesChannelAdapterRepos(t)
+	settings := &SettingsService{repo: repos.Settings}
+	ctx := context.Background()
+	if err := settings.Set(ctx, "olx_api_key", "fake-olx-api-key"); err != nil {
+		t.Fatalf("save OLX API key: %v", err)
+	}
+	provider := NewOLXSalesChannelProviderWithSettings(settings, fakeOLXClient{
+		err: errors.New("olx api_key=super-secret token=also-secret"),
+	})
+
+	status, err := provider.Status(ctx)
+	if err != nil {
+		t.Fatalf("status: %v", err)
+	}
+	if status.Connected {
+		t.Fatalf("expected OLX to remain disconnected")
+	}
+	if strings.Contains(status.LastError, "super-secret") || strings.Contains(status.LastError, "also-secret") {
+		t.Fatalf("expected sanitized OLX status error, got %q", status.LastError)
+	}
+}
+
 func TestMercadoLivreSalesChannelProvider_StatusUsesInjectedClient(t *testing.T) {
 	provider := NewMercadoLivreSalesChannelProviderWithClient(fakeMercadoLivreClient{
 		user: &mercadolivre.User{ID: 123456789, Nickname: "PICO_TEST_USER", SiteID: "MLB"},
@@ -440,6 +490,19 @@ func assertStatus(t *testing.T, provider saleschannel.Provider, channel salescha
 	if status.DisplayName != displayName {
 		t.Fatalf("%s display name: expected %q, got %q", channel, displayName, status.DisplayName)
 	}
+}
+
+type fakeOLXClient struct {
+	accountID string
+	name      string
+	err       error
+}
+
+func (f fakeOLXClient) ValidateAPIKey(context.Context, string) (string, string, error) {
+	if f.err != nil {
+		return "", "", f.err
+	}
+	return f.accountID, f.name, nil
 }
 
 type fakeMercadoLivreClient struct {
