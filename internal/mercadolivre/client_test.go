@@ -163,7 +163,52 @@ func TestClient_ListOrders_ParsesSearchFixture(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListOrders: %v", err)
 	}
-	if len(orders) != 1 || orders[0].ID != 2000000001 || orders[0].Status != "paid" {
+	if len(orders) != 1 || orders[0].ID != 2000000001 || orders[0].Items[0].Item.SKU != "DRAGON-RED" {
 		t.Fatalf("unexpected orders: %+v", orders)
+	}
+}
+
+func TestClient_ListItems_ParsesSearchAndItemFixtures(t *testing.T) {
+	userFixture, err := os.ReadFile("testdata/user.json")
+	if err != nil {
+		t.Fatalf("read user fixture: %v", err)
+	}
+	searchFixture, err := os.ReadFile("testdata/items_search.json")
+	if err != nil {
+		t.Fatalf("read items search fixture: %v", err)
+	}
+	itemFixture, err := os.ReadFile("testdata/item.json")
+	if err != nil {
+		t.Fatalf("read item fixture: %v", err)
+	}
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.Header.Get("Authorization"); got != "Bearer fake-token" {
+			t.Fatalf("Authorization = %q, want %q", got, "Bearer fake-token")
+		}
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/users/me":
+			_, _ = w.Write(userFixture)
+		case "/users/123456789/items/search":
+			_, _ = w.Write(searchFixture)
+		case "/items/MLB123456789":
+			_, _ = w.Write(itemFixture)
+		default:
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+	}))
+	defer ts.Close()
+
+	oldBase := BaseURL
+	defer func() { BaseURL = oldBase }()
+	BaseURL = ts.URL
+
+	items, err := NewClient("fake-token").WithHTTPClient(ts.Client()).ListItems(context.Background())
+	if err != nil {
+		t.Fatalf("ListItems: %v", err)
+	}
+	if len(items) != 1 || items[0].ID != "MLB123456789" || items[0].SKU != "DRAGON-RED" {
+		t.Fatalf("unexpected items: %+v", items)
 	}
 }

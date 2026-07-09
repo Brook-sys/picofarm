@@ -178,3 +178,78 @@ func (c *Client) ListOrders(ctx context.Context) ([]*Order, error) {
 	}
 	return orders, nil
 }
+
+// Item represents the minimal Mercado Libre item shape PicoFarm needs for listings/products.
+type Item struct {
+	ID                string  `json:"id"`
+	Title             string  `json:"title"`
+	Status            string  `json:"status"`
+	Permalink         string  `json:"permalink"`
+	Price             float64 `json:"price"`
+	CurrencyID        string  `json:"currency_id"`
+	AvailableQuantity int     `json:"available_quantity"`
+	SKU               string  `json:"seller_custom_field"`
+}
+
+// ItemsSearchResponse is the minimal response returned by /users/{id}/items/search.
+type ItemsSearchResponse struct {
+	Results []string `json:"results"`
+}
+
+// ListItems lists recent Mercado Libre items for the authenticated seller.
+func (c *Client) ListItems(ctx context.Context) ([]*Item, error) {
+	user, err := c.GetCurrentUser(ctx)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := c.get(ctx, fmt.Sprintf("/users/%d/items/search?status=active&limit=50", user.ID))
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("reading response: %w", err)
+	}
+	if resp.StatusCode >= 400 {
+		return nil, fmt.Errorf("API error %d: %s", resp.StatusCode, string(body))
+	}
+
+	var search ItemsSearchResponse
+	if err := json.Unmarshal(body, &search); err != nil {
+		return nil, fmt.Errorf("parsing items search: %w", err)
+	}
+	items := make([]*Item, 0, len(search.Results))
+	for _, id := range search.Results {
+		item, err := c.GetItem(ctx, id)
+		if err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+	}
+	return items, nil
+}
+
+// GetItem fetches a single Mercado Libre item by ID.
+func (c *Client) GetItem(ctx context.Context, itemID string) (*Item, error) {
+	resp, err := c.get(ctx, "/items/"+itemID)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("reading response: %w", err)
+	}
+	if resp.StatusCode >= 400 {
+		return nil, fmt.Errorf("API error %d: %s", resp.StatusCode, string(body))
+	}
+
+	var item Item
+	if err := json.Unmarshal(body, &item); err != nil {
+		return nil, fmt.Errorf("parsing item: %w", err)
+	}
+	return &item, nil
+}
