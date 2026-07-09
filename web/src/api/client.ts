@@ -1326,6 +1326,16 @@ export const salesChannelsApi = {
       method: 'POST',
       body: JSON.stringify({ kind }),
     }),
+  listSyncRuns: (params?: import('../types').SalesChannelSyncRunsFilter) => {
+    const searchParams = new URLSearchParams()
+    if (params?.channel) searchParams.set('channel', params.channel)
+    if (params?.kind) searchParams.set('kind', params.kind)
+    if (params?.connection_id) searchParams.set('connection_id', params.connection_id)
+    if (params?.limit) searchParams.set('limit', String(params.limit))
+    if (params?.offset) searchParams.set('offset', String(params.offset))
+    const query = searchParams.toString()
+    return fetchApi<import('../types').SalesChannelSyncRunsResponse>(`/sales-channels/sync-runs${query ? `?${query}` : ''}`)
+  },
 }
 
 // Etsy API

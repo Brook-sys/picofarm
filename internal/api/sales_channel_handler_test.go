@@ -4,13 +4,16 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/Brook-sys/picofarm/internal/model"
+	"github.com/Brook-sys/picofarm/internal/repository"
 	"github.com/Brook-sys/picofarm/internal/saleschannel"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -166,7 +169,106 @@ func TestSalesChannelHandler_SyncRejectsUnsupportedCapability(t *testing.T) {
 	}
 }
 
+func TestSalesChannelHandler_ListSyncRunsRedactsStoredErrors(t *testing.T) {
+	env := newTestEnv(t)
+	ctx := context.Background()
+	connection := seedSalesChannelConnection(t, ctx, env, saleschannel.ChannelEtsy)
+	finishedAt := time.Date(2026, 7, 9, 12, 5, 0, 0, time.UTC)
+	rawLastError := "etsy failed access_token=secret-token refresh_token=refresh-secret Bearer bearer-secret"
+	run := &saleschannel.SyncRun{
+		ConnectionID: connection.ID,
+		Channel:      saleschannel.ChannelEtsy,
+		Kind:         saleschannel.SyncOrders,
+		Status:       saleschannel.SyncRunStatusFailed,
+		TotalFetched: 7,
+		Created:      3,
+		Updated:      1,
+		Skipped:      2,
+		Errors:       1,
+		LastError:    rawLastError,
+		StartedAt:    time.Date(2026, 7, 9, 12, 0, 0, 0, time.UTC),
+		FinishedAt:   &finishedAt,
+	}
+	if err := env.repos.SalesChannels.CreateSyncRun(ctx, run); err != nil {
+		t.Fatalf("create sync run: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/sales-channels/sync-runs?channel=etsy&kind=orders", nil)
+	rr := httptest.NewRecorder()
+	env.handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", rr.Code, rr.Body.String())
+	}
+	var response struct {
+		Runs []saleschannel.SyncRun `json:"runs"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if len(response.Runs) != 1 {
+		t.Fatalf("expected 1 sync run, got %d: %#v", len(response.Runs), response.Runs)
+	}
+	got := response.Runs[0]
+	if got.LastError == "" || got.LastError != saleschannel.SanitizeErrorMessage(rawLastError) {
+		t.Fatalf("expected sanitized last_error, got %q", got.LastError)
+	}
+	for _, secret := range []string{"secret-token", "refresh-secret", "bearer-secret"} {
+		if strings.Contains(got.LastError, secret) || strings.Contains(rr.Body.String(), secret) {
+			t.Fatalf("sync run response leaked secret %q in body %s", secret, rr.Body.String())
+		}
+	}
+}
+
+func TestSalesChannelHandler_SyncRecordsSanitizedFailureRun(t *testing.T) {
+	env := newTestEnv(t)
+	ctx := context.Background()
+	seedSalesChannelConnection(t, ctx, env, saleschannel.ChannelEtsy)
+	provider := &fakeSalesChannelProvider{
+		descriptor: saleschannel.ProviderDescriptor{
+			ID:           saleschannel.ChannelEtsy,
+			DisplayName:  "Etsy",
+			Capabilities: []saleschannel.Capability{saleschannel.CapabilityOrdersRead},
+		},
+		syncError: errors.New("oauth failed access_token=secret-token client_secret=client-secret code=oauth-code"),
+	}
+	router := newSalesChannelTestRouterWithRepo(t, env.repos.SalesChannels, provider)
+
+	body := bytes.NewBufferString(`{"kind":"orders"}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/sales-channels/etsy/sync", body)
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusInternalServerError {
+		t.Fatalf("expected 500, got %d: %s", rr.Code, rr.Body.String())
+	}
+	for _, secret := range []string{"secret-token", "client-secret", "oauth-code"} {
+		if strings.Contains(rr.Body.String(), secret) {
+			t.Fatalf("sync error response leaked secret %q in body %s", secret, rr.Body.String())
+		}
+	}
+	runs, err := env.repos.SalesChannels.ListSyncRuns(ctx, saleschannel.SyncRunFilter{Channel: saleschannel.ChannelEtsy, Kind: saleschannel.SyncOrders})
+	if err != nil {
+		t.Fatalf("list sync runs: %v", err)
+	}
+	if len(runs) != 1 {
+		t.Fatalf("expected 1 failure run, got %d: %#v", len(runs), runs)
+	}
+	if runs[0].Status != saleschannel.SyncRunStatusFailed || runs[0].Errors != 1 || runs[0].FinishedAt == nil {
+		t.Fatalf("unexpected failure run: %#v", runs[0])
+	}
+	for _, secret := range []string{"secret-token", "client-secret", "oauth-code"} {
+		if strings.Contains(runs[0].LastError, secret) {
+			t.Fatalf("stored sync error leaked secret %q in %q", secret, runs[0].LastError)
+		}
+	}
+}
+
 func newSalesChannelTestRouter(t *testing.T, providers ...saleschannel.Provider) http.Handler {
+	return newSalesChannelTestRouterWithRepo(t, nil, providers...)
+}
+
+func newSalesChannelTestRouterWithRepo(t *testing.T, repo *repository.SalesChannelRepository, providers ...saleschannel.Provider) http.Handler {
 	t.Helper()
 	registry := saleschannel.NewRegistry()
 	for _, provider := range providers {
@@ -174,9 +276,10 @@ func newSalesChannelTestRouter(t *testing.T, providers ...saleschannel.Provider)
 			t.Fatalf("register provider: %v", err)
 		}
 	}
-	handler := NewSalesChannelHandler(registry, nil)
+	handler := NewSalesChannelHandler(registry, repo)
 	router := chi.NewRouter()
 	router.Route("/api/sales-channels", func(r chi.Router) {
+		r.Get("/sync-runs", handler.ListSyncRuns)
 		r.Post("/{channel}/sync", handler.Sync)
 	})
 	return router
@@ -184,6 +287,7 @@ func newSalesChannelTestRouter(t *testing.T, providers ...saleschannel.Provider)
 
 type fakeSalesChannelProvider struct {
 	descriptor saleschannel.ProviderDescriptor
+	syncError  error
 }
 
 func (p *fakeSalesChannelProvider) Descriptor() saleschannel.ProviderDescriptor {
@@ -195,6 +299,9 @@ func (p *fakeSalesChannelProvider) Status(context.Context) (saleschannel.Connect
 }
 
 func (p *fakeSalesChannelProvider) Sync(_ context.Context, kind saleschannel.SyncKind) (saleschannel.SyncResult, error) {
+	if p.syncError != nil {
+		return saleschannel.SyncResult{}, p.syncError
+	}
 	return saleschannel.SyncResult{Channel: p.descriptor.ID, Kind: kind, TotalFetched: 3}, nil
 }
 
