@@ -100,11 +100,14 @@ func NewRouterWithOptions(services *service.Services, hub *realtime.Hub, opts Ro
 
 		// Provider-neutral sales-channel endpoints.
 		if services.SalesChannels != nil {
-			salesChannelHandler := NewSalesChannelHandler(services.SalesChannels, services.SalesChannelData)
+			salesChannelHandler := NewSalesChannelHandler(services.SalesChannels, services.SalesChannelData, services.Orders)
 			r.Route("/sales-channels", func(r chi.Router) {
 				r.Get("/", salesChannelHandler.List)
 				r.Get("/orders", salesChannelHandler.ListExternalOrders)
+				r.Post("/orders/{id}/process", salesChannelHandler.ProcessExternalOrder)
 				r.Get("/products", salesChannelHandler.ListExternalProducts)
+				r.Post("/products/{id}/link", salesChannelHandler.LinkExternalProduct)
+				r.Delete("/products/{id}/link", salesChannelHandler.UnlinkExternalProduct)
 				r.Get("/{channel}", salesChannelHandler.Get)
 				r.Post("/{channel}/sync", salesChannelHandler.Sync)
 			})

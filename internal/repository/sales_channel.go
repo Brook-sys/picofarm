@@ -275,6 +275,37 @@ func (r *SalesChannelRepository) GetExternalOrderByProviderID(ctx context.Contex
 	return order, nil
 }
 
+// GetExternalOrderByID retrieves a stored provider order by canonical ID and its line items.
+func (r *SalesChannelRepository) GetExternalOrderByID(ctx context.Context, id uuid.UUID) (*saleschannel.ExternalOrder, error) {
+	order, err := r.scanExternalOrder(r.db.QueryRowContext(ctx, `
+		SELECT id, connection_id, channel, external_order_id, order_id, order_number, customer_name,
+			customer_email, total_cents, currency, status, is_processed, raw_json, created_at, updated_at
+		FROM sales_channel_external_orders WHERE id = ?
+	`, id))
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	items, err := r.listExternalOrderItems(ctx, order.ID)
+	if err != nil {
+		return nil, err
+	}
+	order.Items = items
+	return order, nil
+}
+
+// MarkExternalOrderProcessed links an external order to its internal order.
+func (r *SalesChannelRepository) MarkExternalOrderProcessed(ctx context.Context, externalOrderID uuid.UUID, orderID uuid.UUID) error {
+	_, err := r.db.ExecContext(ctx, `
+		UPDATE sales_channel_external_orders
+		SET order_id = ?, is_processed = 1, updated_at = ?
+		WHERE id = ?
+	`, orderID, time.Now(), externalOrderID)
+	return err
+}
+
 // ListExternalOrders returns provider-neutral imported orders with optional filters.
 func (r *SalesChannelRepository) ListExternalOrders(ctx context.Context, filter saleschannel.OrderFilter) ([]saleschannel.ExternalOrder, error) {
 	query := `
@@ -411,6 +442,27 @@ func (r *SalesChannelRepository) externalProductID(ctx context.Context, connecti
 	return id, err
 }
 
+// GetExternalProductByID retrieves a stored provider product/listing by canonical ID.
+func (r *SalesChannelRepository) GetExternalProductByID(ctx context.Context, id uuid.UUID) (*saleschannel.ExternalProduct, error) {
+	product, err := r.scanExternalProduct(r.db.QueryRowContext(ctx, `
+		SELECT id, connection_id, channel, external_product_id, title, description, url, status,
+			is_visible, price_cents, currency, raw_json
+		FROM sales_channel_external_products WHERE id = ?
+	`, id))
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	variants, err := r.listExternalProductVariants(ctx, product.ID)
+	if err != nil {
+		return nil, err
+	}
+	product.Variants = variants
+	return product, nil
+}
+
 // ListExternalProducts returns provider-neutral imported products/listings with optional filters.
 func (r *SalesChannelRepository) ListExternalProducts(ctx context.Context, filter saleschannel.ProductFilter) ([]saleschannel.ExternalProduct, error) {
 	query := `
@@ -482,6 +534,20 @@ func (r *SalesChannelRepository) UpsertProductLink(ctx context.Context, link *sa
 			sync_inventory = excluded.sync_inventory,
 			updated_at = excluded.updated_at
 	`, link.ID, link.ConnectionID, link.Channel, link.ExternalProductID, link.ExternalVariantID, link.ProjectID, link.SKU, link.SyncInventory, link.CreatedAt, link.UpdatedAt)
+	return err
+}
+
+// DeleteProductLink removes a mapping between a provider product/variant and PicoFarm project.
+func (r *SalesChannelRepository) DeleteProductLink(ctx context.Context, externalProductID uuid.UUID, externalVariantID *uuid.UUID, projectID uuid.UUID) error {
+	query := `DELETE FROM sales_channel_product_links WHERE external_product_id = ? AND project_id = ?`
+	args := []any{externalProductID, projectID}
+	if externalVariantID == nil {
+		query += ` AND external_variant_id IS NULL`
+	} else {
+		query += ` AND external_variant_id = ?`
+		args = append(args, *externalVariantID)
+	}
+	_, err := r.db.ExecContext(ctx, query, args...)
 	return err
 }
 

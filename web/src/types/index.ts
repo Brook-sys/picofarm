@@ -1315,12 +1315,40 @@ export interface SalesChannelExternalProduct {
   variants?: SalesChannelExternalProductVariant[]
 }
 
+export interface SalesChannelProductLink {
+  id: string
+  connection_id: string
+  channel: SalesChannelID
+  external_product_id: string
+  external_variant_id?: string
+  project_id: string
+  sku?: string
+  sync_inventory: boolean
+  created_at: string
+  updated_at: string
+}
+
 export interface SalesChannelExternalOrdersResponse {
   orders: SalesChannelExternalOrder[]
 }
 
 export interface SalesChannelExternalProductsResponse {
   products: SalesChannelExternalProduct[]
+}
+
+export interface SalesChannelProcessOrderResponse {
+  order: Order
+}
+
+export interface SalesChannelLinkProductRequest {
+  project_id: string
+  external_variant_id?: string
+  sku?: string
+  sync_inventory?: boolean
+}
+
+export interface SalesChannelProductLinkResponse {
+  link: SalesChannelProductLink
 }
 
 // Bambu Cloud types

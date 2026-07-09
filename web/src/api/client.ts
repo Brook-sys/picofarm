@@ -1307,6 +1307,20 @@ export const salesChannelsApi = {
     const query = searchParams.toString()
     return fetchApi<import('../types').SalesChannelExternalProductsResponse>(`/sales-channels/products${query ? `?${query}` : ''}`)
   },
+  processOrder: (externalOrderId: string) =>
+    fetchApi<import('../types').SalesChannelProcessOrderResponse>(`/sales-channels/orders/${externalOrderId}/process`, {
+      method: 'POST',
+    }),
+  linkProduct: (externalProductId: string, data: import('../types').SalesChannelLinkProductRequest) =>
+    fetchApi<import('../types').SalesChannelProductLinkResponse>(`/sales-channels/products/${externalProductId}/link`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  unlinkProduct: (externalProductId: string, data: Pick<import('../types').SalesChannelLinkProductRequest, 'project_id' | 'external_variant_id'>) =>
+    fetchApi<{ status: string }>(`/sales-channels/products/${externalProductId}/link`, {
+      method: 'DELETE',
+      body: JSON.stringify(data),
+    }),
   sync: (channel: import('../types').SalesChannelID, kind: import('../types').SalesChannelSyncKind = 'all') =>
     fetchApi<import('../types').SalesChannelSyncResponse>(`/sales-channels/${channel}/sync`, {
       method: 'POST',

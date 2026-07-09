@@ -187,11 +187,11 @@ Representative routes:
 | `GET /api/sales-channels/{channel}/sync-runs` | List sync history. |
 | `GET /api/sales-channels/orders` | Implemented read-model endpoint. Lists canonical external orders, filterable by `channel`, `processed`, `status`, `limit`, and `offset`. Responses include line items and omit provider `raw_json`. |
 | `GET /api/sales-channels/orders/{id}` | Get one canonical external order. |
-| `POST /api/sales-channels/orders/{id}/process` | Convert external order into internal PicoFarm order/workflow. |
+| `POST /api/sales-channels/orders/{id}/process` | Implemented action endpoint. Converts one canonical external order into a PicoFarm order, marks the external order processed, and rejects repeat processing with `409`. |
 | `GET /api/sales-channels/products` | Implemented read-model endpoint. Lists canonical external products/listings, filterable by `channel`, `linked`, `status`, `limit`, and `offset`. Responses include variants and omit provider `raw_json`. |
-| `GET /api/sales-channels/products/{id}` | Get one canonical external product. |
-| `POST /api/sales-channels/products/{id}/link` | Link product/variant/SKU to a PicoFarm project. |
-| `DELETE /api/sales-channels/products/{id}/link` | Remove a product link. |
+| `GET /api/sales-channels/products/{id}` | Planned get-one canonical external product route. |
+| `POST /api/sales-channels/products/{id}/link` | Implemented action endpoint. Links product/variant/SKU to a PicoFarm project via canonical `sales_channel_product_links`. |
+| `DELETE /api/sales-channels/products/{id}/link` | Implemented action endpoint. Removes a product/variant/project link via canonical storage. |
 | `POST /api/sales-channels/{channel}/webhook` | Inbound webhook endpoint where supported. |
 | `GET /api/sales-channels/{channel}/webhook-events` | Inspect webhook events where supported. |
 | `POST /api/sales-channels/{channel}/webhook-events/{id}/reprocess` | Replay a stored webhook event. |
@@ -301,7 +301,7 @@ When changing sales channels, select validation based on impact:
 | Descriptor/registry only | `go test ./internal/saleschannel -count=1`, full Go tests if package wiring changes. |
 | Storage/migration | repository tests, fresh DB test, upgrade/partial-upgrade test if compatibility logic changes. |
 | Provider adapter | fake-client conversion tests and sync tests for that provider. |
-| Generic API route | handler tests for success, unknown channel, unsupported capability, auth/secret redaction. |
+| Generic API route | handler tests for success, unknown channel, unsupported capability, duplicate processing/linking, auth/secret redaction. |
 | Frontend page/API | `cd web && npm run lint && npm run build`, manual channel page smoke check. |
 | Webhooks | signature validation tests, duplicate/replay tests, sanitized logging checks. |
 
