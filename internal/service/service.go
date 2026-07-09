@@ -169,6 +169,7 @@ func mustNewSalesChannelRegistry(services *Services) *saleschannel.Registry {
 		NewShopifySalesChannelProvider(services.Shopify),
 		NewMercadoLivreSalesChannelProvider(),
 		NewShopeeSalesChannelProvider(),
+		NewOLXSalesChannelProvider(),
 	)
 	if err != nil {
 		panic(err)

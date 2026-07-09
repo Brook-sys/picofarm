@@ -150,6 +150,64 @@ func (p *ShopeeSalesChannelProvider) UnlinkProduct(context.Context, string, uuid
 	return errSalesChannelReadModelPending(saleschannel.ChannelShopee, "unlink_product")
 }
 
+// OLXSalesChannelProvider exposes the approved partial OLX Brasil MVP.
+// OLX is gated by official integrator registration, so the initial provider is
+// intentionally manual/import-oriented and does not advertise orders or stock writes.
+type OLXSalesChannelProvider struct{}
+
+func NewOLXSalesChannelProvider() *OLXSalesChannelProvider {
+	return &OLXSalesChannelProvider{}
+}
+
+func (p *OLXSalesChannelProvider) Descriptor() saleschannel.ProviderDescriptor {
+	return saleschannel.ProviderDescriptor{
+		ID:          saleschannel.ChannelOLX,
+		DisplayName: "OLX Brasil",
+		Description: "Partial OLX classifieds/lead integration. Official API access is gated by integrator registration; MVP starts as manual/import plus ads/leads planning.",
+		Capabilities: []saleschannel.Capability{
+			saleschannel.CapabilityProductsRead,
+			saleschannel.CapabilityWebhooks,
+		},
+		AuthType: "manual",
+		DocsURL:  "docs/SALES_CHANNELS.md#olx-mvp-and-fallback-decision",
+	}
+}
+
+func (p *OLXSalesChannelProvider) Status(context.Context) (saleschannel.ConnectionStatus, error) {
+	return saleschannel.ConnectionStatus{
+		Channel:   saleschannel.ChannelOLX,
+		LastError: "Manual/import setup pending; official OLX API access requires integrator registration.",
+	}, nil
+}
+
+func (p *OLXSalesChannelProvider) Sync(context.Context, saleschannel.SyncKind) (saleschannel.SyncResult, error) {
+	return saleschannel.SyncResult{Channel: saleschannel.ChannelOLX}, errSalesChannelReadModelPending(saleschannel.ChannelOLX, "manual_import")
+}
+
+func (p *OLXSalesChannelProvider) ListOrders(context.Context, saleschannel.OrderFilter) ([]saleschannel.ExternalOrder, error) {
+	return nil, errSalesChannelReadModelPending(saleschannel.ChannelOLX, "orders")
+}
+
+func (p *OLXSalesChannelProvider) GetOrder(context.Context, string) (*saleschannel.ExternalOrder, error) {
+	return nil, errSalesChannelReadModelPending(saleschannel.ChannelOLX, "order")
+}
+
+func (p *OLXSalesChannelProvider) ProcessOrder(context.Context, string) (*model.Order, error) {
+	return nil, errSalesChannelReadModelPending(saleschannel.ChannelOLX, "process_order")
+}
+
+func (p *OLXSalesChannelProvider) ListProducts(context.Context, saleschannel.ProductFilter) ([]saleschannel.ExternalProduct, error) {
+	return []saleschannel.ExternalProduct{}, nil
+}
+
+func (p *OLXSalesChannelProvider) LinkProduct(context.Context, string, uuid.UUID, string) error {
+	return errSalesChannelReadModelPending(saleschannel.ChannelOLX, "link_product")
+}
+
+func (p *OLXSalesChannelProvider) UnlinkProduct(context.Context, string, uuid.UUID) error {
+	return errSalesChannelReadModelPending(saleschannel.ChannelOLX, "unlink_product")
+}
+
 func (p *ShopeeSalesChannelProvider) upsertConnection(ctx context.Context) (*saleschannel.Connection, error) {
 	shop, err := p.client.GetShop(ctx)
 	if err != nil {
