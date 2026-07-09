@@ -25,9 +25,10 @@ type Repositories struct {
 	PrintJobs            *PrintJobRepository
 	Files                *FileRepository
 	Expenses             *ExpenseRepository
-	Sales *SaleRepository
-	Etsy  *EtsyRepository
+	Sales                *SaleRepository
+	Etsy                 *EtsyRepository
 	Squarespace          *SquarespaceRepository
+	SalesChannels        *SalesChannelRepository
 	BambuCloud           *BambuCloudRepository
 	Settings             *SettingsRepository
 	ProjectSupplies      *ProjectSupplyRepository
@@ -86,9 +87,10 @@ func NewRepositories(db *sql.DB) *Repositories {
 		PrintJobs:            &PrintJobRepository{db: db},
 		Files:                &FileRepository{db: db},
 		Expenses:             &ExpenseRepository{db: db},
-		Sales: &SaleRepository{db: db},
-		Etsy:  &EtsyRepository{db: db},
+		Sales:                &SaleRepository{db: db},
+		Etsy:                 &EtsyRepository{db: db},
 		Squarespace:          &SquarespaceRepository{db: db},
+		SalesChannels:        NewSalesChannelRepository(db),
 		BambuCloud:           &BambuCloudRepository{db: db},
 		Settings:             &SettingsRepository{db: db},
 		ProjectSupplies:      &ProjectSupplyRepository{db: db},
