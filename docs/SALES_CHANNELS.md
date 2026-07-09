@@ -340,6 +340,29 @@ OLX-01 validates that OLX Brasil has an official integration path, but the shape
 
 OLX-01 decision: OLX should continue to OLX-02 as an official-but-gated integration candidate. The likely PicoFarm MVP is an ads/leads/manual-import channel with honest capabilities, not a full marketplace order provider.
 
+### OLX MVP and fallback decision
+
+OLX-02 approves OLX as a partial classifieds/lead channel, not a full marketplace order channel. The initial implementation should be useful for PicoFarm sellers without pretending OLX has Etsy/Shopee-style order fulfillment semantics.
+
+| Capability | MVP decision | Rationale and implementation notes |
+| --- | --- | --- |
+| `oauth` | Planned/gated. | Official OLX docs use OAuth and registered applications. Add only after app registration/homologation details are available. CI remains fake-client only. |
+| `products_read` / ads read | MVP candidate. | Map published ads/listings into canonical `ExternalProduct` records when official access exists. If account/category access is not ready, support manual/CSV import into the same canonical shape. |
+| Ads write/import | Post-MVP or separate explicit capability. | OLX import supports insert/edit/delete JSON payloads, but category-specific validation and publication rules need separate fixtures and user approval before live writes. Do not hide this behind generic inventory writes. |
+| Leads/messages | MVP candidate as webhook/inbox, not order processing. | Lead delivery is the closest OLX business workflow. Store inbound leads as webhook/lead events first; a later CRM/order conversion decision can map specific leads into PicoFarm orders manually. |
+| `orders_read` | Not supported in MVP. | Discovery did not find official order lifecycle semantics. Keep OLX out of order sync/process UI until a target-account API proves orders exist. |
+| `inventory_write` | Not supported in MVP. | OLX ads are not SKU stock inventory. Any ad refresh/import workflow should be modeled separately from stock updates. |
+| `webhooks` | Planned for leads/ad notifications only. | Implement after endpoint token/header verification and idempotent event storage are covered by tests. |
+| Manual/import fallback | Approved. | If OAuth/app approval is blocked, expose OLX as manual/import-only ads/leads channel with limited capabilities and explicit status messaging. |
+
+Recommended OLX implementation sequence:
+
+1. Add an `olx` descriptor/provider skeleton with honest capabilities: `oauth` and `products_read` only when official access is configured; otherwise `manual` auth with no live capabilities.
+2. Add fakeable DTOs/client interfaces for published ads and leads; do not call live OLX in tests.
+3. Map ads to canonical external products/listings and leads to webhook/lead events. Do not map leads to external orders by default.
+4. Add manual/CSV import fallback for ads if app registration/homologation is unavailable.
+5. Gate live ad write/import and lead webhook setup behind separate cards with category/scope fixtures, redaction tests, and user approval.
+
 ## Checklist for adding a new channel
 
 Before coding:
