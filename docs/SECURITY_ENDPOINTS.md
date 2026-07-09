@@ -136,6 +136,7 @@ Sales-channel routes are designed in `docs/SALES_CHANNELS.md`. Any new generic `
 | `GET /api/sales-channels/{channel}` | Integration/read | One provider descriptor/capabilities plus connection status. Redact credential details and external API errors. |
 | `GET /api/sales-channels/orders` | Integration/read/business data | Lists canonical external orders and line items. Supports filters; must not expose provider `raw_json` or credential material. |
 | `GET /api/sales-channels/products` | Integration/read/business data | Lists canonical external products/listings and variants. Supports filters; must not expose provider `raw_json` or credential material. |
+| `GET /api/sales-channels/sync-runs` | Integration/read/diagnostic | Lists provider-neutral sync attempts. `last_error` must be sanitized and must not expose API keys, OAuth codes, access/refresh tokens, bearer tokens, webhook secrets, or signed headers. |
 | `POST /api/sales-channels/{channel}/connect` | Integration/secrets/settings | Connects external account/API. Validate provider-specific body and never log credentials. |
 | `POST /api/sales-channels/{channel}/disconnect` | Integration | Disconnects provider/connection. |
 | `GET /api/sales-channels/{channel}/auth-url` | Integration/OAuth | OAuth start. Validate redirect config and state. |

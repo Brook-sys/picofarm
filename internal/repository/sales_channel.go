@@ -81,6 +81,19 @@ func (r *SalesChannelRepository) GetConnection(ctx context.Context, id uuid.UUID
 	return connection, err
 }
 
+// ConnectionForChannel retrieves the most recent connection metadata for a channel.
+func (r *SalesChannelRepository) ConnectionForChannel(ctx context.Context, channel saleschannel.ChannelID) (*saleschannel.Connection, error) {
+	connection, err := r.scanConnection(r.db.QueryRowContext(ctx, `
+		SELECT id, channel, account_id, display_name, status, capabilities_json, config_json,
+			last_order_sync_at, last_product_sync_at, last_error, created_at, updated_at
+		FROM sales_channel_connections WHERE channel = ? ORDER BY updated_at DESC LIMIT 1
+	`, channel))
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	return connection, err
+}
+
 func (r *SalesChannelRepository) connectionIDByProviderAccount(ctx context.Context, channel saleschannel.ChannelID, accountID string) (uuid.UUID, error) {
 	var id uuid.UUID
 	err := scanRow(r.db.QueryRowContext(ctx, `SELECT id FROM sales_channel_connections WHERE channel = ? AND account_id = ?`, channel, accountID), &id)
@@ -105,6 +118,7 @@ func (r *SalesChannelRepository) CreateSyncRun(ctx context.Context, run *salesch
 	if run.Status == "" {
 		run.Status = saleschannel.SyncRunStatusRunning
 	}
+	run.LastError = saleschannel.SanitizeErrorMessage(run.LastError)
 	_, err := r.db.ExecContext(ctx, `
 		INSERT INTO sales_channel_sync_runs (
 			id, connection_id, channel, kind, status, total_fetched, created_count,
@@ -120,6 +134,7 @@ func (r *SalesChannelRepository) FinishSyncRun(ctx context.Context, run *salesch
 		now := time.Now()
 		run.FinishedAt = &now
 	}
+	run.LastError = saleschannel.SanitizeErrorMessage(run.LastError)
 	_, err := r.db.ExecContext(ctx, `
 		UPDATE sales_channel_sync_runs
 		SET status = ?, total_fetched = ?, created_count = ?, updated_count = ?, skipped_count = ?,

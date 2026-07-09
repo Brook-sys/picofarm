@@ -108,6 +108,7 @@ func NewRouterWithOptions(services *service.Services, hub *realtime.Hub, opts Ro
 				r.Get("/products", salesChannelHandler.ListExternalProducts)
 				r.Post("/products/{id}/link", salesChannelHandler.LinkExternalProduct)
 				r.Delete("/products/{id}/link", salesChannelHandler.UnlinkExternalProduct)
+				r.Get("/sync-runs", salesChannelHandler.ListSyncRuns)
 				r.Get("/{channel}", salesChannelHandler.Get)
 				r.Post("/{channel}/sync", salesChannelHandler.Sync)
 			})

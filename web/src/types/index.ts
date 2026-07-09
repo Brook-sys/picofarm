@@ -1351,6 +1351,35 @@ export interface SalesChannelProductLinkResponse {
   link: SalesChannelProductLink
 }
 
+export interface SalesChannelSyncRun {
+  id: string
+  connection_id: string
+  channel: SalesChannelID
+  kind: SalesChannelSyncKind
+  status: 'running' | 'succeeded' | 'failed'
+  total_fetched: number
+  created: number
+  updated: number
+  skipped: number
+  errors: number
+  last_error?: string
+  started_at: string
+  finished_at?: string
+  created_at: string
+}
+
+export interface SalesChannelSyncRunsResponse {
+  runs: SalesChannelSyncRun[]
+}
+
+export interface SalesChannelSyncRunsFilter {
+  channel?: SalesChannelID
+  kind?: SalesChannelSyncKind
+  connection_id?: string
+  limit?: number
+  offset?: number
+}
+
 // Bambu Cloud types
 export interface CloudDevice {
   dev_id: string

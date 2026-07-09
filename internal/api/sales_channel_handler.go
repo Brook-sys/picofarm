@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -48,6 +49,10 @@ type salesChannelSyncRequest struct {
 
 type salesChannelSyncResponse struct {
 	Result saleschannel.SyncResult `json:"result"`
+}
+
+type salesChannelSyncRunsResponse struct {
+	Runs []saleschannel.SyncRun `json:"runs"`
 }
 
 type salesChannelExternalOrdersResponse struct {
@@ -165,6 +170,43 @@ func (h *SalesChannelHandler) ListExternalProducts(w http.ResponseWriter, r *htt
 		products[i].RawJSON = ""
 	}
 	respondJSON(w, http.StatusOK, salesChannelExternalProductsResponse{Products: products})
+}
+
+// ListSyncRuns returns provider-neutral sync-run observability from canonical storage.
+// GET /api/sales-channels/sync-runs
+func (h *SalesChannelHandler) ListSyncRuns(w http.ResponseWriter, r *http.Request) {
+	if h == nil || h.repo == nil {
+		respondError(w, http.StatusServiceUnavailable, "sales-channel storage unavailable")
+		return
+	}
+	filter := saleschannel.SyncRunFilter{
+		Channel: saleschannel.ChannelID(r.URL.Query().Get("channel")),
+		Kind:    saleschannel.SyncKind(r.URL.Query().Get("kind")),
+		Limit:   parsePositiveIntQuery(r, "limit"),
+		Offset:  parsePositiveIntQuery(r, "offset"),
+	}
+	if connectionID := r.URL.Query().Get("connection_id"); connectionID != "" {
+		parsed, err := uuid.Parse(connectionID)
+		if err != nil {
+			respondError(w, http.StatusBadRequest, "invalid connection_id filter")
+			return
+		}
+		filter.ConnectionID = parsed
+	}
+	if filter.Kind != "" && !validSyncKind(filter.Kind) {
+		respondError(w, http.StatusBadRequest, "invalid sync kind")
+		return
+	}
+	runs, err := h.repo.ListSyncRuns(r.Context(), filter)
+	if err != nil {
+		slog.Error("failed to list sales-channel sync runs", "error", err)
+		respondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	for i := range runs {
+		runs[i].LastError = saleschannel.SanitizeErrorMessage(runs[i].LastError)
+	}
+	respondJSON(w, http.StatusOK, salesChannelSyncRunsResponse{Runs: runs})
 }
 
 // ProcessExternalOrder converts a canonical external order into a PicoFarm order.
@@ -377,6 +419,7 @@ func (h *SalesChannelHandler) Sync(w http.ResponseWriter, r *http.Request) {
 	}
 
 	startedAt := time.Now().UTC()
+	run := h.newSyncRun(r.Context(), descriptor.ID, req.Kind, startedAt)
 	result, err := provider.Sync(r.Context(), req.Kind)
 	finishedAt := time.Now().UTC()
 	result.Channel = descriptor.ID
@@ -384,12 +427,61 @@ func (h *SalesChannelHandler) Sync(w http.ResponseWriter, r *http.Request) {
 	result.StartedAt = startedAt
 	result.FinishedAt = finishedAt
 	if err != nil {
-		slog.Error("failed to sync sales channel", "channel", descriptor.ID, "kind", req.Kind, "error", err)
-		respondError(w, http.StatusInternalServerError, err.Error())
+		sanitized := saleschannel.SanitizeErrorMessage(err.Error())
+		slog.Error("failed to sync sales channel", "channel", descriptor.ID, "kind", req.Kind, "error", sanitized)
+		h.finishSyncRun(r.Context(), run, result, saleschannel.SyncRunStatusFailed, finishedAt, sanitized)
+		respondError(w, http.StatusInternalServerError, sanitized)
 		return
 	}
+	h.finishSyncRun(r.Context(), run, result, saleschannel.SyncRunStatusSucceeded, finishedAt, "")
 
 	respondJSON(w, http.StatusOK, salesChannelSyncResponse{Result: result})
+}
+
+func (h *SalesChannelHandler) newSyncRun(ctx context.Context, channel saleschannel.ChannelID, kind saleschannel.SyncKind, startedAt time.Time) *saleschannel.SyncRun {
+	if h == nil || h.repo == nil {
+		return nil
+	}
+	run := &saleschannel.SyncRun{
+		Channel:   channel,
+		Kind:      kind,
+		Status:    saleschannel.SyncRunStatusRunning,
+		StartedAt: startedAt,
+	}
+	connection, err := h.repo.ConnectionForChannel(ctx, channel)
+	if err != nil {
+		slog.Warn("failed to resolve sales-channel connection for sync run", "channel", channel, "error", err)
+		return nil
+	}
+	if connection == nil {
+		return nil
+	}
+	run.ConnectionID = connection.ID
+	if err := h.repo.CreateSyncRun(ctx, run); err != nil {
+		slog.Warn("failed to create sales-channel sync run", "channel", channel, "kind", kind, "error", err)
+		return nil
+	}
+	return run
+}
+
+func (h *SalesChannelHandler) finishSyncRun(ctx context.Context, run *saleschannel.SyncRun, result saleschannel.SyncResult, status saleschannel.SyncRunStatus, finishedAt time.Time, lastError string) {
+	if h == nil || h.repo == nil || run == nil {
+		return
+	}
+	run.Status = status
+	run.TotalFetched = result.TotalFetched
+	run.Created = result.Created
+	run.Updated = result.Updated
+	run.Skipped = result.Skipped
+	run.Errors = result.Errors
+	if status == saleschannel.SyncRunStatusFailed && run.Errors == 0 {
+		run.Errors = 1
+	}
+	run.LastError = saleschannel.SanitizeErrorMessage(lastError)
+	run.FinishedAt = &finishedAt
+	if err := h.repo.FinishSyncRun(ctx, run); err != nil {
+		slog.Warn("failed to finish sales-channel sync run", "run_id", run.ID, "error", err)
+	}
 }
 
 func (h *SalesChannelHandler) providerFromRequest(w http.ResponseWriter, r *http.Request) (saleschannel.Provider, bool) {

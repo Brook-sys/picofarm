@@ -290,6 +290,7 @@ Docs and validation:
 - Verify webhook signatures where the provider supports them; document providers that cannot sign webhooks.
 - Store inbound webhook events idempotently to tolerate duplicate delivery and replay.
 - Sanitize external API errors before saving them in `sales_channel_sync_runs` or returning them to the browser.
+- `GET /api/sales-channels/sync-runs` is the provider-neutral diagnostic read model for sync attempts. It supports `channel`, `kind`, `connection_id`, `limit`, and `offset` filters and must only return sanitized `last_error` values.
 - Tests must use fake clients, fixtures, or local test servers. Do not require real marketplace accounts in CI.
 
 ## Regression matrix additions
