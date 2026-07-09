@@ -2,11 +2,13 @@ package service
 
 import (
 	"context"
+	"errors"
 	"reflect"
 	"testing"
 	"time"
 
 	"github.com/Brook-sys/picofarm/internal/database"
+	"github.com/Brook-sys/picofarm/internal/mercadolivre"
 	"github.com/Brook-sys/picofarm/internal/model"
 	"github.com/Brook-sys/picofarm/internal/printer"
 	"github.com/Brook-sys/picofarm/internal/realtime"
@@ -120,6 +122,43 @@ func TestSalesChannelAdapters_StatusMapsLegacyIntegrations(t *testing.T) {
 	assertStatus(t, shopifyProvider, saleschannel.ChannelShopify, "dragon-store.myshopify.com", "dragon-store.myshopify.com")
 }
 
+func TestMercadoLivreSalesChannelProvider_StatusUsesInjectedClient(t *testing.T) {
+	provider := NewMercadoLivreSalesChannelProviderWithClient(fakeMercadoLivreClient{
+		user: &mercadolivre.User{ID: 123456789, Nickname: "PICO_TEST_USER", SiteID: "MLB"},
+	})
+
+	status, err := provider.Status(context.Background())
+	if err != nil {
+		t.Fatalf("status: %v", err)
+	}
+	if !status.Connected {
+		t.Fatalf("expected Mercado Livre to be connected")
+	}
+	if status.Channel != saleschannel.ChannelMercadoLivre {
+		t.Fatalf("expected channel %q, got %q", saleschannel.ChannelMercadoLivre, status.Channel)
+	}
+	if status.AccountID != "123456789" || status.DisplayName != "PICO_TEST_USER" {
+		t.Fatalf("unexpected Mercado Livre status: %+v", status)
+	}
+}
+
+func TestMercadoLivreSalesChannelProvider_StatusSanitizesClientErrors(t *testing.T) {
+	provider := NewMercadoLivreSalesChannelProviderWithClient(fakeMercadoLivreClient{
+		err: errors.New("access_token=super-secret-token client_secret=also-secret"),
+	})
+
+	status, err := provider.Status(context.Background())
+	if err != nil {
+		t.Fatalf("status: %v", err)
+	}
+	if status.Connected {
+		t.Fatalf("expected Mercado Livre to remain disconnected")
+	}
+	if status.LastError != "access_token=[REDACTED] client_secret=[REDACTED]" {
+		t.Fatalf("expected sanitized error, got %q", status.LastError)
+	}
+}
+
 func TestServicesWireSalesChannelRegistryWithInitialAdapters(t *testing.T) {
 	t.Run("default services", func(t *testing.T) {
 		repos := openSalesChannelAdapterRepos(t)
@@ -175,6 +214,18 @@ func assertStatus(t *testing.T, provider saleschannel.Provider, channel salescha
 	if status.DisplayName != displayName {
 		t.Fatalf("%s display name: expected %q, got %q", channel, displayName, status.DisplayName)
 	}
+}
+
+type fakeMercadoLivreClient struct {
+	user *mercadolivre.User
+	err  error
+}
+
+func (f fakeMercadoLivreClient) GetCurrentUser(context.Context) (*mercadolivre.User, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	return f.user, nil
 }
 
 func openSalesChannelAdapterRepos(t *testing.T) *repository.Repositories {
