@@ -117,7 +117,7 @@ Provider behavior by auth family:
 
 | Auth family | Providers | Generic flow | Notes |
 | --- | --- | --- | --- |
-| OAuth | Etsy, Shopify, Mercado Livre | `GET /auth-url` creates/validates state and returns URL; `/callback` validates state then delegates token exchange. | State must be unguessable, single-use where supported, and tied to redirect/provider metadata. Callback errors must be sanitized before redirect/query strings are built. |
+| OAuth | Etsy, Shopify, Mercado Livre | `GET /auth-url` creates/validates state and returns URL; `/callback` validates state then delegates token exchange. | State must be unguessable, single-use where supported, and tied to redirect/provider metadata. Callback errors must be sanitized before redirect/query strings are built. Mercado Livre uses OAuth 2.0 with `offline_access` for refresh tokens, provides test users instead of a dedicated sandbox, and exposes application rate limits (for example 18,000 requests/hour in application metadata). |
 | API key | Squarespace, future API-key providers | `POST /connect` accepts `{ "api_key": "[REDACTED]" }`, validates with a fakeable provider service, persists only through the existing credential path, and returns redacted connection metadata. | Never return the key, store it in `Connection.ConfigJSON`, or include it in sync-run errors. |
 | Signed partner API | Shopee | `POST /connect` should accept partner/shop identifiers and secret material as `[REDACTED]`; provider client owns HMAC signing. | Tests should assert signing inputs without real credentials. |
 | Manual/import-only | OLX fallback, CSV/manual | `POST /connect` creates local metadata only and reports limited capabilities. | Do not imply live API support until provider availability is validated. |
@@ -243,6 +243,28 @@ Do not perform a big-bang rewrite. Use these phases:
 7. Add sync-run observability and secret-redaction tests.
 8. Mark legacy routes as compatibility wrappers only after the generic path is stable.
 9. Remove or simplify legacy internals only in a later explicit cleanup cycle.
+
+## Mercado Livre discovery matrix
+
+Use this matrix as the source of truth for the first Mercado Livre implementation cards. It is based on the official Mercado Livre/Mercado Libre Developers documentation inspected during ML-01 and should be re-checked before any live integration because endpoint behavior, scopes, and limits can change.
+
+| Area | Official API shape | PicoFarm capability mapping | Implementation notes |
+| --- | --- | --- | --- |
+| Authentication | OAuth 2.0 authorization flow with bearer tokens and refresh tokens via `offline_access`. Apps expose callback URL, scopes, active status, and request limits in application metadata. | `oauth`, connection status, future generic `/api/sales-channels/mercado_livre/auth-url` and `/callback`. | Store tokens only through the existing secret/credential path. Never place access/refresh tokens in `Connection.ConfigJSON`, sync-run errors, logs, or API responses. |
+| Testing | Mercado Livre does not provide a separate sandbox. Official testing uses test users created via `POST https://api.mercadolibre.com/users/test_user` with a developer token; one seller and one buyer test user are recommended. | Fake-client CI plus optional manual QA with test users. | Do not use personal/production accounts for tests. Test users and test listings can expire or be removed after inactivity; CI must not depend on them. |
+| Orders | Order lookup uses `GET https://api.mercadolibre.com/orders/{order_id}` and order search such as `/orders/search?seller={seller_id}`. Order payloads include line items, variation IDs/attributes, seller SKU, amounts, status, pack/shipping IDs, and fraud/shipping context. | `orders_read`, canonical `external_orders`, idempotent order sync, `POST /api/sales-channels/orders/{id}/process`. | ML-04 should map order IDs, pack IDs, order items, variation IDs, SKU, buyer/shipping summary, status, currency, totals, and raw provider payload into canonical storage while omitting `raw_json` from API responses. |
+| Products/listings | Seller listing discovery uses `/users/{USER_ID}/items/search` and item multiget via `/items?ids=...`. Public search endpoints expose approximate `available_quantity`; authenticated item resources are needed for precise seller operations. | `products_read`, canonical `external_products`, variants, product links. | ML-05 should sync item ID, title, status, category, listing type, price/currency, available quantity where precise, variation IDs/attributes/SKUs, and permalink/image metadata when available. |
+| Inventory/listing updates | Item update uses `PUT https://api.mercadolibre.com/items/{ITEM_ID}`. Active items can update price, pictures, description, shipping, and `available_quantity`; items with sales restrict title/condition/buying mode changes. Variations require updating the item `variations` collection with the relevant variation IDs/stock. | `inventory_write` after read-only sync is stable. | Treat inventory writes as a later capability-gated path. Tests must cover item-level and variation-level stock payload generation with fake clients before any UI action is enabled. |
+| Shipping/fulfillment | Orders can contain shipping IDs; official docs direct clients to shipment resources such as `/shipments/{shipping_id}` for logistics mode/status/details. | Future fulfillment/shipping status read capability. | Capture shipping IDs on order sync, but defer fulfillment mutations until a dedicated card because shipping modes differ by site/logistics configuration. |
+| Notifications/webhooks | Notifications send a resource path, topic, user ID, application ID, attempts, sent/received timestamps. Topics include `items` and `orders`; clients fetch the referenced resource with bearer auth. | `webhooks`, canonical `sales_channel_webhook_events`, future `/api/sales-channels/mercado_livre/webhook`. | ML-06 should store inbound notification payloads idempotently, fetch the referenced resource via fakeable client, and document whether Mercado Livre signs notifications for the configured app. If signatures are unavailable, classify the route and rely on provider/account validation plus idempotent replay. |
+| Rate limits | Application metadata exposes `max_requests_per_hour` (official examples show 18,000/hour). | Provider throttling/backoff policy. | Add client-level retry/backoff and sync-run counters/errors before live polling. Respect `429`/rate-limit responses and keep errors sanitized. |
+
+Recommended implementation sequence:
+
+1. Add a `mercado_livre` descriptor with OAuth, orders read, products read, inventory write, and webhooks marked according to implemented support, not aspirational support.
+2. Build a fakeable client with fixtures for OAuth token refresh, orders, item search/multiget, item update, shipments read, and notifications.
+3. Implement read-only order sync first, then products/listings, then inventory write, then notifications/webhooks.
+4. Keep every live endpoint behind capabilities and fake-client tests; do not require Mercado Livre credentials for CI.
 
 ## Checklist for adding a new channel
 
