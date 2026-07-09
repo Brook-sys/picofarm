@@ -258,7 +258,7 @@ Primary response types:
 
 Representative route groups:
 
-- Generic sales-channel routes implemented so far: `GET /api/sales-channels`, `GET /api/sales-channels/{channel}`, `POST /api/sales-channels/{channel}/sync`, `GET /api/sales-channels/sync-runs`, `GET /api/sales-channels/orders`, `POST /api/sales-channels/orders/{id}/process`, `GET /api/sales-channels/products`, `POST /api/sales-channels/products/{id}/link`, and `DELETE /api/sales-channels/products/{id}/link` (see `docs/SALES_CHANNELS.md`)
+- Generic sales-channel routes implemented so far: `GET /api/sales-channels`, `GET /api/sales-channels/{channel}`, `POST /api/sales-channels/{channel}/sync`, `GET /api/sales-channels/sync-runs`, `GET /api/sales-channels/orders`, `POST /api/sales-channels/orders/{id}/process`, `GET /api/sales-channels/products`, `POST /api/sales-channels/products/{id}/link`, `DELETE /api/sales-channels/products/{id}/link`, `POST /api/sales-channels/{channel}/webhook`, and `GET /api/sales-channels/{channel}/webhook-events` (see `docs/SALES_CHANNELS.md`). Webhook event listings return metadata only and omit stored `payload`/`signature`.
 - Planned generic sales-channel connection routes: `POST /api/sales-channels/{channel}/connect`, `POST /api/sales-channels/{channel}/disconnect`, `GET /api/sales-channels/{channel}/auth-url`, and `GET /api/sales-channels/{channel}/callback`. These must preserve snake_case, capability errors, OAuth state validation, and secret-redaction semantics before implementation.
 - `/api/integrations/etsy/*`
 - `/api/integrations/squarespace/*`

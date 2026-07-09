@@ -215,6 +215,60 @@ func TestSalesChannelRepository_UpsertExternalProductAndLink(t *testing.T) {
 	}
 }
 
+func TestSalesChannelRepository_UpsertWebhookEventIsIdempotentAndSanitizedForListing(t *testing.T) {
+	db := openTestDB(t)
+	repo := NewSalesChannelRepository(db)
+	ctx := context.Background()
+	connection := &saleschannel.Connection{
+		Channel:      saleschannel.ChannelMercadoLivre,
+		AccountID:    "PICO_TEST_USER",
+		DisplayName:  "PicoFarm Mercado Livre",
+		Status:       saleschannel.ConnectionStatusConnected,
+		Capabilities: []saleschannel.Capability{saleschannel.CapabilityOAuth, saleschannel.CapabilityWebhooks},
+	}
+	if err := repo.UpsertConnection(ctx, connection); err != nil {
+		t.Fatalf("upsert Mercado Livre connection: %v", err)
+	}
+
+	event := &saleschannel.WebhookEvent{
+		ConnectionID:    &connection.ID,
+		Channel:         saleschannel.ChannelMercadoLivre,
+		ExternalEventID: "orders:/orders/2000000001:1",
+		Topic:           "orders",
+		ResourcePath:    "/orders/2000000001",
+		Payload:         `{"resource":"/orders/2000000001","access_token":"secret-token"}`,
+		Signature:       "Bearer bearer-secret",
+	}
+	if err := repo.UpsertWebhookEvent(ctx, event); err != nil {
+		t.Fatalf("upsert webhook event: %v", err)
+	}
+	firstID := event.ID
+
+	event.Payload = `{"resource":"/orders/2000000001","refresh_token":"refresh-secret"}`
+	event.Signature = "Bearer changed-secret"
+	if err := repo.UpsertWebhookEvent(ctx, event); err != nil {
+		t.Fatalf("upsert same webhook event: %v", err)
+	}
+	if event.ID != firstID {
+		t.Fatalf("expected idempotent webhook upsert to keep ID %s, got %s", firstID, event.ID)
+	}
+
+	events, err := repo.ListWebhookEvents(ctx, saleschannel.WebhookEventFilter{Channel: saleschannel.ChannelMercadoLivre, Topic: "orders"})
+	if err != nil {
+		t.Fatalf("list webhook events: %v", err)
+	}
+	if len(events) != 1 {
+		t.Fatalf("expected 1 event, got %d: %#v", len(events), events)
+	}
+	got := events[0]
+	if got.Payload != "" || got.Signature != "" {
+		t.Fatalf("list response should omit payload/signature, got payload=%q signature=%q", got.Payload, got.Signature)
+	}
+	if got.Topic != "orders" || got.ResourcePath != "/orders/2000000001" || got.Channel != saleschannel.ChannelMercadoLivre {
+		t.Fatalf("unexpected event metadata: %#v", got)
+	}
+}
+
 func testSalesChannelConnection(t *testing.T, ctx context.Context, repo *SalesChannelRepository) *saleschannel.Connection {
 	t.Helper()
 	connection := &saleschannel.Connection{

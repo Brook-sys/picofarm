@@ -734,6 +734,29 @@ CREATE TABLE IF NOT EXISTS etsy_webhook_events (
 CREATE INDEX IF NOT EXISTS idx_etsy_webhook_events_type ON etsy_webhook_events(event_type);
 CREATE INDEX IF NOT EXISTS idx_etsy_webhook_events_processed ON etsy_webhook_events(processed);
 
+-- Provider-neutral sales-channel webhook inbox
+CREATE TABLE IF NOT EXISTS sales_channel_webhook_events (
+    id TEXT PRIMARY KEY,
+    connection_id TEXT REFERENCES sales_channel_connections(id) ON DELETE SET NULL,
+    channel TEXT NOT NULL,
+    external_event_id TEXT,
+    topic TEXT,
+    resource_path TEXT,
+    payload TEXT NOT NULL,
+    signature TEXT,
+    processed INTEGER DEFAULT 0,
+    processed_at TEXT,
+    error TEXT,
+    received_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_sales_channel_webhook_events_channel ON sales_channel_webhook_events(channel);
+CREATE INDEX IF NOT EXISTS idx_sales_channel_webhook_events_processed ON sales_channel_webhook_events(processed);
+CREATE INDEX IF NOT EXISTS idx_sales_channel_webhook_events_topic ON sales_channel_webhook_events(topic);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_sales_channel_webhook_events_unique ON sales_channel_webhook_events(channel, external_event_id);
+
 -- Squarespace Integration
 CREATE TABLE IF NOT EXISTS squarespace_integration (
     id TEXT PRIMARY KEY,
