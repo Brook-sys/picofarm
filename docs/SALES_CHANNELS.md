@@ -284,12 +284,43 @@ Use this matrix as the source of truth for the first Shopee implementation cards
 | Sandbox/testing | Shopee documents Sandbox Testing V2. | Fake-client CI plus optional sandbox manual QA. | CI must not require real seller credentials. Use local fixtures/fake clients for auth, signing, order list/detail, item/model reads, stock updates, and push events; reserve Shopee sandbox accounts for manual validation. |
 | Rate limits/errors | Official docs and partner policies can impose per-app/per-shop limits and signed request expiry behavior. | Provider throttling/backoff and sanitized sync-run diagnostics. | Add retry/backoff for `429`/transient failures before live polling. Persist only sanitized errors through `sales_channel_sync_runs`; never persist full signed URLs, bearer tokens, or partner secrets. |
 
+### Shopee MVP and capability matrix
+
+SHP-02 approves a conservative MVP that keeps Shopee provider work useful without over-promising live capabilities before partner/account access is verified.
+
+| Capability | MVP decision | When visible/enabled | Required implementation proof |
+| --- | --- | --- | --- |
+| Channel ID | Use `shopee`. | After provider skeleton registration. | Descriptor tests and generic `/api/sales-channels` smoke show stable ID/display name. |
+| Auth type | Model Shopee as OAuth shop authorization plus signed V2 API calls. Do not introduce a new public `signed_api` auth type unless the generic contract needs it later. | OAuth connect UI only after auth-url/callback/state handling is implemented and tested. | Fake token exchange tests, state mismatch/replay tests, and redaction tests for `code`, tokens, partner keys, and signed URLs. |
+| `orders_read` | In MVP. Import order list/detail into canonical external orders. | Enabled after fake-client idempotent order sync tests pass. | Order SN, status, buyer/recipient/shipping summary, totals/currency, item ID, model ID, seller SKU/model SKU, and quantity map into `external_orders`/items without exposing `raw_json`. |
+| `products_read` | In MVP. Import item/base info plus model/variation data into canonical external products and variants. | Enabled after fake-client idempotent product sync tests pass. | Item ID, model ID, item SKU, model SKU, title, status, price/currency, stock, images/permalink, and variation metadata map into `external_products`/variants. |
+| Product links | In MVP after product sync. Reuse generic product link routes. | Enabled when Shopee products/variants are present in canonical storage. | Link/unlink tests prove project ID validation and variant ownership checks. |
+| `inventory_write` | Post-MVP gated capability. Do not advertise until read-only sync and product links are stable. | Enabled only after item-level and model-level stock update payload tests pass. | Fake-client tests for stock update payloads, rate-limit errors, and sanitized sync-run failures. |
+| `webhooks` | Post-MVP gated capability unless push signature/verification requirements are confirmed. | Enabled only after idempotent webhook storage and verification rules are implemented. | Duplicate push-event tests, metadata-only listing tests, and signature/header redaction tests. |
+| Regions/access | Brazil/account partner eligibility is a launch gate, not a CI dependency. | Manual pre-live checklist. | Document partner app requirements and keep CI fully fake-client based. |
+
+Shopee item/model/SKU mapping rules:
+
+- Treat an item as the external product/listing.
+- Treat a model/variation as an external product variant.
+- Preserve both item-level SKU and model-level SKU. Prefer model SKU for variant links when present; fall back to item SKU only for non-variation listings.
+- Store Shopee order SN and item/model IDs as provider IDs, not PicoFarm UUIDs.
+- Preserve provider `raw_json` internally for diagnostics/replay, but omit it from all public/generic API responses.
+
+Pagination and rate-limit strategy:
+
+- Provider client methods should accept cursor/time-window parameters rather than hiding unbounded loops in handlers.
+- Order sync should prefer bounded windows and persist sync progress through connection metadata or sync-run context when added.
+- Product sync should page item lists, then batch/fan out item/model detail calls within configured limits.
+- Handle `429`, signed request expiry, token expiry, and transient 5xx as operational errors with retry/backoff in the provider layer.
+- Store sanitized rate-limit/token/signature failures in `sales_channel_sync_runs`; never store full signed URLs or bearer tokens.
+
 Recommended implementation sequence:
 
-1. Complete SHP-02 with a Brazil/account-specific MVP decision and capability matrix.
-2. Add only a descriptor/provider skeleton once the chosen capabilities are approved; keep unsupported capabilities absent, not aspirational.
-3. Build the signed fakeable client first: authorization URL/token exchange, signature helper, order list/detail, item/model reads, stock update, and push-event parsing.
-4. Implement read-only order sync, then product/model sync, then product links and inventory writes, then webhook replay.
+1. Add only the `shopee` descriptor/provider skeleton with OAuth, `orders_read`, and `products_read` after this MVP matrix; keep `inventory_write` and `webhooks` absent until their gates are met.
+2. Build the signed fakeable client first: authorization URL/token exchange, signature helper, order list/detail, item/model reads, stock update payload generation, and push-event parsing.
+3. Implement read-only order sync, then product/model sync, then product links.
+4. Add inventory write and webhook replay as separate post-MVP cards after read-only flows are stable.
 5. Keep every Shopee path covered by fake-client tests and do not require real Shopee credentials in CI.
 
 ## Checklist for adding a new channel
