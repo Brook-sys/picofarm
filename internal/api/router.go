@@ -97,6 +97,16 @@ func NewRouterWithOptions(services *service.Services, hub *realtime.Hub, opts Ro
 	// API routes
 	r.Route("/api", func(r chi.Router) {
 		r.Use(ApiTokenAuth(opts.ApiToken))
+
+		// Provider-neutral sales-channel endpoints.
+		if services.SalesChannels != nil {
+			salesChannelHandler := NewSalesChannelHandler(services.SalesChannels)
+			r.Route("/sales-channels", func(r chi.Router) {
+				r.Get("/", salesChannelHandler.List)
+				r.Get("/{channel}", salesChannelHandler.Get)
+			})
+		}
+
 		// Projects (Product Catalog)
 		projectHandler := &ProjectHandler{service: services.Projects}
 		projectPrintJobHandler := &PrintJobHandler{service: services.PrintJobs}

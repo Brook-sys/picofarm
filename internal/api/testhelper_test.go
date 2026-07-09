@@ -16,6 +16,7 @@ import (
 type testEnv struct {
 	handler  http.Handler
 	services *service.Services
+	repos    *repository.Repositories
 	storage  *storage.LocalStorage
 }
 
@@ -39,14 +40,15 @@ func newTestEnv(t *testing.T) *testEnv {
 	hub := realtime.NewHub()
 	printerMgr := printer.NewManager()
 
-	services := service.NewServices(repos, store, printerMgr, hub)
-	// Ensure BambuCloud service is available (NewServices already sets it).
+	services := service.NewServicesWithConfig(repos, store, printerMgr, hub, service.ServicesConfig{})
+	// Ensure BambuCloud service is available (NewServicesWithConfig already sets it).
 
 	router := NewRouter(services, hub)
 
 	return &testEnv{
 		handler:  router,
 		services: services,
+		repos:    repos,
 		storage:  store,
 	}
 }

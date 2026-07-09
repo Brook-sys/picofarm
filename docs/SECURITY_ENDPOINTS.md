@@ -132,8 +132,8 @@ Sales-channel routes are designed in `docs/SALES_CHANNELS.md`. Any new generic `
 
 | Routes | Class | Notes |
 | --- | --- | --- |
-| `GET /api/sales-channels` | Integration/read | Provider descriptors/capabilities. Do not include secrets or private account data. |
-| `GET /api/sales-channels/status` | Integration/read | Connection/sync status. Redact credential details and external API errors. |
+| `GET /api/sales-channels` | Integration/read | Provider descriptors/capabilities plus connection status. Do not include secrets or private account data. |
+| `GET /api/sales-channels/{channel}` | Integration/read | One provider descriptor/capabilities plus connection status. Redact credential details and external API errors. |
 | `POST /api/sales-channels/{channel}/connect` | Integration/secrets/settings | Connects external account/API. Validate provider-specific body and never log credentials. |
 | `POST /api/sales-channels/{channel}/disconnect` | Integration | Disconnects provider/connection. |
 | `GET /api/sales-channels/{channel}/auth-url` | Integration/OAuth | OAuth start. Validate redirect config and state. |
