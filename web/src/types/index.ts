@@ -1218,6 +1218,7 @@ export interface SyncResult {
 export type SalesChannelID = 'etsy' | 'squarespace' | 'shopify'
 export type SalesChannelAuthType = 'oauth' | 'api_key' | 'manual'
 export type SalesChannelCapability = 'oauth' | 'api_key' | 'orders_read' | 'products_read' | 'inventory_write' | 'webhooks'
+export type SalesChannelSyncKind = 'orders' | 'products' | 'all'
 
 export interface SalesChannelDescriptor {
   id: SalesChannelID
@@ -1245,6 +1246,17 @@ export interface SalesChannelSummary {
 
 export interface SalesChannelsListResponse {
   channels: SalesChannelSummary[]
+}
+
+export interface SalesChannelSyncResult extends SyncResult {
+  channel: SalesChannelID
+  kind: SalesChannelSyncKind
+  started_at: string
+  finished_at: string
+}
+
+export interface SalesChannelSyncResponse {
+  result: SalesChannelSyncResult
 }
 
 // Bambu Cloud types

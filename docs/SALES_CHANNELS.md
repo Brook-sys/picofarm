@@ -4,7 +4,7 @@ This document is the canonical guide for PicoFarm sales-channel integrations. Us
 
 The goal is a modular, capability-driven architecture where each external marketplace or storefront is implemented as a provider behind a common contract. New contributors should be able to add a channel by following this document without reverse-engineering every existing integration.
 
-> Current status: the generic `internal/saleschannel` contracts, provider registry, canonical storage repository, initial legacy-backed adapters for Etsy, Squarespace, and Shopify, read-only generic HTTP routes, and frontend descriptor/status discovery are implemented. Existing provider-specific routes (`/api/integrations/{provider}/*`) remain supported while write/sync/connect flows continue to migrate behind `/api/sales-channels/*`.
+> Current status: the generic `internal/saleschannel` contracts, provider registry, canonical storage repository, initial legacy-backed adapters for Etsy, Squarespace, and Shopify, generic descriptor/status/sync HTTP routes, and frontend descriptor/status discovery are implemented. Existing provider-specific routes (`/api/integrations/{provider}/*`) remain supported while connect/read-model/order-processing flows continue to migrate behind `/api/sales-channels/*`.
 
 ## Design goals
 
@@ -59,9 +59,9 @@ internal/saleschannel/
   registry.go
 ```
 
-Initial adapters currently live in `internal/service/sales_channel_adapters.go` so they can wrap existing Etsy, Squarespace, and Shopify services without moving legacy business logic yet. They expose descriptors, capabilities, connection status, and legacy sync entry points while read-model conversion for external orders/products remains a follow-up.
+Initial adapters currently live in `internal/service/sales_channel_adapters.go` so they can wrap existing Etsy, Squarespace, and Shopify services without moving legacy business logic yet. They expose descriptors, capabilities, connection status, and generic sync entry points while read-model conversion for external orders/products remains a follow-up.
 
-Read-only generic API handlers live in `internal/api/sales_channel_handler.go`. They expose registered provider descriptors and current connection status for all providers or one provider without returning credentials, OAuth codes, API keys, or raw provider payloads.
+Generic API handlers live in `internal/api/sales_channel_handler.go`. They expose registered provider descriptors, current connection status, and capability-checked sync dispatch without returning credentials, OAuth codes, API keys, or raw provider payloads.
 
 Frontend sales-channel API types live in `web/src/types/index.ts`, the provider-neutral client lives in `web/src/api/client.ts`, and `web/src/pages/Channels.tsx` now discovers channel display names/status from `GET /api/sales-channels` while keeping legacy Etsy/Squarespace data, sync, process, and link calls until those generic flows exist.
 

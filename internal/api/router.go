@@ -104,6 +104,7 @@ func NewRouterWithOptions(services *service.Services, hub *realtime.Hub, opts Ro
 			r.Route("/sales-channels", func(r chi.Router) {
 				r.Get("/", salesChannelHandler.List)
 				r.Get("/{channel}", salesChannelHandler.Get)
+				r.Post("/{channel}/sync", salesChannelHandler.Sync)
 			})
 		}
 

@@ -1287,6 +1287,11 @@ export const salesChannelsApi = {
   list: () => fetchApi<import('../types').SalesChannelsListResponse>('/sales-channels'),
   get: (channel: import('../types').SalesChannelID) =>
     fetchApi<import('../types').SalesChannelSummary>(`/sales-channels/${channel}`),
+  sync: (channel: import('../types').SalesChannelID, kind: import('../types').SalesChannelSyncKind = 'all') =>
+    fetchApi<import('../types').SalesChannelSyncResponse>(`/sales-channels/${channel}/sync`, {
+      method: 'POST',
+      body: JSON.stringify({ kind }),
+    }),
 }
 
 // Etsy API
