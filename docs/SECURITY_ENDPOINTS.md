@@ -145,7 +145,8 @@ Sales-channel routes are designed in `docs/SALES_CHANNELS.md`. Any new generic `
 | `POST /api/sales-channels/orders/{id}/process` | Integration/write | Converts external order into internal workflow. |
 | `POST /api/sales-channels/products/{id}/link` | Integration/write | Links external product/variant to internal project/SKU. |
 | `DELETE /api/sales-channels/products/{id}/link` | Integration/write | Unlinks external product/variant. |
-| `POST /api/sales-channels/{channel}/webhook` | Integration/webhook | Inbound webhook. Verify signatures where provider supports them. |
+| `POST /api/sales-channels/{channel}/webhook` | Integration/webhook | Inbound webhook. Stores raw payload/signature for replay but response must not echo them. Verify signatures where provider supports them; for Mercado Livre, signature support is not assumed until configured/documented. |
+| `GET /api/sales-channels/{channel}/webhook-events` | Integration/read/diagnostic | Lists webhook metadata only. Must omit stored payload, signatures, bearer tokens, access/refresh tokens, and provider raw secrets. |
 | `POST /api/sales-channels/{channel}/webhook-events/{id}/reprocess` | Integration/write | Replays inbound event. Must be idempotent and auditable. |
 | `POST /api/bambu-cloud/login` | Integration/secrets | Authenticates external account; never log credentials. |
 | `POST /api/bambu-cloud/verify` | Integration/secrets | Verifies auth material. |

@@ -110,6 +110,8 @@ func NewRouterWithOptions(services *service.Services, hub *realtime.Hub, opts Ro
 				r.Delete("/products/{id}/link", salesChannelHandler.UnlinkExternalProduct)
 				r.Get("/sync-runs", salesChannelHandler.ListSyncRuns)
 				r.Get("/{channel}", salesChannelHandler.Get)
+				r.Post("/{channel}/webhook", salesChannelHandler.ReceiveWebhook)
+				r.Get("/{channel}/webhook-events", salesChannelHandler.ListWebhookEvents)
 				r.Post("/{channel}/sync", salesChannelHandler.Sync)
 			})
 		}

@@ -2,9 +2,12 @@ package api
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -368,6 +371,104 @@ func orderSourceForSalesChannel(channel saleschannel.ChannelID) model.OrderSourc
 	default:
 		return model.OrderSource(fmt.Sprintf("sales_channel:%s", channel))
 	}
+}
+
+// ReceiveWebhook accepts a provider webhook payload, stores it idempotently and sanitizes responses.
+func (h *SalesChannelHandler) ReceiveWebhook(w http.ResponseWriter, r *http.Request) {
+	if h == nil || h.repo == nil {
+		respondError(w, http.StatusServiceUnavailable, "sales-channel storage unavailable")
+		return
+	}
+	channel := saleschannel.ChannelID(chi.URLParam(r, "channel"))
+	if channel == "" {
+		respondError(w, http.StatusBadRequest, "channel is required")
+		return
+	}
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		respondError(w, http.StatusBadRequest, "failed to read webhook body")
+		return
+	}
+	defer r.Body.Close()
+
+	sig := r.Header.Get("X-Request-Signature")
+	event := salesChannelWebhookEventFromRequest(channel, sig, body)
+	if err := h.repo.UpsertWebhookEvent(r.Context(), &event); err != nil {
+		slog.Error("failed to store sales-channel webhook event", "channel", channel, "error", err)
+		respondError(w, http.StatusInternalServerError, "failed to store webhook event")
+		return
+	}
+	respondJSON(w, http.StatusAccepted, map[string]string{"status": "accepted"})
+}
+
+// ListWebhookEvents lists stored inbound webhook metadata (payload and signature omitted).
+func (h *SalesChannelHandler) ListWebhookEvents(w http.ResponseWriter, r *http.Request) {
+	if h == nil || h.repo == nil {
+		respondError(w, http.StatusServiceUnavailable, "sales-channel storage unavailable")
+		return
+	}
+	channel := saleschannel.ChannelID(chi.URLParam(r, "channel"))
+	if channel == "" {
+		respondError(w, http.StatusBadRequest, "channel is required")
+		return
+	}
+	filter := saleschannel.WebhookEventFilter{
+		Channel: channel,
+		Topic:   r.URL.Query().Get("topic"),
+		Limit:   parsePositiveIntQuery(r, "limit"),
+		Offset:  parsePositiveIntQuery(r, "offset"),
+	}
+	events, err := h.repo.ListWebhookEvents(r.Context(), filter)
+	if err != nil {
+		slog.Error("failed to list sales-channel webhook events", "error", err)
+		respondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	for i := range events {
+		events[i].Payload = ""
+		events[i].Signature = ""
+	}
+	type response struct {
+		Events []saleschannel.WebhookEvent `json:"events"`
+	}
+	respondJSON(w, http.StatusOK, response{Events: events})
+}
+
+func salesChannelWebhookEventFromRequest(channel saleschannel.ChannelID, sig string, body []byte) saleschannel.WebhookEvent {
+	event := saleschannel.WebhookEvent{
+		Channel:         channel,
+		ExternalEventID: computeExternalEventID(channel, sig, body),
+		Payload:         string(body),
+		Signature:       sig,
+	}
+	var payload struct {
+		ID       string `json:"_id"`
+		Topic    string `json:"topic"`
+		Resource string `json:"resource"`
+	}
+	if err := json.Unmarshal(body, &payload); err == nil {
+		event.ExternalEventID = firstNonEmpty(payload.ID, event.ExternalEventID)
+		event.Topic = payload.Topic
+		event.ResourcePath = payload.Resource
+	}
+	return event
+}
+
+func computeExternalEventID(channel saleschannel.ChannelID, sig string, body []byte) string {
+	h := sha256.New()
+	h.Write([]byte(string(channel)))
+	h.Write([]byte(sig))
+	h.Write(body)
+	return hex.EncodeToString(h.Sum(nil))
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if value != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 // Get returns one registered sales channel with descriptor and current status.

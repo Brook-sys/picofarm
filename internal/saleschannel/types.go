@@ -251,3 +251,30 @@ type ProductLink struct {
 	CreatedAt         time.Time  `json:"created_at"`
 	UpdatedAt         time.Time  `json:"updated_at"`
 }
+
+// WebhookEvent is a provider-neutral inbox entry for inbound sales-channel notifications.
+type WebhookEvent struct {
+	ID              uuid.UUID  `json:"id"`
+	ConnectionID    *uuid.UUID `json:"connection_id,omitempty"`
+	Channel         ChannelID  `json:"channel"`
+	ExternalEventID string     `json:"external_event_id,omitempty"`
+	Topic           string     `json:"topic,omitempty"`
+	ResourcePath    string     `json:"resource_path,omitempty"`
+	Payload         string     `json:"payload,omitempty"`
+	Signature       string     `json:"signature,omitempty"`
+	Processed       bool       `json:"processed"`
+	ProcessedAt     *time.Time `json:"processed_at,omitempty"`
+	Error           string     `json:"error,omitempty"`
+	ReceivedAt      time.Time  `json:"received_at"`
+	CreatedAt       time.Time  `json:"created_at"`
+}
+
+// WebhookEventFilter filters provider-neutral inbound webhook events.
+type WebhookEventFilter struct {
+	ConnectionID uuid.UUID
+	Channel      ChannelID
+	Topic        string
+	Processed    *bool
+	Limit        int
+	Offset       int
+}

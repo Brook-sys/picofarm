@@ -268,6 +268,63 @@ func newSalesChannelTestRouter(t *testing.T, providers ...saleschannel.Provider)
 	return newSalesChannelTestRouterWithRepo(t, nil, providers...)
 }
 
+func TestSalesChannelHandler_MercadoLivreWebhookStoresEventAndListsMetadata(t *testing.T) {
+	env := newTestEnv(t)
+	ctx := context.Background()
+	seedSalesChannelConnection(t, ctx, env, saleschannel.ChannelMercadoLivre)
+	provider := &fakeSalesChannelProvider{
+		descriptor: saleschannel.ProviderDescriptor{
+			ID:           saleschannel.ChannelMercadoLivre,
+			DisplayName:  "Mercado Livre",
+			Capabilities: []saleschannel.Capability{saleschannel.CapabilityWebhooks},
+		},
+	}
+	router := newSalesChannelTestRouterWithRepo(t, env.repos.SalesChannels, provider)
+
+	payload := `{"_id":"orders:/orders/2000000001:1","topic":"orders","resource":"/orders/2000000001","user_id":123,"access_token":"secret-token"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/sales-channels/mercado_livre/webhook", strings.NewReader(payload))
+	req.Header.Set("X-Request-Signature", "Bearer bearer-secret")
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusAccepted {
+		t.Fatalf("expected 202, got %d: %s", rr.Code, rr.Body.String())
+	}
+	for _, secret := range []string{"secret-token", "bearer-secret"} {
+		if strings.Contains(rr.Body.String(), secret) {
+			t.Fatalf("webhook response leaked secret %q in body %s", secret, rr.Body.String())
+		}
+	}
+
+	listReq := httptest.NewRequest(http.MethodGet, "/api/sales-channels/mercado_livre/webhook-events?topic=orders", nil)
+	listRR := httptest.NewRecorder()
+	router.ServeHTTP(listRR, listReq)
+	if listRR.Code != http.StatusOK {
+		t.Fatalf("expected 200 listing events, got %d: %s", listRR.Code, listRR.Body.String())
+	}
+	for _, secret := range []string{"secret-token", "bearer-secret"} {
+		if strings.Contains(listRR.Body.String(), secret) {
+			t.Fatalf("webhook list leaked secret %q in body %s", secret, listRR.Body.String())
+		}
+	}
+	var response struct {
+		Events []saleschannel.WebhookEvent `json:"events"`
+	}
+	if err := json.Unmarshal(listRR.Body.Bytes(), &response); err != nil {
+		t.Fatalf("decode webhook events: %v", err)
+	}
+	if len(response.Events) != 1 {
+		t.Fatalf("expected 1 event, got %d: %#v", len(response.Events), response.Events)
+	}
+	got := response.Events[0]
+	if got.Channel != saleschannel.ChannelMercadoLivre || got.Topic != "orders" || got.ResourcePath != "/orders/2000000001" {
+		t.Fatalf("unexpected event metadata: %#v", got)
+	}
+	if got.Payload != "" || got.Signature != "" {
+		t.Fatalf("payload/signature should be omitted from listing: %#v", got)
+	}
+}
+
 func newSalesChannelTestRouterWithRepo(t *testing.T, repo *repository.SalesChannelRepository, providers ...saleschannel.Provider) http.Handler {
 	t.Helper()
 	registry := saleschannel.NewRegistry()
@@ -280,6 +337,8 @@ func newSalesChannelTestRouterWithRepo(t *testing.T, repo *repository.SalesChann
 	router := chi.NewRouter()
 	router.Route("/api/sales-channels", func(r chi.Router) {
 		r.Get("/sync-runs", handler.ListSyncRuns)
+		r.Post("/{channel}/webhook", handler.ReceiveWebhook)
+		r.Get("/{channel}/webhook-events", handler.ListWebhookEvents)
 		r.Post("/{channel}/sync", handler.Sync)
 	})
 	return router

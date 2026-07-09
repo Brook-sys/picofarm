@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/Brook-sys/picofarm/internal/saleschannel"
@@ -608,6 +609,115 @@ func (r *SalesChannelRepository) ListProductLinks(ctx context.Context, externalP
 		links = append(links, link)
 	}
 	return links, rows.Err()
+}
+
+// UpsertWebhookEvent stores an inbound webhook event idempotently by channel+external_event_id.
+func (r *SalesChannelRepository) UpsertWebhookEvent(ctx context.Context, event *saleschannel.WebhookEvent) error {
+	if event.ID == uuid.Nil {
+		event.ID = uuid.New()
+	}
+	now := time.Now().UTC()
+	event.CreatedAt = now
+	event.ReceivedAt = now
+	_, err := r.db.ExecContext(ctx, `
+		INSERT INTO sales_channel_webhook_events (
+			id, connection_id, channel, external_event_id, topic, resource_path,
+			payload, signature, processed, processed_at, error, received_at, created_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(channel, external_event_id) DO UPDATE SET
+			payload = excluded.payload,
+			signature = excluded.signature,
+			updated_at = CURRENT_TIMESTAMP
+	`, event.ID, nullableUUID(event.ConnectionID), string(event.Channel), event.ExternalEventID,
+		event.Topic, event.ResourcePath, event.Payload, event.Signature,
+		boolToInt(event.Processed), nullableTime(event.ProcessedAt), event.Error, event.ReceivedAt, event.CreatedAt)
+	return err
+}
+
+// ListWebhookEvents returns metadata-only webhook events (payload/signature omitted).
+func (r *SalesChannelRepository) ListWebhookEvents(ctx context.Context, filter saleschannel.WebhookEventFilter) ([]saleschannel.WebhookEvent, error) {
+	query := `
+		SELECT id, connection_id, channel, external_event_id, topic, resource_path,
+			'', '', processed, processed_at, error, received_at, created_at
+		FROM sales_channel_webhook_events
+		WHERE 1=1
+	`
+	args := []any{}
+	if filter.Channel != "" {
+		query += " AND channel = ?"
+		args = append(args, string(filter.Channel))
+	}
+	if filter.Topic != "" {
+		query += " AND topic = ?"
+		args = append(args, filter.Topic)
+	}
+	if filter.ConnectionID != uuid.Nil {
+		query += " AND connection_id = ?"
+		args = append(args, filter.ConnectionID.String())
+	}
+	if filter.Processed != nil {
+		query += " AND processed = ?"
+		args = append(args, boolToInt(*filter.Processed))
+	}
+	query += " ORDER BY received_at DESC"
+	if filter.Limit > 0 {
+		query += fmt.Sprintf(" LIMIT %d", filter.Limit)
+	}
+	if filter.Offset > 0 {
+		query += fmt.Sprintf(" OFFSET %d", filter.Offset)
+	}
+	rows, err := r.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	events := []saleschannel.WebhookEvent{}
+	for rows.Next() {
+		var event saleschannel.WebhookEvent
+		var connIDStr sql.NullString
+		var processedInt int
+		var processedAtStr sql.NullString
+		if err := scanRow(rows, &event.ID, &connIDStr, &event.Channel, &event.ExternalEventID,
+			&event.Topic, &event.ResourcePath, &event.Payload, &event.Signature,
+			&processedInt, &processedAtStr, &event.Error, &event.ReceivedAt, &event.CreatedAt); err != nil {
+			return nil, err
+		}
+		event.Processed = processedInt != 0
+		if connIDStr.Valid {
+			if id, err := uuid.Parse(connIDStr.String); err == nil {
+				event.ConnectionID = &id
+			}
+		}
+		if processedAtStr.Valid {
+			if t, err := time.Parse(time.RFC3339, processedAtStr.String); err == nil {
+				event.ProcessedAt = &t
+			}
+		}
+		events = append(events, event)
+	}
+	return events, rows.Err()
+}
+
+func nullableUUID(id *uuid.UUID) any {
+	if id == nil {
+		return nil
+	}
+	return id.String()
+}
+
+func nullableTime(t *time.Time) any {
+	if t == nil {
+		return nil
+	}
+	return t.Format(time.RFC3339)
+}
+
+func boolToInt(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
 }
 
 func (r *SalesChannelRepository) scanConnection(row scannable) (*saleschannel.Connection, error) {
