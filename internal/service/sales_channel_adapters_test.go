@@ -207,6 +207,54 @@ func TestMercadoLivreSalesChannelProvider_SyncOrdersUpsertsExternalOrdersIdempot
 	}
 }
 
+func TestMercadoLivreSalesChannelProvider_SyncProductsUpsertsExternalProductsIdempotently(t *testing.T) {
+	repos := openSalesChannelAdapterRepos(t)
+	ctx := context.Background()
+	provider := NewMercadoLivreSalesChannelProviderWithRepository(fakeMercadoLivreClient{
+		user: &mercadolivre.User{ID: 123456789, Nickname: "PICO_TEST_USER", SiteID: "MLB"},
+		item: fakeMercadoLivreItem(),
+	}, repos.SalesChannels)
+
+	result, err := provider.Sync(ctx, saleschannel.SyncProducts)
+	if err != nil {
+		t.Fatalf("sync products: %v", err)
+	}
+	if result.TotalFetched != 1 || result.Created != 1 || result.Updated != 0 || result.Skipped != 0 {
+		t.Fatalf("unexpected first sync result: %+v", result)
+	}
+
+	products, err := repos.SalesChannels.ListExternalProducts(ctx, saleschannel.ProductFilter{Channel: saleschannel.ChannelMercadoLivre})
+	if err != nil {
+		t.Fatalf("list stored products: %v", err)
+	}
+	if len(products) != 1 {
+		t.Fatalf("expected 1 stored product, got %d", len(products))
+	}
+	firstID := products[0].ID
+	if products[0].ExternalProductID != "MLB123456789" || products[0].Title != "Printed Dragon Miniature" || products[0].PriceCents != 12990 {
+		t.Fatalf("unexpected stored product: %+v", products[0])
+	}
+	if len(products[0].Variants) != 1 || products[0].Variants[0].SKU != "DRAGON-RED" || products[0].Variants[0].StockQuantity == nil || *products[0].Variants[0].StockQuantity != 12 {
+		t.Fatalf("unexpected stored variants: %+v", products[0].Variants)
+	}
+
+	result, err = provider.Sync(ctx, saleschannel.SyncProducts)
+	if err != nil {
+		t.Fatalf("sync products second: %v", err)
+	}
+	if result.TotalFetched != 1 || result.Created != 0 || result.Updated != 1 || result.Skipped != 0 {
+		t.Fatalf("unexpected second sync result: %+v", result)
+	}
+
+	products, err = repos.SalesChannels.ListExternalProducts(ctx, saleschannel.ProductFilter{Channel: saleschannel.ChannelMercadoLivre})
+	if err != nil {
+		t.Fatalf("list stored products second: %v", err)
+	}
+	if len(products) != 1 || products[0].ID != firstID {
+		t.Fatalf("expected idempotent upsert to keep one row with ID %s, got %+v", firstID, products)
+	}
+}
+
 func TestServicesWireSalesChannelRegistryWithInitialAdapters(t *testing.T) {
 	t.Run("default services", func(t *testing.T) {
 		repos := openSalesChannelAdapterRepos(t)
@@ -267,6 +315,7 @@ func assertStatus(t *testing.T, provider saleschannel.Provider, channel salescha
 type fakeMercadoLivreClient struct {
 	user  *mercadolivre.User
 	order *mercadolivre.Order
+	item  *mercadolivre.Item
 	err   error
 }
 
@@ -294,6 +343,23 @@ func (f fakeMercadoLivreClient) ListOrders(context.Context) ([]*mercadolivre.Ord
 	return []*mercadolivre.Order{f.order}, nil
 }
 
+func (f fakeMercadoLivreClient) ListItems(context.Context) ([]*mercadolivre.Item, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	if f.item == nil {
+		return []*mercadolivre.Item{}, nil
+	}
+	return []*mercadolivre.Item{f.item}, nil
+}
+
+func (f fakeMercadoLivreClient) GetItem(context.Context, string) (*mercadolivre.Item, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	return f.item, nil
+}
+
 func fakeMercadoLivreOrder() *mercadolivre.Order {
 	order := &mercadolivre.Order{
 		ID:          2000000001,
@@ -311,6 +377,19 @@ func fakeMercadoLivreOrder() *mercadolivre.Order {
 	item.Item.SKU = "DRAGON-RED"
 	order.Items = []mercadolivre.OrderItem{item}
 	return order
+}
+
+func fakeMercadoLivreItem() *mercadolivre.Item {
+	return &mercadolivre.Item{
+		ID:                "MLB123456789",
+		Title:             "Printed Dragon Miniature",
+		Status:            "active",
+		Permalink:         "https://produto.mercadolivre.com.br/MLB-123456789-printed-dragon-miniature",
+		Price:             129.90,
+		CurrencyID:        "BRL",
+		AvailableQuantity: 12,
+		SKU:               "DRAGON-RED",
+	}
 }
 
 func openSalesChannelAdapterRepos(t *testing.T) *repository.Repositories {

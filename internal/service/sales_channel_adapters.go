@@ -309,6 +309,8 @@ type MercadoLivreClient interface {
 	GetCurrentUser(ctx context.Context) (*mercadolivre.User, error)
 	ListOrders(ctx context.Context) ([]*mercadolivre.Order, error)
 	GetOrder(ctx context.Context, externalOrderID string) (*mercadolivre.Order, error)
+	ListItems(ctx context.Context) ([]*mercadolivre.Item, error)
+	GetItem(ctx context.Context, itemID string) (*mercadolivre.Item, error)
 }
 
 // MercadoLivreSalesChannelProvider exposes the approved Mercado Livre MVP
@@ -369,7 +371,7 @@ func (p *MercadoLivreSalesChannelProvider) Status(ctx context.Context) (salescha
 
 func (p *MercadoLivreSalesChannelProvider) Sync(ctx context.Context, kind saleschannel.SyncKind) (saleschannel.SyncResult, error) {
 	result := saleschannel.SyncResult{Channel: saleschannel.ChannelMercadoLivre, Kind: kind}
-	if kind != saleschannel.SyncOrders && kind != saleschannel.SyncAll {
+	if kind != saleschannel.SyncOrders && kind != saleschannel.SyncProducts && kind != saleschannel.SyncAll {
 		return result, errSalesChannelReadModelPending(saleschannel.ChannelMercadoLivre, string(kind))
 	}
 	if p.client == nil || p.repo == nil {
@@ -379,9 +381,23 @@ func (p *MercadoLivreSalesChannelProvider) Sync(ctx context.Context, kind salesc
 	if err != nil {
 		return result, err
 	}
+	if kind == saleschannel.SyncOrders || kind == saleschannel.SyncAll {
+		if err := p.syncOrders(ctx, connection, &result); err != nil {
+			return result, err
+		}
+	}
+	if kind == saleschannel.SyncProducts || kind == saleschannel.SyncAll {
+		if err := p.syncProducts(ctx, connection, &result); err != nil {
+			return result, err
+		}
+	}
+	return result, nil
+}
+
+func (p *MercadoLivreSalesChannelProvider) syncOrders(ctx context.Context, connection *saleschannel.Connection, result *saleschannel.SyncResult) error {
 	orders, err := p.client.ListOrders(ctx)
 	if err != nil {
-		return result, fmt.Errorf("mercado_livre list orders: %w", err)
+		return fmt.Errorf("mercado_livre list orders: %w", err)
 	}
 	for _, order := range orders {
 		if order == nil {
@@ -392,10 +408,10 @@ func (p *MercadoLivreSalesChannelProvider) Sync(ctx context.Context, kind salesc
 		external.ConnectionID = connection.ID
 		stored, err := p.repo.GetExternalOrderByProviderID(ctx, connection.ID, external.ExternalOrderID)
 		if err != nil {
-			return result, err
+			return err
 		}
 		if err := p.repo.UpsertExternalOrder(ctx, &external); err != nil {
-			return result, err
+			return err
 		}
 		result.TotalFetched++
 		if stored == nil {
@@ -404,7 +420,36 @@ func (p *MercadoLivreSalesChannelProvider) Sync(ctx context.Context, kind salesc
 			result.Updated++
 		}
 	}
-	return result, nil
+	return nil
+}
+
+func (p *MercadoLivreSalesChannelProvider) syncProducts(ctx context.Context, connection *saleschannel.Connection, result *saleschannel.SyncResult) error {
+	items, err := p.client.ListItems(ctx)
+	if err != nil {
+		return fmt.Errorf("mercado_livre list items: %w", err)
+	}
+	for _, item := range items {
+		if item == nil {
+			result.Skipped++
+			continue
+		}
+		external := mercadoLivreExternalProduct(item)
+		external.ConnectionID = connection.ID
+		stored, err := p.repo.GetExternalProductByProviderID(ctx, connection.ID, external.ExternalProductID)
+		if err != nil {
+			return err
+		}
+		if err := p.repo.UpsertExternalProduct(ctx, &external); err != nil {
+			return err
+		}
+		result.TotalFetched++
+		if stored == nil {
+			result.Created++
+		} else {
+			result.Updated++
+		}
+	}
+	return nil
 }
 
 func (p *MercadoLivreSalesChannelProvider) ListOrders(ctx context.Context, filter saleschannel.OrderFilter) ([]saleschannel.ExternalOrder, error) {
@@ -475,6 +520,30 @@ func mercadoLivreBuyerName(order *mercadolivre.Order) string {
 	return name
 }
 
+func mercadoLivreExternalProduct(item *mercadolivre.Item) saleschannel.ExternalProduct {
+	stock := item.AvailableQuantity
+	product := saleschannel.ExternalProduct{
+		Channel:           saleschannel.ChannelMercadoLivre,
+		ExternalProductID: item.ID,
+		Title:             item.Title,
+		URL:               item.Permalink,
+		Status:            item.Status,
+		IsVisible:         item.Status == "active",
+		PriceCents:        int(item.Price * 100),
+		Currency:          item.CurrencyID,
+		RawJSON:           "{}",
+	}
+	product.Variants = []saleschannel.ExternalProductVariant{{
+		ExternalVariantID: item.ID,
+		SKU:               item.SKU,
+		Title:             item.Title,
+		PriceCents:        product.PriceCents,
+		Currency:          product.Currency,
+		StockQuantity:     &stock,
+	}}
+	return product
+}
+
 func (p *MercadoLivreSalesChannelProvider) upsertConnection(ctx context.Context) (*saleschannel.Connection, error) {
 	if p.repo == nil {
 		return nil, errSalesChannelReadModelPending(saleschannel.ChannelMercadoLivre, "connection")
@@ -500,8 +569,25 @@ func (p *MercadoLivreSalesChannelProvider) ProcessOrder(context.Context, string)
 	return nil, errSalesChannelReadModelPending(saleschannel.ChannelMercadoLivre, "process_order")
 }
 
-func (p *MercadoLivreSalesChannelProvider) ListProducts(context.Context, saleschannel.ProductFilter) ([]saleschannel.ExternalProduct, error) {
-	return nil, errSalesChannelReadModelPending(saleschannel.ChannelMercadoLivre, "products")
+func (p *MercadoLivreSalesChannelProvider) ListProducts(ctx context.Context, filter saleschannel.ProductFilter) ([]saleschannel.ExternalProduct, error) {
+	if p.repo != nil {
+		filter.Channel = saleschannel.ChannelMercadoLivre
+		return p.repo.ListExternalProducts(ctx, filter)
+	}
+	if p.client == nil {
+		return nil, errSalesChannelReadModelPending(saleschannel.ChannelMercadoLivre, "products")
+	}
+	items, err := p.client.ListItems(ctx)
+	if err != nil {
+		return nil, err
+	}
+	products := make([]saleschannel.ExternalProduct, 0, len(items))
+	for _, item := range items {
+		if item != nil {
+			products = append(products, mercadoLivreExternalProduct(item))
+		}
+	}
+	return products, nil
 }
 
 func (p *MercadoLivreSalesChannelProvider) LinkProduct(context.Context, string, uuid.UUID, string) error {

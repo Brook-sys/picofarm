@@ -457,6 +457,27 @@ func (r *SalesChannelRepository) externalProductID(ctx context.Context, connecti
 	return id, err
 }
 
+// GetExternalProductByProviderID retrieves a stored provider product/listing by connection and provider product ID.
+func (r *SalesChannelRepository) GetExternalProductByProviderID(ctx context.Context, connectionID uuid.UUID, externalProductID string) (*saleschannel.ExternalProduct, error) {
+	product, err := r.scanExternalProduct(r.db.QueryRowContext(ctx, `
+		SELECT id, connection_id, channel, external_product_id, title, description, url, status,
+			is_visible, price_cents, currency, raw_json
+		FROM sales_channel_external_products WHERE connection_id = ? AND external_product_id = ?
+	`, connectionID, externalProductID))
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	variants, err := r.listExternalProductVariants(ctx, product.ID)
+	if err != nil {
+		return nil, err
+	}
+	product.Variants = variants
+	return product, nil
+}
+
 // GetExternalProductByID retrieves a stored provider product/listing by canonical ID.
 func (r *SalesChannelRepository) GetExternalProductByID(ctx context.Context, id uuid.UUID) (*saleschannel.ExternalProduct, error) {
 	product, err := r.scanExternalProduct(r.db.QueryRowContext(ctx, `
