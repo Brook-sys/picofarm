@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/Brook-sys/picofarm/internal/mercadolivre"
 	"github.com/Brook-sys/picofarm/internal/model"
 	"github.com/Brook-sys/picofarm/internal/saleschannel"
 	"github.com/google/uuid"
@@ -301,15 +302,27 @@ func (p *ShopifySalesChannelProvider) UnlinkProduct(context.Context, string, uui
 	return errSalesChannelReadModelPending(saleschannel.ChannelShopify, "unlink_product")
 }
 
+// MercadoLivreClient is the Mercado Livre client surface the provider needs.
+// Tests can provide fakes without network or credentials.
+type MercadoLivreClient interface {
+	GetCurrentUser(ctx context.Context) (*mercadolivre.User, error)
+}
+
 // MercadoLivreSalesChannelProvider exposes the approved Mercado Livre MVP
-// contract before the live client is implemented. It keeps the provider visible
-// to descriptor/capability discovery while every operational method fails
-// closed with clear pending-adapter errors.
-type MercadoLivreSalesChannelProvider struct{}
+// contract and delegates provider validation to an injected fakeable client.
+// Operational sync/list/link methods remain fail-closed until follow-up cards.
+type MercadoLivreSalesChannelProvider struct {
+	client MercadoLivreClient
+}
 
 // NewMercadoLivreSalesChannelProvider creates the Mercado Livre provider shell.
 func NewMercadoLivreSalesChannelProvider() *MercadoLivreSalesChannelProvider {
 	return &MercadoLivreSalesChannelProvider{}
+}
+
+// NewMercadoLivreSalesChannelProviderWithClient creates a Mercado Livre provider with an injected client.
+func NewMercadoLivreSalesChannelProviderWithClient(client MercadoLivreClient) *MercadoLivreSalesChannelProvider {
+	return &MercadoLivreSalesChannelProvider{client: client}
 }
 
 func (p *MercadoLivreSalesChannelProvider) Descriptor() saleschannel.ProviderDescriptor {
@@ -329,8 +342,20 @@ func (p *MercadoLivreSalesChannelProvider) Descriptor() saleschannel.ProviderDes
 	}
 }
 
-func (p *MercadoLivreSalesChannelProvider) Status(context.Context) (saleschannel.ConnectionStatus, error) {
-	return saleschannel.ConnectionStatus{Channel: saleschannel.ChannelMercadoLivre}, nil
+func (p *MercadoLivreSalesChannelProvider) Status(ctx context.Context) (saleschannel.ConnectionStatus, error) {
+	status := saleschannel.ConnectionStatus{Channel: saleschannel.ChannelMercadoLivre}
+	if p.client == nil {
+		return status, nil
+	}
+	user, err := p.client.GetCurrentUser(ctx)
+	if err != nil {
+		status.LastError = saleschannel.SanitizeErrorMessage(err.Error())
+		return status, nil
+	}
+	status.Connected = true
+	status.AccountID = fmt.Sprintf("%d", user.ID)
+	status.DisplayName = user.Nickname
+	return status, nil
 }
 
 func (p *MercadoLivreSalesChannelProvider) Sync(_ context.Context, kind saleschannel.SyncKind) (saleschannel.SyncResult, error) {
