@@ -3,11 +3,13 @@ package service
 import (
 	"context"
 	"fmt"
+	"math"
 
 	"github.com/Brook-sys/picofarm/internal/mercadolivre"
 	"github.com/Brook-sys/picofarm/internal/model"
 	"github.com/Brook-sys/picofarm/internal/repository"
 	"github.com/Brook-sys/picofarm/internal/saleschannel"
+	"github.com/Brook-sys/picofarm/internal/shopee"
 	"github.com/google/uuid"
 )
 
@@ -27,13 +29,27 @@ type EtsySalesChannelProvider struct {
 	svc *EtsyService
 }
 
-// ShopeeSalesChannelProvider is the conservative MVP descriptor for Shopee.
-// Live auth, sync, inventory, and webhook behavior are added in later SHP cards.
-type ShopeeSalesChannelProvider struct{}
+// ShopeeClient is the fakeable Shopee Open Platform client surface used by the provider adapter.
+type ShopeeClient interface {
+	GetShop(ctx context.Context) (*shopee.Shop, error)
+	ListOrders(ctx context.Context) ([]*shopee.Order, error)
+	ListItems(ctx context.Context) ([]*shopee.Item, error)
+}
+
+// ShopeeSalesChannelProvider exposes the approved read-only Shopee MVP.
+type ShopeeSalesChannelProvider struct {
+	client ShopeeClient
+	repo   *repository.SalesChannelRepository
+}
 
 // NewShopeeSalesChannelProvider creates a Shopee provider descriptor skeleton.
 func NewShopeeSalesChannelProvider() *ShopeeSalesChannelProvider {
 	return &ShopeeSalesChannelProvider{}
+}
+
+// NewShopeeSalesChannelProviderWithRepository creates a Shopee provider with fakeable client and canonical storage.
+func NewShopeeSalesChannelProviderWithRepository(client ShopeeClient, repo *repository.SalesChannelRepository) *ShopeeSalesChannelProvider {
+	return &ShopeeSalesChannelProvider{client: client, repo: repo}
 }
 
 func (p *ShopeeSalesChannelProvider) Descriptor() saleschannel.ProviderDescriptor {
@@ -51,27 +67,78 @@ func (p *ShopeeSalesChannelProvider) Descriptor() saleschannel.ProviderDescripto
 	}
 }
 
-func (p *ShopeeSalesChannelProvider) Status(context.Context) (saleschannel.ConnectionStatus, error) {
-	return saleschannel.ConnectionStatus{Channel: saleschannel.ChannelShopee}, nil
+func (p *ShopeeSalesChannelProvider) Status(ctx context.Context) (saleschannel.ConnectionStatus, error) {
+	status := saleschannel.ConnectionStatus{Channel: saleschannel.ChannelShopee}
+	if p == nil || p.client == nil {
+		return status, nil
+	}
+	shop, err := p.client.GetShop(ctx)
+	if err != nil {
+		status.LastError = saleschannel.SanitizeErrorMessage(err.Error())
+		return status, nil
+	}
+	if shop == nil {
+		return status, nil
+	}
+	status.Connected = true
+	status.AccountID = fmt.Sprintf("%d", shop.ID)
+	status.DisplayName = shop.Name
+	return status, nil
 }
 
 func (p *ShopeeSalesChannelProvider) Sync(ctx context.Context, kind saleschannel.SyncKind) (saleschannel.SyncResult, error) {
-	return saleschannel.SyncResult{Channel: saleschannel.ChannelShopee, Kind: kind}, errSalesChannelReadModelPending(saleschannel.ChannelShopee, fmt.Sprintf("sync_%s", kind))
+	result := saleschannel.SyncResult{Channel: saleschannel.ChannelShopee, Kind: kind}
+	if kind != saleschannel.SyncOrders && kind != saleschannel.SyncProducts && kind != saleschannel.SyncAll {
+		return result, errSalesChannelReadModelPending(saleschannel.ChannelShopee, string(kind))
+	}
+	if p == nil || p.client == nil || p.repo == nil {
+		return result, errSalesChannelReadModelPending(saleschannel.ChannelShopee, "sync")
+	}
+	connection, err := p.upsertConnection(ctx)
+	if err != nil {
+		return result, err
+	}
+	if kind == saleschannel.SyncOrders || kind == saleschannel.SyncAll {
+		if err := p.syncOrders(ctx, connection, &result); err != nil {
+			return result, err
+		}
+	}
+	if kind == saleschannel.SyncProducts || kind == saleschannel.SyncAll {
+		if err := p.syncProducts(ctx, connection, &result); err != nil {
+			return result, err
+		}
+	}
+	return result, nil
 }
 
-func (p *ShopeeSalesChannelProvider) ListOrders(context.Context, saleschannel.OrderFilter) ([]saleschannel.ExternalOrder, error) {
+func (p *ShopeeSalesChannelProvider) ListOrders(ctx context.Context, filter saleschannel.OrderFilter) ([]saleschannel.ExternalOrder, error) {
+	if p.repo != nil {
+		filter.Channel = saleschannel.ChannelShopee
+		return p.repo.ListExternalOrders(ctx, filter)
+	}
 	return nil, errSalesChannelReadModelPending(saleschannel.ChannelShopee, "orders")
 }
 
-func (p *ShopeeSalesChannelProvider) GetOrder(context.Context, string) (*saleschannel.ExternalOrder, error) {
-	return nil, errSalesChannelReadModelPending(saleschannel.ChannelShopee, "order")
+func (p *ShopeeSalesChannelProvider) GetOrder(ctx context.Context, externalID string) (*saleschannel.ExternalOrder, error) {
+	if p.repo == nil {
+		return nil, errSalesChannelReadModelPending(saleschannel.ChannelShopee, "order")
+	}
+	connection, err := p.repo.ConnectionForChannel(ctx, saleschannel.ChannelShopee)
+	if err != nil || connection == nil {
+		return nil, err
+	}
+	return p.repo.GetExternalOrderByProviderID(ctx, connection.ID, externalID)
 }
 
 func (p *ShopeeSalesChannelProvider) ProcessOrder(context.Context, string) (*model.Order, error) {
 	return nil, errSalesChannelReadModelPending(saleschannel.ChannelShopee, "process_order")
 }
 
-func (p *ShopeeSalesChannelProvider) ListProducts(context.Context, saleschannel.ProductFilter) ([]saleschannel.ExternalProduct, error) {
+func (p *ShopeeSalesChannelProvider) ListProducts(ctx context.Context, filter saleschannel.ProductFilter) ([]saleschannel.ExternalProduct, error) {
+	if p.repo != nil {
+		filter.Channel = saleschannel.ChannelShopee
+		return p.repo.ListExternalProducts(ctx, filter)
+	}
 	return nil, errSalesChannelReadModelPending(saleschannel.ChannelShopee, "products")
 }
 
@@ -81,6 +148,170 @@ func (p *ShopeeSalesChannelProvider) LinkProduct(context.Context, string, uuid.U
 
 func (p *ShopeeSalesChannelProvider) UnlinkProduct(context.Context, string, uuid.UUID) error {
 	return errSalesChannelReadModelPending(saleschannel.ChannelShopee, "unlink_product")
+}
+
+func (p *ShopeeSalesChannelProvider) upsertConnection(ctx context.Context) (*saleschannel.Connection, error) {
+	shop, err := p.client.GetShop(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("shopee shop: %s", saleschannel.SanitizeErrorMessage(err.Error()))
+	}
+	if shop == nil {
+		return nil, fmt.Errorf("shopee shop unavailable")
+	}
+	connection := &saleschannel.Connection{
+		Channel:      saleschannel.ChannelShopee,
+		AccountID:    fmt.Sprintf("%d", shop.ID),
+		DisplayName:  shop.Name,
+		Status:       saleschannel.ConnectionStatusConnected,
+		Capabilities: []saleschannel.Capability{saleschannel.CapabilityOAuth, saleschannel.CapabilityOrdersRead, saleschannel.CapabilityProductsRead},
+	}
+	if err := p.repo.UpsertConnection(ctx, connection); err != nil {
+		return nil, err
+	}
+	return connection, nil
+}
+
+func (p *ShopeeSalesChannelProvider) syncOrders(ctx context.Context, connection *saleschannel.Connection, result *saleschannel.SyncResult) error {
+	orders, err := p.client.ListOrders(ctx)
+	if err != nil {
+		return fmt.Errorf("shopee list orders: %s", saleschannel.SanitizeErrorMessage(err.Error()))
+	}
+	for _, order := range orders {
+		if order == nil {
+			result.Skipped++
+			continue
+		}
+		external := shopeeExternalOrder(order)
+		external.ConnectionID = connection.ID
+		stored, err := p.repo.GetExternalOrderByProviderID(ctx, connection.ID, external.ExternalOrderID)
+		if err != nil {
+			return err
+		}
+		if err := p.repo.UpsertExternalOrder(ctx, &external); err != nil {
+			return err
+		}
+		result.TotalFetched++
+		if stored == nil {
+			result.Created++
+		} else {
+			result.Updated++
+		}
+	}
+	return nil
+}
+
+func (p *ShopeeSalesChannelProvider) syncProducts(ctx context.Context, connection *saleschannel.Connection, result *saleschannel.SyncResult) error {
+	items, err := p.client.ListItems(ctx)
+	if err != nil {
+		return fmt.Errorf("shopee list items: %s", saleschannel.SanitizeErrorMessage(err.Error()))
+	}
+	for _, item := range items {
+		if item == nil {
+			result.Skipped++
+			continue
+		}
+		external := shopeeExternalProduct(item)
+		external.ConnectionID = connection.ID
+		stored, err := p.repo.GetExternalProductByProviderID(ctx, connection.ID, external.ExternalProductID)
+		if err != nil {
+			return err
+		}
+		if err := p.repo.UpsertExternalProduct(ctx, &external); err != nil {
+			return err
+		}
+		result.TotalFetched++
+		if stored == nil {
+			result.Created++
+		} else {
+			result.Updated++
+		}
+	}
+	return nil
+}
+
+func shopeeExternalOrder(order *shopee.Order) saleschannel.ExternalOrder {
+	external := saleschannel.ExternalOrder{
+		Channel:         saleschannel.ChannelShopee,
+		ExternalOrderID: order.SN,
+		OrderNumber:     order.SN,
+		CustomerName:    order.BuyerName,
+		TotalCents:      centsFromFloat(order.TotalAmount),
+		Currency:        order.Currency,
+		Status:          order.Status,
+		RawJSON:         order.RawJSON,
+		CreatedAt:       order.CreatedAt,
+		UpdatedAt:       order.UpdatedAt,
+	}
+	if external.CustomerName == "" {
+		external.CustomerName = order.Recipient
+	}
+	for _, item := range order.OrderItems {
+		external.Items = append(external.Items, saleschannel.ExternalOrderItem{
+			ExternalLineItemID: shopeeLineItemID(item),
+			SKU:                firstNonEmptyString(item.ModelSKU, item.ItemSKU),
+			Title:              item.Title,
+			Quantity:           item.Quantity,
+			UnitPriceCents:     centsFromFloat(item.UnitPrice),
+			Currency:           firstNonEmptyString(item.Currency, order.Currency),
+		})
+	}
+	return external
+}
+
+func shopeeExternalProduct(item *shopee.Item) saleschannel.ExternalProduct {
+	product := saleschannel.ExternalProduct{
+		Channel:           saleschannel.ChannelShopee,
+		ExternalProductID: fmt.Sprintf("%d", item.ID),
+		Title:             item.Title,
+		URL:               item.URL,
+		Status:            item.Status,
+		IsVisible:         item.Status == "NORMAL" || item.Status == "active",
+		PriceCents:        centsFromFloat(item.Price),
+		Currency:          item.Currency,
+		RawJSON:           item.RawJSON,
+	}
+	if len(item.ModelList) == 0 {
+		product.Variants = append(product.Variants, saleschannel.ExternalProductVariant{
+			ExternalVariantID: fmt.Sprintf("%d", item.ID),
+			SKU:               item.SKU,
+			Title:             item.Title,
+			PriceCents:        product.PriceCents,
+			Currency:          product.Currency,
+			StockQuantity:     item.Stock,
+		})
+		return product
+	}
+	for _, model := range item.ModelList {
+		product.Variants = append(product.Variants, saleschannel.ExternalProductVariant{
+			ExternalVariantID: fmt.Sprintf("%d", model.ID),
+			SKU:               firstNonEmptyString(model.SKU, item.SKU),
+			Title:             firstNonEmptyString(model.Title, item.Title),
+			PriceCents:        centsFromFloat(model.Price),
+			Currency:          firstNonEmptyString(model.Currency, item.Currency),
+			StockQuantity:     model.Stock,
+		})
+	}
+	return product
+}
+
+func shopeeLineItemID(item shopee.OrderItem) string {
+	if item.ModelID != 0 {
+		return fmt.Sprintf("%d:%d", item.ItemID, item.ModelID)
+	}
+	return fmt.Sprintf("%d", item.ItemID)
+}
+
+func centsFromFloat(value float64) int {
+	return int(math.Round(value * 100))
+}
+
+func firstNonEmptyString(values ...string) string {
+	for _, value := range values {
+		if value != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 // NewEtsySalesChannelProvider creates an Etsy sales-channel adapter.

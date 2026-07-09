@@ -40,7 +40,7 @@ Existing provider-specific integration code lives in these areas:
 | Squarespace | `internal/model/squarespace.go`, `internal/repository/squarespace.go`, `internal/service/squarespace.go`, `internal/api/squarespace_handler.go` | `internal/squarespace/client.go` | API-key style connection, orders/products sync and links. |
 | Shopify | `internal/repository/shopify.go`, `internal/service/shopify.go`, `internal/api/shopify_handler.go`, Shopify model shapes in `internal/model/models.go` | service-level HTTP/OAuth code | Existing support is partial and should be exposed by capabilities, not assumptions. |
 | Mercado Livre | `internal/service/sales_channel_adapters.go` provider shell, `internal/saleschannel/types.go` channel ID | `internal/mercadolivre/client.go` with injected HTTP client/fakes, `ListOrders` via `/orders/search`, and `ListItems` via `/users/{id}/items/search` + `/items/{id}` | Descriptor/capability contract and fakeable client are registered; `Sync(orders)` imports Mercado Livre orders idempotently via `UpsertExternalOrder`, and `Sync(products)` imports active listings idempotently via `UpsertExternalProduct` with SKU/stock variants for generic product linking. Live OAuth/write inventory/webhooks are follow-up ML cards. |
-| Shopee | `internal/service/sales_channel_adapters.go` provider skeleton, `internal/saleschannel/types.go` channel ID | `internal/shopee/signing.go` HMAC helper; full HTTP client is a follow-up. | Descriptor is registered with OAuth, `orders_read`, and `products_read` only. Official Open Platform docs expose signed API calls, shop authorization, order/product/stock endpoints, push notifications, and sandbox testing. Brazil/regional availability and partner access must be confirmed for the user's account before live use. |
+| Shopee | `internal/service/sales_channel_adapters.go` provider skeleton/sync adapter, `internal/saleschannel/types.go` channel ID | `internal/shopee/signing.go` HMAC helper and `internal/shopee/types.go` normalized fakeable client DTOs; full HTTP client is a follow-up. | Descriptor is registered with OAuth, `orders_read`, and `products_read` only. Fake-client backed sync maps orders and item/model products into canonical storage idempotently. Official Open Platform docs expose signed API calls, shop authorization, order/product/stock endpoints, push notifications, and sandbox testing. Brazil/regional availability and partner access must be confirmed for the user's account before live use. |
 
 Current provider-specific route groups remain supported during migration:
 
@@ -292,8 +292,8 @@ SHP-02 approves a conservative MVP that keeps Shopee provider work useful withou
 | --- | --- | --- | --- |
 | Channel ID | Use `shopee`. | Provider skeleton registered. | Descriptor tests and generic `/api/sales-channels` smoke show stable ID/display name. |
 | Auth type | Model Shopee as OAuth shop authorization plus signed V2 API calls. Do not introduce a new public `signed_api` auth type unless the generic contract needs it later. | OAuth connect UI only after auth-url/callback/state handling is implemented and tested. | Fake token exchange tests, state mismatch/replay tests, and redaction tests for `code`, tokens, partner keys, and signed URLs. |
-| `orders_read` | In MVP. Import order list/detail into canonical external orders. | Enabled after fake-client idempotent order sync tests pass. | Order SN, status, buyer/recipient/shipping summary, totals/currency, item ID, model ID, seller SKU/model SKU, and quantity map into `external_orders`/items without exposing `raw_json`. |
-| `products_read` | In MVP. Import item/base info plus model/variation data into canonical external products and variants. | Enabled after fake-client idempotent product sync tests pass. | Item ID, model ID, item SKU, model SKU, title, status, price/currency, stock, images/permalink, and variation metadata map into `external_products`/variants. |
+| `orders_read` | In MVP. Import order list/detail into canonical external orders. | Fake-client backed adapter implemented; live HTTP client remains gated by partner/account access. | Order SN, status, buyer/recipient/shipping summary, totals/currency, item ID, model ID, seller SKU/model SKU, and quantity map into `external_orders`/items without exposing `raw_json`. |
+| `products_read` | In MVP. Import item/base info plus model/variation data into canonical external products and variants. | Fake-client backed adapter implemented; live HTTP client remains gated by partner/account access. | Item ID, model ID, item SKU, model SKU, title, status, price/currency, stock, images/permalink, and variation metadata map into `external_products`/variants. |
 | Product links | In MVP after product sync. Reuse generic product link routes. | Enabled when Shopee products/variants are present in canonical storage. | Link/unlink tests prove project ID validation and variant ownership checks. |
 | `inventory_write` | Post-MVP gated capability. Do not advertise until read-only sync and product links are stable. | Enabled only after item-level and model-level stock update payload tests pass. | Fake-client tests for stock update payloads, rate-limit errors, and sanitized sync-run failures. |
 | `webhooks` | Post-MVP gated capability unless push signature/verification requirements are confirmed. | Enabled only after idempotent webhook storage and verification rules are implemented. | Duplicate push-event tests, metadata-only listing tests, and signature/header redaction tests. |
@@ -317,10 +317,10 @@ Pagination and rate-limit strategy:
 
 Recommended implementation sequence:
 
-1. Add only the `shopee` descriptor/provider skeleton with OAuth, `orders_read`, and `products_read` after this MVP matrix; keep `inventory_write` and `webhooks` absent until their gates are met.
-2. Build the signed fakeable client first: authorization URL/token exchange, signature helper, order list/detail, item/model reads, stock update payload generation, and push-event parsing.
-3. Implement read-only order sync, then product/model sync, then product links.
-4. Add inventory write and webhook replay as separate post-MVP cards after read-only flows are stable.
+1. Keep the registered `shopee` descriptor/provider skeleton limited to OAuth, `orders_read`, and `products_read`; `inventory_write` and `webhooks` remain absent until their gates are met.
+2. Add the real signed HTTP client behind the existing fakeable interface: authorization URL/token exchange, order list/detail, item/model reads, stock update payload generation, and push-event parsing.
+3. Product links can reuse the generic link/unlink routes once Shopee products/variants are present in canonical storage.
+4. Add inventory write and webhook replay as separate post-MVP cards after read-only flows are stable with live-client fixtures.
 5. Keep every Shopee path covered by fake-client tests and do not require real Shopee credentials in CI.
 
 ## Checklist for adding a new channel
