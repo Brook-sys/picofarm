@@ -7,6 +7,7 @@ import (
 	"github.com/Brook-sys/picofarm/internal/printer"
 	"github.com/Brook-sys/picofarm/internal/realtime"
 	"github.com/Brook-sys/picofarm/internal/repository"
+	"github.com/Brook-sys/picofarm/internal/saleschannel"
 	"github.com/Brook-sys/picofarm/internal/storage"
 	"github.com/google/uuid"
 )
@@ -26,6 +27,7 @@ type Services struct {
 	Stats           *StatsService
 	Etsy            *EtsyService
 	Squarespace     *SquarespaceService
+	SalesChannels   *saleschannel.Registry
 	BambuCloud      *BambuCloudService
 	Settings        *SettingsService
 	ProjectSupplies *ProjectSupplyService
@@ -114,6 +116,7 @@ func NewServices(repos *repository.Repositories, store storage.Storage, printerM
 	services.Alerts = NewAlertService(repos.Spools, repos.Materials, repos.Orders, repos.AlertDismissals, hub)
 	services.Tags = NewTagService(repos.Tags, repos.Parts, repos.Designs)
 	services.Shopify = NewShopifyService(repos.Shopify, services.Orders, hub)
+	services.SalesChannels = mustNewSalesChannelRegistry(services)
 	services.Timeline = NewTimelineService(repos.Orders, repos.Tasks, repos.Projects, repos.PrintJobs)
 	services.Tasks = NewTaskService(repos.Tasks, repos.Projects, repos.PrintJobs, repos.Parts, repos.TaskChecklist, repos.Designs, hub)
 	services.Feedback = &FeedbackService{repo: repos.Feedback}
@@ -145,6 +148,7 @@ func NewServices(repos *repository.Repositories, store storage.Storage, printerM
 func NewServicesWithEtsy(repos *repository.Repositories, store storage.Storage, printerMgr *printer.Manager, hub *realtime.Hub, etsyConfig EtsyConfig) *Services {
 	services := NewServices(repos, store, printerMgr, hub)
 	services.Etsy = NewEtsyService(repos.Etsy, etsyConfig.ClientID, etsyConfig.RedirectURI, services.Settings)
+	services.SalesChannels = mustNewSalesChannelRegistry(services)
 	return services
 }
 
@@ -152,7 +156,20 @@ func NewServicesWithEtsy(repos *repository.Repositories, store storage.Storage, 
 func NewServicesWithConfig(repos *repository.Repositories, store storage.Storage, printerMgr *printer.Manager, hub *realtime.Hub, config ServicesConfig) *Services {
 	services := NewServices(repos, store, printerMgr, hub)
 	services.Etsy = NewEtsyService(repos.Etsy, config.Etsy.ClientID, config.Etsy.RedirectURI, services.Settings)
+	services.SalesChannels = mustNewSalesChannelRegistry(services)
 	return services
+}
+
+func mustNewSalesChannelRegistry(services *Services) *saleschannel.Registry {
+	registry, err := NewSalesChannelRegistry(
+		NewEtsySalesChannelProvider(services.Etsy),
+		NewSquarespaceSalesChannelProvider(services.Squarespace),
+		NewShopifySalesChannelProvider(services.Shopify),
+	)
+	if err != nil {
+		panic(err)
+	}
+	return registry
 }
 
 // SetBackupService sets the backup service (must be called after DB is available).

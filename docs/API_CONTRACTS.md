@@ -257,6 +257,8 @@ Representative route groups:
 
 Primary contracts live in:
 
+- `internal/saleschannel/*.go` for provider-neutral descriptors, capabilities, connection status, sync results, external orders/products, sync runs, and product links
+- `internal/service/sales_channel_adapters.go` for the current legacy-backed Etsy/Squarespace/Shopify provider adapters
 - `internal/model/etsy.go`
 - `internal/model/squarespace.go`
 - Shopify/Bambu model shapes in `internal/model/models.go`
