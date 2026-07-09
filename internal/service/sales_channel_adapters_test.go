@@ -159,6 +159,54 @@ func TestMercadoLivreSalesChannelProvider_StatusSanitizesClientErrors(t *testing
 	}
 }
 
+func TestMercadoLivreSalesChannelProvider_SyncOrdersUpsertsExternalOrdersIdempotently(t *testing.T) {
+	repos := openSalesChannelAdapterRepos(t)
+	ctx := context.Background()
+	provider := NewMercadoLivreSalesChannelProviderWithRepository(fakeMercadoLivreClient{
+		user:  &mercadolivre.User{ID: 123456789, Nickname: "PICO_TEST_USER", SiteID: "MLB"},
+		order: fakeMercadoLivreOrder(),
+	}, repos.SalesChannels)
+
+	result, err := provider.Sync(ctx, saleschannel.SyncOrders)
+	if err != nil {
+		t.Fatalf("sync orders: %v", err)
+	}
+	if result.TotalFetched != 1 || result.Created != 1 || result.Updated != 0 || result.Skipped != 0 {
+		t.Fatalf("unexpected first sync result: %+v", result)
+	}
+
+	orders, err := repos.SalesChannels.ListExternalOrders(ctx, saleschannel.OrderFilter{Channel: saleschannel.ChannelMercadoLivre})
+	if err != nil {
+		t.Fatalf("list stored orders: %v", err)
+	}
+	if len(orders) != 1 {
+		t.Fatalf("expected 1 stored order, got %d", len(orders))
+	}
+	firstID := orders[0].ID
+	if orders[0].ExternalOrderID != "2000000001" || orders[0].CustomerName != "TEST_BUYER" || orders[0].TotalCents != 12990 {
+		t.Fatalf("unexpected stored order: %+v", orders[0])
+	}
+	if len(orders[0].Items) != 1 || orders[0].Items[0].SKU != "DRAGON-RED" {
+		t.Fatalf("unexpected stored items: %+v", orders[0].Items)
+	}
+
+	result, err = provider.Sync(ctx, saleschannel.SyncOrders)
+	if err != nil {
+		t.Fatalf("sync orders second: %v", err)
+	}
+	if result.TotalFetched != 1 || result.Created != 0 || result.Updated != 1 || result.Skipped != 0 {
+		t.Fatalf("unexpected second sync result: %+v", result)
+	}
+
+	orders, err = repos.SalesChannels.ListExternalOrders(ctx, saleschannel.OrderFilter{Channel: saleschannel.ChannelMercadoLivre})
+	if err != nil {
+		t.Fatalf("list stored orders second: %v", err)
+	}
+	if len(orders) != 1 || orders[0].ID != firstID {
+		t.Fatalf("expected idempotent upsert to keep one row with ID %s, got %+v", firstID, orders)
+	}
+}
+
 func TestServicesWireSalesChannelRegistryWithInitialAdapters(t *testing.T) {
 	t.Run("default services", func(t *testing.T) {
 		repos := openSalesChannelAdapterRepos(t)
@@ -217,8 +265,9 @@ func assertStatus(t *testing.T, provider saleschannel.Provider, channel salescha
 }
 
 type fakeMercadoLivreClient struct {
-	user *mercadolivre.User
-	err  error
+	user  *mercadolivre.User
+	order *mercadolivre.Order
+	err   error
 }
 
 func (f fakeMercadoLivreClient) GetCurrentUser(context.Context) (*mercadolivre.User, error) {
@@ -226,6 +275,42 @@ func (f fakeMercadoLivreClient) GetCurrentUser(context.Context) (*mercadolivre.U
 		return nil, f.err
 	}
 	return f.user, nil
+}
+
+func (f fakeMercadoLivreClient) GetOrder(context.Context, string) (*mercadolivre.Order, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	return f.order, nil
+}
+
+func (f fakeMercadoLivreClient) ListOrders(context.Context) ([]*mercadolivre.Order, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	if f.order == nil {
+		return []*mercadolivre.Order{}, nil
+	}
+	return []*mercadolivre.Order{f.order}, nil
+}
+
+func fakeMercadoLivreOrder() *mercadolivre.Order {
+	order := &mercadolivre.Order{
+		ID:          2000000001,
+		Status:      "paid",
+		TotalAmount: 129.90,
+		CurrencyID:  "BRL",
+	}
+	order.Buyer.Nickname = "TEST_BUYER"
+	order.Buyer.FirstName = "Test"
+	order.Buyer.LastName = "Buyer"
+	order.Buyer.Email = "buyer@example.test"
+	item := mercadolivre.OrderItem{Quantity: 1, UnitPrice: 129.90, CurrencyID: "BRL"}
+	item.Item.ID = "MLB123456789"
+	item.Item.Title = "Printed Dragon Miniature"
+	item.Item.SKU = "DRAGON-RED"
+	order.Items = []mercadolivre.OrderItem{item}
+	return order
 }
 
 func openSalesChannelAdapterRepos(t *testing.T) *repository.Repositories {

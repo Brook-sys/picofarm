@@ -39,7 +39,7 @@ Existing provider-specific integration code lives in these areas:
 | Etsy | `internal/model/etsy.go`, `internal/repository/etsy.go`, `internal/service/etsy.go`, `internal/api/etsy_handler.go` | `internal/etsy/client.go` | OAuth, receipts/orders, listings, links, inventory/webhooks. |
 | Squarespace | `internal/model/squarespace.go`, `internal/repository/squarespace.go`, `internal/service/squarespace.go`, `internal/api/squarespace_handler.go` | `internal/squarespace/client.go` | API-key style connection, orders/products sync and links. |
 | Shopify | `internal/repository/shopify.go`, `internal/service/shopify.go`, `internal/api/shopify_handler.go`, Shopify model shapes in `internal/model/models.go` | service-level HTTP/OAuth code | Existing support is partial and should be exposed by capabilities, not assumptions. |
-| Mercado Livre | `internal/service/sales_channel_adapters.go` provider shell, `internal/saleschannel/types.go` channel ID | `internal/mercadolivre/client.go` with injected HTTP client/fakes | Descriptor/capability contract and fakeable client are registered; live OAuth/sync/webhooks are implemented by follow-up ML cards. |
+| Mercado Livre | `internal/service/sales_channel_adapters.go` provider shell, `internal/saleschannel/types.go` channel ID | `internal/mercadolivre/client.go` with injected HTTP client/fakes and `ListOrders` via `/orders/search` | Descriptor/capability contract and fakeable client are registered; `Sync(orders)` imports Mercado Livre orders into canonical external orders idempotently via `UpsertExternalOrder`. Live OAuth/products/webhooks are follow-up ML cards. |
 
 Current provider-specific route groups remain supported during migration:
 
