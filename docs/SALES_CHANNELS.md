@@ -40,6 +40,7 @@ Existing provider-specific integration code lives in these areas:
 | Squarespace | `internal/model/squarespace.go`, `internal/repository/squarespace.go`, `internal/service/squarespace.go`, `internal/api/squarespace_handler.go` | `internal/squarespace/client.go` | API-key style connection, orders/products sync and links. |
 | Shopify | `internal/repository/shopify.go`, `internal/service/shopify.go`, `internal/api/shopify_handler.go`, Shopify model shapes in `internal/model/models.go` | service-level HTTP/OAuth code | Existing support is partial and should be exposed by capabilities, not assumptions. |
 | Mercado Livre | `internal/service/sales_channel_adapters.go` provider shell, `internal/saleschannel/types.go` channel ID | `internal/mercadolivre/client.go` with injected HTTP client/fakes, `ListOrders` via `/orders/search`, and `ListItems` via `/users/{id}/items/search` + `/items/{id}` | Descriptor/capability contract and fakeable client are registered; `Sync(orders)` imports Mercado Livre orders idempotently via `UpsertExternalOrder`, and `Sync(products)` imports active listings idempotently via `UpsertExternalProduct` with SKU/stock variants for generic product linking. Live OAuth/write inventory/webhooks are follow-up ML cards. |
+| Shopee | Planned provider only; no code should be added before the SHP discovery/MVP cards are complete. | Future injectable Open Platform client. | Official Open Platform docs expose signed API calls, shop authorization, order/product/stock endpoints, push notifications, and sandbox testing. Brazil/regional availability and partner access must be confirmed for the user's account before enabling capabilities. |
 
 Current provider-specific route groups remain supported during migration:
 
@@ -266,6 +267,30 @@ Recommended implementation sequence:
 2. Build a fakeable client with fixtures for OAuth token refresh, orders, item search/multiget, item update, shipments read, and notifications.
 3. Implement read-only order sync first, then products/listings, then inventory write, then notifications/webhooks.
 4. Keep every live endpoint behind capabilities and fake-client tests; do not require Mercado Livre credentials for CI.
+
+## Shopee discovery matrix
+
+Use this matrix as the source of truth for the first Shopee implementation cards. It is based on the Shopee Open Platform pages discovered during SHP-01, including the developer guides for shop authorization, API calls, push mechanism, sandbox testing, and V2 order/product/stock documents. Re-check the official docs before implementation because partner access, regional support, and endpoint contracts can change.
+
+| Area | Official API shape | PicoFarm capability mapping | Implementation notes |
+| --- | --- | --- | --- |
+| Platform/access | Shopee Open Platform is a partner-app portal. Production usage requires a registered partner app and seller/shop authorization; Brazilian availability was found through Shopee Open API Brazil material, but partner/regional eligibility must be confirmed against the user's account. | Planned channel ID `shopee`; do not register a live descriptor until access and MVP scope are confirmed. | Treat SHP-02 as the approval gate for whether Shopee becomes a full sales channel or remains blocked by partner access. Do not use scraping or unofficial endpoints as the integration path. |
+| Authentication | Shop authorization redirects the seller to authorize the app and returns an authorization code. Token exchange uses public/auth endpoints to obtain access and refresh tokens tied to `shop_id`/merchant context. | `oauth` plus future generic `/api/sales-channels/shopee/auth-url` and `/callback`. | OAuth `code`, access tokens, refresh tokens, partner keys, and signed query strings must never be logged, returned, stored in `Connection.ConfigJSON`, or embedded in docs except as `[REDACTED]`. State validation and replay protection are required before enabling the callback. |
+| Request signing | V2 API calls are signed with HMAC-SHA256 over a base string that includes partner identity, request path, timestamp, and, for shop-scoped calls, token/shop context. Requests include `partner_id`, `timestamp`, and `sign`; shop-scoped calls also use `shop_id` and access token. | Future signed OAuth provider/client, not `api_key`. | Isolate canonical base-string construction and HMAC signing in a small package with table-driven tests using fake IDs/keys. Do not scatter signing logic in services or UI. |
+| Orders | Official V2 order docs include order list and order detail endpoints. Order detail returns order numbers, statuses, timestamps, buyer/recipient/shipping fields, currency/totals, and item/model details needed for fulfillment mapping. | `orders_read`, canonical `external_orders`, future `POST /api/sales-channels/orders/{id}/process`. | SHP-04 should map order SN, item IDs, model IDs, seller SKU/model SKU, quantity, totals, currency, order status, recipient/shipping summary, and raw provider payload into canonical storage while omitting `raw_json` from API responses. |
+| Products/items/models | Official V2 product docs include item list/base-info and model/variation detail endpoints. Shopee separates item and model/variation concepts; stock/SKU may live at model level for variation listings. | `products_read`, canonical `external_products` and variants. | Product sync must preserve item ID, model ID, item/model SKU, title, status, price/currency, stock, images/permalink when available, and variation metadata for generic product linking. |
+| Inventory writes | Official product docs include stock update endpoints for item/model stock. | `inventory_write` only after read-only product sync and link mapping are stable. | Keep inventory writes capability-gated and disabled until fake-client tests prove item-level and model-level stock payloads, validation, and sanitized errors. |
+| Webhooks/push | Shopee Open Platform documents a push mechanism for event notifications. | `webhooks`, canonical `sales_channel_webhook_events`, future `POST /api/sales-channels/shopee/webhook`. | Store push events idempotently and expose metadata-only listings. Signature/verification requirements must be confirmed in the official push docs before accepting live callbacks; raw payload/signature must not be echoed. |
+| Sandbox/testing | Shopee documents Sandbox Testing V2. | Fake-client CI plus optional sandbox manual QA. | CI must not require real seller credentials. Use local fixtures/fake clients for auth, signing, order list/detail, item/model reads, stock updates, and push events; reserve Shopee sandbox accounts for manual validation. |
+| Rate limits/errors | Official docs and partner policies can impose per-app/per-shop limits and signed request expiry behavior. | Provider throttling/backoff and sanitized sync-run diagnostics. | Add retry/backoff for `429`/transient failures before live polling. Persist only sanitized errors through `sales_channel_sync_runs`; never persist full signed URLs, bearer tokens, or partner secrets. |
+
+Recommended implementation sequence:
+
+1. Complete SHP-02 with a Brazil/account-specific MVP decision and capability matrix.
+2. Add only a descriptor/provider skeleton once the chosen capabilities are approved; keep unsupported capabilities absent, not aspirational.
+3. Build the signed fakeable client first: authorization URL/token exchange, signature helper, order list/detail, item/model reads, stock update, and push-event parsing.
+4. Implement read-only order sync, then product/model sync, then product links and inventory writes, then webhook replay.
+5. Keep every Shopee path covered by fake-client tests and do not require real Shopee credentials in CI.
 
 ## Checklist for adding a new channel
 

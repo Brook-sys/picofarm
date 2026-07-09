@@ -277,7 +277,7 @@ Primary contracts live in:
 
 Integration endpoints must be testable without real credentials. Use fake clients or conversion tests for CI.
 
-Sales-channel work should move toward provider descriptors, capabilities, generic connection status, external orders/products, product links, sync runs, and optional webhook events as documented in `docs/SALES_CHANNELS.md`. Keep legacy integration route contracts working until a dedicated migration/deprecation cycle explicitly changes them. Mercado Livre is currently documented as a future OAuth provider: use `mercado_livre` as the channel ID, OAuth + `offline_access` for refresh tokens, test users instead of a sandbox, and fake-client fixtures for CI.
+Sales-channel work should move toward provider descriptors, capabilities, generic connection status, external orders/products, product links, sync runs, and optional webhook events as documented in `docs/SALES_CHANNELS.md`. Keep legacy integration route contracts working until a dedicated migration/deprecation cycle explicitly changes them. Mercado Livre uses channel ID `mercado_livre`, OAuth + `offline_access` for refresh tokens, test users instead of a sandbox, and fake-client fixtures for CI. Shopee is discovery/planning-only until SHP-02 confirms account/regional access and the MVP capability matrix; if approved, use channel ID `shopee`, OAuth shop authorization, signed HMAC-SHA256 V2 API calls, fake-client/sandbox validation, and no real credentials in CI.
 
 ### Notifications, alerts, backups, settings, and feedback
 
