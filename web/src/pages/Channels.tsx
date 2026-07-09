@@ -68,8 +68,8 @@ export default function Channels() {
   const [linkingId, setLinkingId] = useState<string | null>(null)
   const [selectedTemplate, setSelectedTemplate] = useState<Record<string, string>>({})
 
-  const connectedSalesChannels = salesChannels.filter(({ status }) => status.connected)
-  const visibleSalesChannels = salesChannels.filter(({ descriptor }) => descriptor.id === 'etsy' || descriptor.id === 'squarespace')
+  const visibleSalesChannels = salesChannels
+  const hasConfiguredOrPlannedChannel = salesChannels.length > 0
   const syncKind: SalesChannelSyncKind = tab === 'orders' ? 'orders' : 'products'
   const syncableVisibleChannels = visibleSalesChannels.filter(({ descriptor, status }) =>
     status.connected && descriptor.capabilities.includes(tab === 'orders' ? 'orders_read' : 'products_read')
@@ -293,7 +293,43 @@ export default function Channels() {
     })
   }
 
-  const hasConnectedChannel = connectedSalesChannels.length > 0
+  function channelTone(channelID: SalesChannelID) {
+    switch (channelID) {
+      case 'etsy':
+        return 'bg-orange-500/10 border-orange-500/30 text-orange-300'
+      case 'squarespace':
+        return 'bg-purple-500/10 border-purple-500/30 text-purple-300'
+      case 'mercado_livre':
+        return 'bg-yellow-500/10 border-yellow-500/30 text-yellow-300'
+      case 'shopee':
+        return 'bg-rose-500/10 border-rose-500/30 text-rose-300'
+      case 'olx':
+        return 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
+      default:
+        return 'bg-sky-500/10 border-sky-500/30 text-sky-300'
+    }
+  }
+
+  function channelIcon(channelID: SalesChannelID, className = 'h-3.5 w-3.5') {
+    return channelID === 'etsy' ? <Store className={className} /> : <ShoppingBag className={className} />
+  }
+
+  function syncButtonTone(channelID: Channel) {
+    switch (channelID) {
+      case 'etsy':
+        return 'bg-orange-500 hover:bg-orange-600'
+      case 'squarespace':
+        return 'bg-purple-500 hover:bg-purple-600'
+      case 'mercado_livre':
+        return 'bg-yellow-600 hover:bg-yellow-500'
+      case 'shopee':
+        return 'bg-rose-600 hover:bg-rose-500'
+      case 'olx':
+        return 'bg-emerald-600 hover:bg-emerald-500'
+      default:
+        return 'bg-accent-600 hover:bg-accent-500'
+    }
+  }
 
   return (
     <div className="p-6">
@@ -310,27 +346,22 @@ export default function Channels() {
 
         {/* Connection Status Pills */}
         <div className="flex items-center gap-2">
-          {connectedSalesChannels.map(({ descriptor, status }) => (
+          {visibleSalesChannels.map(({ descriptor, status }) => (
             <div
               key={descriptor.id}
               className={cn(
                 'flex items-center gap-1.5 px-2 py-1 rounded-lg border',
-                descriptor.id === 'etsy'
-                  ? 'bg-orange-500/10 border-orange-500/30 text-orange-300'
-                  : descriptor.id === 'squarespace'
-                    ? 'bg-purple-500/10 border-purple-500/30 text-purple-300'
-                    : 'bg-sky-500/10 border-sky-500/30 text-sky-300'
+                channelTone(descriptor.id),
+                !status.connected && 'opacity-70'
               )}
+              title={status.connected ? 'Connected' : status.last_error || 'Not connected yet'}
             >
-              {descriptor.id === 'etsy' ? (
-                <Store className="h-3.5 w-3.5" />
-              ) : (
-                <ShoppingBag className="h-3.5 w-3.5" />
-              )}
+              {channelIcon(descriptor.id)}
               <span className="text-xs">{status.display_name || descriptor.display_name}</span>
+              {!status.connected && <span className="text-[10px] uppercase tracking-wide opacity-70">planned</span>}
             </div>
           ))}
-          {!hasConnectedChannel && (
+          {!hasConfiguredOrPlannedChannel && (
             <RouterLink
               to="/settings"
               className="text-sm text-accent-400 hover:text-accent-300"
@@ -379,10 +410,8 @@ export default function Channels() {
               className="input h-auto py-1.5 w-auto"
             >
               <option value="all">All Channels</option>
-              {visibleSalesChannels.map(({ descriptor, status }) => (
-                status.connected && (
-                  <option key={descriptor.id} value={descriptor.id}>{descriptor.display_name}</option>
-                )
+              {visibleSalesChannels.map(({ descriptor }) => (
+                <option key={descriptor.id} value={descriptor.id}>{descriptor.display_name}</option>
               ))}
             </select>
           </div>
@@ -425,7 +454,7 @@ export default function Channels() {
               disabled={syncing !== null || !syncableVisibleChannels.some(({ descriptor }) => descriptor.id === channel)}
               className={cn(
                 'flex items-center gap-2 px-4 py-2 text-white rounded-lg disabled:opacity-50 text-sm',
-                channel === 'etsy' ? 'bg-orange-500 hover:bg-orange-600' : 'bg-purple-500 hover:bg-purple-600'
+                syncButtonTone(channel)
               )}
             >
               <RefreshCw className={cn('h-4 w-4', syncing === channel && 'animate-spin')} />
@@ -453,7 +482,7 @@ export default function Channels() {
       )}
 
       {/* Content */}
-      {!hasConnectedChannel ? (
+      {!hasConfiguredOrPlannedChannel ? (
         <div className="text-center py-12">
           <Package className="h-12 w-12 mx-auto text-surface-600 mb-3" />
           <p className="text-surface-400">No sales channels connected</p>
@@ -461,7 +490,7 @@ export default function Channels() {
             to="/settings"
             className="mt-4 inline-block text-accent-400 hover:text-accent-300"
           >
-            Connect Etsy or Squarespace in Settings
+            Connect or plan a sales channel in Settings
           </RouterLink>
         </div>
       ) : loading ? (
@@ -484,11 +513,7 @@ export default function Channels() {
                   <div className="flex-1">
                     <div className="flex items-center gap-3">
                       {/* Channel Icon */}
-                      {order.channel === 'etsy' ? (
-                        <Store className="h-4 w-4 text-orange-400" />
-                      ) : (
-                        <ShoppingBag className="h-4 w-4 text-purple-400" />
-                      )}
+                      {channelIcon(order.channel, 'h-4 w-4')}
                       <h3 className="text-lg font-medium text-surface-100">
                         {order.customerName}
                       </h3>
@@ -589,11 +614,7 @@ export default function Channels() {
                   <div className="flex-1">
                     <div className="flex items-center gap-3">
                       {/* Channel Icon */}
-                      {product.channel === 'etsy' ? (
-                        <Store className="h-4 w-4 text-orange-400" />
-                      ) : (
-                        <ShoppingBag className="h-4 w-4 text-purple-400" />
-                      )}
+                      {channelIcon(product.channel, 'h-4 w-4')}
                       <h3 className="text-lg font-medium text-surface-100">
                         {product.name}
                       </h3>

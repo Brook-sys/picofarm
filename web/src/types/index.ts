@@ -1215,7 +1215,7 @@ export interface SyncResult {
 }
 
 // Provider-neutral sales-channel types
-export type SalesChannelID = 'etsy' | 'squarespace' | 'shopify' | 'mercado_livre' | 'shopee'
+export type SalesChannelID = 'etsy' | 'squarespace' | 'shopify' | 'mercado_livre' | 'shopee' | 'olx'
 export type SalesChannelAuthType = 'oauth' | 'api_key' | 'manual'
 export type SalesChannelCapability = 'oauth' | 'api_key' | 'orders_read' | 'products_read' | 'inventory_write' | 'webhooks'
 export type SalesChannelSyncKind = 'orders' | 'products' | 'all'
