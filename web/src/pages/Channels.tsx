@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { Link as RouterLink } from 'react-router-dom'
 import { RefreshCw, Package, CheckCircle, Clock, ExternalLink, ShoppingBag, Store, Link, Filter } from 'lucide-react'
 import { etsyApi, squarespaceApi, templatesApi, salesChannelsApi } from '../api/client'
-import type { EtsyReceipt, EtsyListing, SquarespaceOrder, SquarespaceProduct, SyncResult, Template, SalesChannelID, SalesChannelSummary } from '../types'
+import type { EtsyReceipt, EtsyListing, SquarespaceOrder, SquarespaceProduct, SyncResult, Template, SalesChannelID, SalesChannelSummary, SalesChannelSyncKind } from '../types'
 import { cn } from '../lib/utils'
 
 type Tab = 'orders' | 'products'
@@ -72,19 +72,24 @@ export default function Channels() {
   const etsyStatus = salesChannels.find(({ descriptor }) => descriptor.id === 'etsy')?.status
   const squarespaceStatus = salesChannels.find(({ descriptor }) => descriptor.id === 'squarespace')?.status
   const visibleSalesChannels = salesChannels.filter(({ descriptor }) => descriptor.id === 'etsy' || descriptor.id === 'squarespace')
+  const syncKind: SalesChannelSyncKind = tab === 'orders' ? 'orders' : 'products'
+  const syncableVisibleChannels = visibleSalesChannels.filter(({ descriptor, status }) =>
+    status.connected && descriptor.capabilities.includes(tab === 'orders' ? 'orders_read' : 'products_read')
+  )
 
   // Load provider-neutral connection status
-  useEffect(() => {
-    async function loadStatus() {
-      try {
-        const response = await salesChannelsApi.list()
-        setSalesChannels(response.channels)
-      } catch (err) {
-        console.error('Failed to load channel status:', err)
-      }
+  const loadSalesChannelStatus = useCallback(async () => {
+    try {
+      const response = await salesChannelsApi.list()
+      setSalesChannels(response.channels)
+    } catch (err) {
+      console.error('Failed to load channel status:', err)
     }
-    loadStatus()
   }, [])
+
+  useEffect(() => {
+    loadSalesChannelStatus()
+  }, [loadSalesChannelStatus])
 
   // Load orders
   const loadOrders = useCallback(async () => {
@@ -252,21 +257,13 @@ export default function Channels() {
     setSyncResult(null)
 
     try {
-      let result: SyncResult
-      if (tab === 'orders') {
-        if (syncChannel === 'etsy') {
-          result = await etsyApi.syncReceipts()
-        } else {
-          result = await squarespaceApi.syncOrders()
-        }
-      } else {
-        if (syncChannel === 'etsy') {
-          result = await etsyApi.syncListings()
-        } else {
-          result = await squarespaceApi.syncProducts()
-        }
+      const selectedChannel = salesChannels.find(({ descriptor }) => descriptor.id === syncChannel)
+      if (!selectedChannel?.descriptor.capabilities.includes(tab === 'orders' ? 'orders_read' : 'products_read')) {
+        throw new Error(`${selectedChannel?.descriptor.display_name || syncChannel} does not support ${tab} sync`)
       }
+      const { result } = await salesChannelsApi.sync(syncChannel, syncKind)
       setSyncResult({ channel: syncChannel, result })
+      await loadSalesChannelStatus()
       if (tab === 'orders') {
         await loadOrders()
       } else {
@@ -287,39 +284,17 @@ export default function Channels() {
     try {
       const results: SyncResult = { total_fetched: 0, created: 0, updated: 0, skipped: 0, errors: 0 }
 
-      if (tab === 'orders') {
-        if (etsyStatus?.connected) {
-          const r = await etsyApi.syncReceipts()
-          results.total_fetched += r.total_fetched
-          results.created += r.created
-          results.updated += r.updated
-          results.errors += r.errors
-        }
-        if (squarespaceStatus?.connected) {
-          const r = await squarespaceApi.syncOrders()
-          results.total_fetched += r.total_fetched
-          results.created += r.created
-          results.updated += r.updated
-          results.errors += r.errors
-        }
-      } else {
-        if (etsyStatus?.connected) {
-          const r = await etsyApi.syncListings()
-          results.total_fetched += r.total_fetched
-          results.created += r.created
-          results.updated += r.updated
-          results.errors += r.errors
-        }
-        if (squarespaceStatus?.connected) {
-          const r = await squarespaceApi.syncProducts()
-          results.total_fetched += r.total_fetched
-          results.created += r.created
-          results.updated += r.updated
-          results.errors += r.errors
-        }
+      for (const { descriptor } of syncableVisibleChannels) {
+        const { result: r } = await salesChannelsApi.sync(descriptor.id, syncKind)
+        results.total_fetched += r.total_fetched
+        results.created += r.created
+        results.updated += r.updated
+        results.skipped += r.skipped
+        results.errors += r.errors
       }
 
       setSyncResult({ channel: 'all', result: results })
+      await loadSalesChannelStatus()
       if (tab === 'orders') {
         await loadOrders()
       } else {
@@ -511,7 +486,7 @@ export default function Channels() {
           {channel === 'all' ? (
             <button
               onClick={handleSyncAll}
-              disabled={syncing !== null || !hasConnectedChannel}
+              disabled={syncing !== null || syncableVisibleChannels.length === 0}
               className="flex items-center gap-2 px-4 py-2 bg-accent-600 text-white rounded-lg hover:bg-accent-500 disabled:opacity-50 text-sm"
             >
               <RefreshCw className={cn('h-4 w-4', syncing && 'animate-spin')} />
@@ -520,14 +495,14 @@ export default function Channels() {
           ) : (
             <button
               onClick={() => handleSync(channel)}
-              disabled={syncing !== null}
+              disabled={syncing !== null || !syncableVisibleChannels.some(({ descriptor }) => descriptor.id === channel)}
               className={cn(
                 'flex items-center gap-2 px-4 py-2 text-white rounded-lg disabled:opacity-50 text-sm',
                 channel === 'etsy' ? 'bg-orange-500 hover:bg-orange-600' : 'bg-purple-500 hover:bg-purple-600'
               )}
             >
               <RefreshCw className={cn('h-4 w-4', syncing === channel && 'animate-spin')} />
-              {syncing === channel ? 'Syncing...' : `Sync ${channel === 'etsy' ? 'Etsy' : 'Squarespace'}`}
+              {syncing === channel ? 'Syncing...' : `Sync ${visibleSalesChannels.find(({ descriptor }) => descriptor.id === channel)?.descriptor.display_name || channel}`}
             </button>
           )}
         </div>

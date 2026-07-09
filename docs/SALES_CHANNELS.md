@@ -4,7 +4,7 @@ This document is the canonical guide for PicoFarm sales-channel integrations. Us
 
 The goal is a modular, capability-driven architecture where each external marketplace or storefront is implemented as a provider behind a common contract. New contributors should be able to add a channel by following this document without reverse-engineering every existing integration.
 
-> Current status: the generic `internal/saleschannel` contracts, provider registry, canonical storage repository, initial legacy-backed adapters for Etsy, Squarespace, and Shopify, generic descriptor/status/sync HTTP routes, and frontend descriptor/status discovery are implemented. Existing provider-specific routes (`/api/integrations/{provider}/*`) remain supported while connect/read-model/order-processing flows continue to migrate behind `/api/sales-channels/*`.
+> Current status: the generic `internal/saleschannel` contracts, provider registry, canonical storage repository, initial legacy-backed adapters for Etsy, Squarespace, and Shopify, generic descriptor/status/sync HTTP routes, and frontend descriptor/status discovery plus sync dispatch are implemented. Existing provider-specific routes (`/api/integrations/{provider}/*`) remain supported while connect/read-model/order-processing flows continue to migrate behind `/api/sales-channels/*`.
 
 ## Design goals
 
@@ -63,7 +63,7 @@ Initial adapters currently live in `internal/service/sales_channel_adapters.go` 
 
 Generic API handlers live in `internal/api/sales_channel_handler.go`. They expose registered provider descriptors, current connection status, and capability-checked sync dispatch without returning credentials, OAuth codes, API keys, or raw provider payloads.
 
-Frontend sales-channel API types live in `web/src/types/index.ts`, the provider-neutral client lives in `web/src/api/client.ts`, and `web/src/pages/Channels.tsx` now discovers channel display names/status from `GET /api/sales-channels` while keeping legacy Etsy/Squarespace data, sync, process, and link calls until those generic flows exist.
+Frontend sales-channel API types live in `web/src/types/index.ts`, the provider-neutral client lives in `web/src/api/client.ts`, and `web/src/pages/Channels.tsx` now discovers channel display names/status from `GET /api/sales-channels` and dispatches sync through `POST /api/sales-channels/{channel}/sync`. It still keeps legacy Etsy/Squarespace data, process, and link calls until those generic flows exist.
 
 Handlers stay thin in `internal/api`. Business orchestration belongs in `internal/saleschannel` or `internal/service`; persistence belongs in `internal/repository`.
 
