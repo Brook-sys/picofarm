@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -14,6 +15,7 @@ import (
 	"github.com/Brook-sys/picofarm/internal/realtime"
 	"github.com/Brook-sys/picofarm/internal/repository"
 	"github.com/Brook-sys/picofarm/internal/saleschannel"
+	"github.com/Brook-sys/picofarm/internal/shopee"
 	"github.com/Brook-sys/picofarm/internal/storage"
 )
 
@@ -262,6 +264,120 @@ func TestMercadoLivreSalesChannelProvider_SyncProductsUpsertsExternalProductsIde
 	}
 }
 
+func TestShopeeSalesChannelProvider_SyncOrdersUpsertsExternalOrdersIdempotently(t *testing.T) {
+	repos := openSalesChannelAdapterRepos(t)
+	ctx := context.Background()
+	provider := NewShopeeSalesChannelProviderWithRepository(fakeShopeeClient{
+		shop:  &shopee.Shop{ID: 987654321, Name: "PicoFarm Shopee"},
+		order: fakeShopeeOrder(),
+	}, repos.SalesChannels)
+
+	result, err := provider.Sync(ctx, saleschannel.SyncOrders)
+	if err != nil {
+		t.Fatalf("sync orders: %v", err)
+	}
+	if result.TotalFetched != 1 || result.Created != 1 || result.Updated != 0 || result.Skipped != 0 {
+		t.Fatalf("unexpected first sync result: %+v", result)
+	}
+
+	orders, err := repos.SalesChannels.ListExternalOrders(ctx, saleschannel.OrderFilter{Channel: saleschannel.ChannelShopee})
+	if err != nil {
+		t.Fatalf("list stored orders: %v", err)
+	}
+	if len(orders) != 1 {
+		t.Fatalf("expected 1 stored order, got %d", len(orders))
+	}
+	firstID := orders[0].ID
+	if orders[0].ExternalOrderID != "250709ABC123" || orders[0].CustomerName != "Shopee Buyer" || orders[0].TotalCents != 8990 || orders[0].Currency != "BRL" {
+		t.Fatalf("unexpected stored order: %+v", orders[0])
+	}
+	if orders[0].RawJSON == "" {
+		t.Fatalf("expected raw_json to be preserved internally")
+	}
+	if len(orders[0].Items) != 1 || orders[0].Items[0].SKU != "MODEL-RED" || orders[0].Items[0].ExternalLineItemID != "1001:2002" {
+		t.Fatalf("unexpected stored items: %+v", orders[0].Items)
+	}
+
+	result, err = provider.Sync(ctx, saleschannel.SyncOrders)
+	if err != nil {
+		t.Fatalf("sync orders second: %v", err)
+	}
+	if result.TotalFetched != 1 || result.Created != 0 || result.Updated != 1 || result.Skipped != 0 {
+		t.Fatalf("unexpected second sync result: %+v", result)
+	}
+	orders, err = repos.SalesChannels.ListExternalOrders(ctx, saleschannel.OrderFilter{Channel: saleschannel.ChannelShopee})
+	if err != nil {
+		t.Fatalf("list stored orders second: %v", err)
+	}
+	if len(orders) != 1 || orders[0].ID != firstID {
+		t.Fatalf("expected idempotent upsert to keep one row with ID %s, got %+v", firstID, orders)
+	}
+}
+
+func TestShopeeSalesChannelProvider_SyncProductsUpsertsExternalProductsIdempotently(t *testing.T) {
+	repos := openSalesChannelAdapterRepos(t)
+	ctx := context.Background()
+	provider := NewShopeeSalesChannelProviderWithRepository(fakeShopeeClient{
+		shop: &shopee.Shop{ID: 987654321, Name: "PicoFarm Shopee"},
+		item: fakeShopeeItem(),
+	}, repos.SalesChannels)
+
+	result, err := provider.Sync(ctx, saleschannel.SyncProducts)
+	if err != nil {
+		t.Fatalf("sync products: %v", err)
+	}
+	if result.TotalFetched != 1 || result.Created != 1 || result.Updated != 0 || result.Skipped != 0 {
+		t.Fatalf("unexpected first sync result: %+v", result)
+	}
+
+	products, err := repos.SalesChannels.ListExternalProducts(ctx, saleschannel.ProductFilter{Channel: saleschannel.ChannelShopee})
+	if err != nil {
+		t.Fatalf("list stored products: %v", err)
+	}
+	if len(products) != 1 {
+		t.Fatalf("expected 1 stored product, got %d", len(products))
+	}
+	firstID := products[0].ID
+	if products[0].ExternalProductID != "1001" || products[0].Title != "Dragon Miniature" || products[0].PriceCents != 8990 {
+		t.Fatalf("unexpected stored product: %+v", products[0])
+	}
+	if products[0].RawJSON == "" {
+		t.Fatalf("expected raw_json to be preserved internally")
+	}
+	if len(products[0].Variants) != 1 || products[0].Variants[0].ExternalVariantID != "2002" || products[0].Variants[0].SKU != "MODEL-RED" || products[0].Variants[0].StockQuantity == nil || *products[0].Variants[0].StockQuantity != 7 {
+		t.Fatalf("unexpected stored variants: %+v", products[0].Variants)
+	}
+
+	result, err = provider.Sync(ctx, saleschannel.SyncProducts)
+	if err != nil {
+		t.Fatalf("sync products second: %v", err)
+	}
+	if result.TotalFetched != 1 || result.Created != 0 || result.Updated != 1 || result.Skipped != 0 {
+		t.Fatalf("unexpected second sync result: %+v", result)
+	}
+	products, err = repos.SalesChannels.ListExternalProducts(ctx, saleschannel.ProductFilter{Channel: saleschannel.ChannelShopee})
+	if err != nil {
+		t.Fatalf("list stored products second: %v", err)
+	}
+	if len(products) != 1 || products[0].ID != firstID {
+		t.Fatalf("expected idempotent upsert to keep one row with ID %s, got %+v", firstID, products)
+	}
+}
+
+func TestShopeeSalesChannelProvider_SyncSanitizesRateLimitErrors(t *testing.T) {
+	provider := NewShopeeSalesChannelProviderWithRepository(fakeShopeeClient{
+		err: errors.New("429 rate limit sign=abcdef access_token=secret-token partner_key=secret-key"),
+	}, openSalesChannelAdapterRepos(t).SalesChannels)
+
+	_, err := provider.Sync(context.Background(), saleschannel.SyncOrders)
+	if err == nil {
+		t.Fatalf("expected sync error")
+	}
+	if strings.Contains(err.Error(), "abcdef") || strings.Contains(err.Error(), "secret-token") || strings.Contains(err.Error(), "secret-key") {
+		t.Fatalf("expected sanitized sync error, got %q", err.Error())
+	}
+}
+
 func TestServicesWireSalesChannelRegistryWithInitialAdapters(t *testing.T) {
 	t.Run("default services", func(t *testing.T) {
 		repos := openSalesChannelAdapterRepos(t)
@@ -396,6 +512,89 @@ func fakeMercadoLivreItem() *mercadolivre.Item {
 		CurrencyID:        "BRL",
 		AvailableQuantity: 12,
 		SKU:               "DRAGON-RED",
+	}
+}
+
+type fakeShopeeClient struct {
+	shop  *shopee.Shop
+	order *shopee.Order
+	item  *shopee.Item
+	err   error
+}
+
+func (f fakeShopeeClient) GetShop(context.Context) (*shopee.Shop, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	return f.shop, nil
+}
+
+func (f fakeShopeeClient) ListOrders(context.Context) ([]*shopee.Order, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	if f.order == nil {
+		return []*shopee.Order{}, nil
+	}
+	return []*shopee.Order{f.order}, nil
+}
+
+func (f fakeShopeeClient) ListItems(context.Context) ([]*shopee.Item, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	if f.item == nil {
+		return []*shopee.Item{}, nil
+	}
+	return []*shopee.Item{f.item}, nil
+}
+
+func fakeShopeeOrder() *shopee.Order {
+	return &shopee.Order{
+		SN:          "250709ABC123",
+		Status:      "READY_TO_SHIP",
+		Currency:    "BRL",
+		TotalAmount: 89.90,
+		BuyerName:   "Shopee Buyer",
+		Recipient:   "Recipient Example",
+		ShippingID:  "SHIP123",
+		RawJSON:     `{"order_sn":"250709ABC123"}`,
+		CreatedAt:   time.Unix(1700000000, 0).UTC(),
+		UpdatedAt:   time.Unix(1700000600, 0).UTC(),
+		OrderItems: []shopee.OrderItem{{
+			ItemID:    1001,
+			ModelID:   2002,
+			ItemSKU:   "ITEM-DRAGON",
+			ModelSKU:  "MODEL-RED",
+			Title:     "Dragon Miniature - Red",
+			Quantity:  1,
+			UnitPrice: 89.90,
+			Currency:  "BRL",
+		}},
+	}
+}
+
+func fakeShopeeItem() *shopee.Item {
+	stock := 7
+	return &shopee.Item{
+		ID:       1001,
+		Title:    "Dragon Miniature",
+		Status:   "NORMAL",
+		URL:      "https://shopee.com.br/product/987654321/1001",
+		Price:    89.90,
+		Currency: "BRL",
+		SKU:      "ITEM-DRAGON",
+		Stock:    &stock,
+		ImageURL: "https://example.test/dragon.jpg",
+		RawJSON:  `{"item_id":1001}`,
+		ModelList: []shopee.Model{{
+			ID:       2002,
+			SKU:      "MODEL-RED",
+			Title:    "Red",
+			Price:    89.90,
+			Currency: "BRL",
+			Stock:    &stock,
+		}},
 	}
 }
 

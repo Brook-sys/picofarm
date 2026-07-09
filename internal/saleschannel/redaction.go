@@ -7,6 +7,8 @@ var sensitiveErrorPatterns = []*regexp.Regexp{
 	regexp.MustCompile(`(?i)(refresh_token\s*[=:]\s*)[^\s&"'{}]+`),
 	regexp.MustCompile(`(?i)(client_secret\s*[=:]\s*)[^\s&"'{}]+`),
 	regexp.MustCompile(`(?i)(api_key\s*[=:]\s*)[^\s&"'{}]+`),
+	regexp.MustCompile(`(?i)(partner_key\s*[=:]\s*)[^\s&"'{}]+`),
+	regexp.MustCompile(`(?i)(sign\s*[=:]\s*)[^\s&"'{}]+`),
 	regexp.MustCompile(`(?i)(code\s*[=:]\s*)[^\s&"'{}]+`),
 	regexp.MustCompile(`(?i)(Bearer\s+)[A-Za-z0-9._\-]+`),
 }
