@@ -24,6 +24,7 @@ var sensitiveKeys = map[string]bool{
 	"bambu_cloud_token":     true,
 	"bambu_cloud_password":  true,
 	"thingiverse_api_token": true,
+	"olx_api_key":           true,
 }
 
 // isSensitive checks if a key should be encrypted.

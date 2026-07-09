@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/Brook-sys/picofarm/internal/bambu"
+	"github.com/Brook-sys/picofarm/internal/olx"
 	"github.com/Brook-sys/picofarm/internal/printer"
 	"github.com/Brook-sys/picofarm/internal/realtime"
 	"github.com/Brook-sys/picofarm/internal/repository"
@@ -169,7 +170,7 @@ func mustNewSalesChannelRegistry(services *Services) *saleschannel.Registry {
 		NewShopifySalesChannelProvider(services.Shopify),
 		NewMercadoLivreSalesChannelProvider(),
 		NewShopeeSalesChannelProvider(),
-		NewOLXSalesChannelProvider(),
+		NewOLXSalesChannelProviderWithSettings(services.Settings, olx.NewClient()),
 	)
 	if err != nil {
 		panic(err)

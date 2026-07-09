@@ -40,6 +40,13 @@ export default function Settings() {
   const [connectingSquarespace, setConnectingSquarespace] = useState(false)
   const [disconnectingSquarespace, setDisconnectingSquarespace] = useState(false)
 
+  // OLX Brasil API key
+  const [olxKey, setOlxKey] = useState('')
+  const [olxKeyMasked, setOlxKeyMasked] = useState('')
+  const [showOlxKey, setShowOlxKey] = useState(false)
+  const [savingOlxKey, setSavingOlxKey] = useState(false)
+  const [deletingOlxKey, setDeletingOlxKey] = useState(false)
+
   // Etsy Client ID configuration
   const [etsyClientId, setEtsyClientId] = useState('')
   const [configuringEtsy, setConfiguringEtsy] = useState(false)
@@ -80,6 +87,7 @@ export default function Settings() {
     loadApiKeys()
     loadBackups()
     loadThingiverseToken()
+    loadOlxKey()
   }, [])
 
   const loadEtsyStatus = async () => {
@@ -179,6 +187,17 @@ export default function Settings() {
     }
   }
 
+  const loadOlxKey = async () => {
+    try {
+      const res = await settingsApi.get('olx_api_key')
+      if (res.value) {
+        setOlxKeyMasked(res.value)
+      }
+    } catch {
+      // OLX key not configured yet
+    }
+  }
+
   const handleSaveAnthropicKey = async () => {
     if (!anthropicKey.trim()) return
 
@@ -216,6 +235,42 @@ export default function Settings() {
       setError(err instanceof Error ? err.message : 'Failed to save Thingiverse token')
     } finally {
       setSavingThingiverseToken(false)
+    }
+  }
+
+  const handleSaveOlxKey = async () => {
+    if (!olxKey.trim()) return
+
+    try {
+      setSavingOlxKey(true)
+      setError(null)
+      const trimmed = olxKey.trim()
+      await settingsApi.set('olx_api_key', trimmed)
+      setSuccessMessage('OLX Brasil API key saved')
+      setOlxKeyMasked(trimmed.length > 8 ? `${trimmed.slice(0, 4)}...${trimmed.slice(-4)}` : '****')
+      setOlxKey('')
+      setShowOlxKey(false)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save OLX API key')
+    } finally {
+      setSavingOlxKey(false)
+    }
+  }
+
+  const handleDeleteOlxKey = async () => {
+    if (!confirm('Remove the OLX Brasil API key?')) return
+
+    try {
+      setDeletingOlxKey(true)
+      setError(null)
+      await settingsApi.delete('olx_api_key')
+      setOlxKey('')
+      setOlxKeyMasked('')
+      setSuccessMessage('OLX Brasil API key removed')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to remove OLX API key')
+    } finally {
+      setDeletingOlxKey(false)
     }
   }
 
@@ -819,14 +874,14 @@ export default function Settings() {
                   <Unplug className="h-4 w-4" />
                 )}
                 Disconnect Store
-              </button>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              <p className="text-surface-300">
+                </button>
+                </div>
+                ) : (
+                <div className="space-y-4">
+                <p className="text-surface-300">
                 Connect your Squarespace store to automatically import orders.
-              </p>
-              <p className="text-xs text-surface-500">
+                </p>
+                <p className="text-xs text-surface-500">
                 Get your API key from{' '}
                 <a
                   href="https://support.squarespace.com/hc/en-us/articles/12880553888141-Commerce-APIs"
@@ -838,9 +893,9 @@ export default function Settings() {
                 </a>
                 . You'll need the <code className="bg-surface-700 px-1 rounded">Orders Read</code> and{' '}
                 <code className="bg-surface-700 px-1 rounded">Products Read</code> permissions.
-              </p>
+                </p>
 
-              <div className="flex gap-2">
+                <div className="flex gap-2">
                 <div className="relative flex-1">
                   <input
                     type={showSquarespaceKey ? 'text' : 'password'}
@@ -869,14 +924,83 @@ export default function Settings() {
                   )}
                   Connect
                 </button>
-              </div>
-            </div>
-           )}
-         </div>
-         )}
+                </div>
+                </div>
+                )}
+                </div>
+                )}
 
-         {/* Business Information */}
-         {activeTab === 'other' && <BusinessInfoSettings />}
+                {/* OLX Brasil Integration Card */}
+                {activeTab === 'integrations' && (
+                <div className="bg-surface-900/50 border border-surface-800 rounded-xl p-6">
+                <div className="flex items-center gap-3 mb-4">
+                <div className="p-2 bg-emerald-500/10 rounded-lg">
+                <Globe className="h-6 w-6 text-emerald-400" />
+                </div>
+                <div>
+                <h2 className="text-lg font-semibold text-surface-100">OLX Brasil Integration</h2>
+                <p className="text-sm text-surface-400">
+                Configure your OLX API key for classifieds and lead sync
+                </p>
+                </div>
+                </div>
+
+                <div className="space-y-4">
+                <p className="text-xs text-surface-500">
+                OLX API access requires integrator registration. Store your API key here; status will reflect validation via the OLX client.
+                </p>
+
+                <div>
+                <label className="block text-sm font-medium text-surface-300 mb-2">OLX API Key</label>
+                {olxKeyMasked && !olxKey && (
+                <div className="flex items-center gap-2 mb-2">
+                  <CheckCircle2 className="h-4 w-4 text-green-400" />
+                  <span className="text-sm text-green-300">Key configured: {olxKeyMasked}</span>
+                </div>
+                )}
+                <div className="flex gap-2">
+                <div className="relative flex-1">
+                  <input
+                    type={showOlxKey ? 'text' : 'password'}
+                    value={olxKey}
+                    onChange={(e) => setOlxKey(e.target.value)}
+                    placeholder={olxKeyMasked ? 'Enter new key to update...' : 'Paste your OLX API key'}
+                    className="w-full bg-surface-800 border border-surface-700 rounded-lg px-3 py-2 text-sm text-surface-100 placeholder-surface-500 focus:outline-none focus:ring-2 focus:ring-accent-500 focus:border-transparent pr-10"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowOlxKey(!showOlxKey)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-surface-400 hover:text-surface-300"
+                  >
+                    {showOlxKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+                <button
+                  onClick={handleSaveOlxKey}
+                  disabled={!olxKey.trim() || savingOlxKey}
+                  className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                >
+                  {savingOlxKey ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                  Save
+                </button>
+                {olxKeyMasked && (
+                  <button
+                    onClick={handleDeleteOlxKey}
+                    disabled={deletingOlxKey}
+                    className="flex items-center gap-2 px-3 py-2 text-sm text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg transition-colors disabled:opacity-50"
+                  >
+                    {deletingOlxKey ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                    Remove
+                  </button>
+                )}
+                </div>
+                </div>
+                </div>
+                </div>
+                )}
+
+                {/* Business Information */}
+                {activeTab === 'other' && <BusinessInfoSettings />}
 
          <CreditsFooter />
       </div>
