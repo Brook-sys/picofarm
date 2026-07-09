@@ -1282,6 +1282,13 @@ export const templatesApi = {
     fetchApi<import('../types').TemplateAnalytics>(`/templates/${id}/analytics`),
 }
 
+// Provider-neutral sales channels API
+export const salesChannelsApi = {
+  list: () => fetchApi<import('../types').SalesChannelsListResponse>('/sales-channels'),
+  get: (channel: import('../types').SalesChannelID) =>
+    fetchApi<import('../types').SalesChannelSummary>(`/sales-channels/${channel}`),
+}
+
 // Etsy API
 export const etsyApi = {
   configure: (data: { client_id: string; redirect_uri?: string }) =>
