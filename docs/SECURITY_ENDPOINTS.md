@@ -128,7 +128,7 @@ Before exposing PicoFarm outside a trusted local network, protect these routes w
 
 ## Integration and webhook endpoints
 
-Sales-channel routes are designed in `docs/SALES_CHANNELS.md`. Any new generic `/api/sales-channels/*` endpoint that connects accounts, handles OAuth/API keys, syncs external data, links products, updates inventory, processes orders, or receives webhooks belongs in this section and should follow the same secret-redaction and fake-client testing rules as the provider-specific routes below.
+Sales-channel routes are designed in `docs/SALES_CHANNELS.md`. Any new generic `/api/sales-channels/*` endpoint that connects accounts, handles OAuth/API keys, syncs external data, links products, updates inventory, processes orders, or receives webhooks belongs in this section and should follow the same secret-redaction and fake-client testing rules as the provider-specific routes below. Mercado Livre uses OAuth bearer/refresh tokens and test users rather than a separate sandbox, so CI must rely on fake clients/fixtures and manual QA must avoid personal or production accounts.
 
 | Routes | Class | Notes |
 | --- | --- | --- |
