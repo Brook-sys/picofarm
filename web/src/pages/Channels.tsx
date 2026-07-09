@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { Link as RouterLink } from 'react-router-dom'
 import { RefreshCw, Package, CheckCircle, Clock, ExternalLink, ShoppingBag, Store, Link, Filter } from 'lucide-react'
 import { etsyApi, squarespaceApi, templatesApi, salesChannelsApi } from '../api/client'
-import type { EtsyReceipt, EtsyListing, SquarespaceOrder, SquarespaceProduct, SyncResult, Template, SalesChannelID, SalesChannelSummary, SalesChannelSyncKind } from '../types'
+import type { EtsyReceipt, EtsyListing, SquarespaceOrder, SquarespaceProduct, SyncResult, Template, SalesChannelID, SalesChannelSummary, SalesChannelSyncKind, SalesChannelExternalOrder, SalesChannelExternalProduct } from '../types'
 import { cn } from '../lib/utils'
 
 type Tab = 'orders' | 'products'
@@ -12,7 +12,7 @@ type OrderFilter = 'all' | 'unprocessed' | 'processed'
 // Unified order type for display
 interface UnifiedOrder {
   id: string
-  channel: 'etsy' | 'squarespace'
+  channel: SalesChannelID
   orderNumber: string
   customerName: string
   customerEmail?: string
@@ -29,13 +29,13 @@ interface UnifiedOrder {
     priceCents: number
     sku?: string
   }>
-  raw: EtsyReceipt | SquarespaceOrder
+  raw: SalesChannelExternalOrder | EtsyReceipt | SquarespaceOrder
 }
 
 // Unified product type for display
 interface UnifiedProduct {
   id: string
-  channel: 'etsy' | 'squarespace'
+  channel: SalesChannelID
   name: string
   description?: string
   type?: string
@@ -43,7 +43,7 @@ interface UnifiedProduct {
   skus: string[]
   priceCents?: number
   linkedTemplateId?: string
-  raw: EtsyListing | SquarespaceProduct
+  raw: SalesChannelExternalProduct | EtsyListing | SquarespaceProduct
 }
 
 export default function Channels() {
@@ -69,8 +69,6 @@ export default function Channels() {
   const [selectedTemplate, setSelectedTemplate] = useState<Record<string, string>>({})
 
   const connectedSalesChannels = salesChannels.filter(({ status }) => status.connected)
-  const etsyStatus = salesChannels.find(({ descriptor }) => descriptor.id === 'etsy')?.status
-  const squarespaceStatus = salesChannels.find(({ descriptor }) => descriptor.id === 'squarespace')?.status
   const visibleSalesChannels = salesChannels.filter(({ descriptor }) => descriptor.id === 'etsy' || descriptor.id === 'squarespace')
   const syncKind: SalesChannelSyncKind = tab === 'orders' ? 'orders' : 'products'
   const syncableVisibleChannels = visibleSalesChannels.filter(({ descriptor, status }) =>
@@ -95,74 +93,34 @@ export default function Channels() {
   const loadOrders = useCallback(async () => {
     setLoading(true)
     setError(null)
-    const unified: UnifiedOrder[] = []
 
     try {
       const processed = orderFilter === 'all' ? undefined : orderFilter === 'processed'
-
-      // Load Etsy orders if connected and channel matches
-      if ((channel === 'all' || channel === 'etsy') && etsyStatus?.connected) {
-        try {
-          const etsyOrders = await etsyApi.listReceipts({ processed })
-          for (const r of etsyOrders) {
-            unified.push({
-              id: r.id,
-              channel: 'etsy',
-              orderNumber: String(r.etsy_receipt_id),
-              customerName: r.name,
-              customerEmail: r.buyer_email,
-              totalCents: r.grandtotal_cents,
-              currency: r.currency,
-              isProcessed: r.is_processed,
-              projectId: r.project_id,
-              createdAt: r.create_timestamp || r.created_at,
-              status: r.status,
-              items: (r.items || []).map(i => ({
-                id: i.id,
-                name: i.title,
-                quantity: i.quantity,
-                priceCents: i.price_cents,
-                sku: i.sku,
-              })),
-              raw: r,
-            })
-          }
-        } catch (err) {
-          console.error('Failed to load Etsy orders:', err)
-        }
-      }
-
-      // Load Squarespace orders if connected and channel matches
-      if ((channel === 'all' || channel === 'squarespace') && squarespaceStatus?.connected) {
-        try {
-          const sqOrders = await squarespaceApi.listOrders({ processed })
-          for (const o of sqOrders) {
-            unified.push({
-              id: o.id,
-              channel: 'squarespace',
-              orderNumber: o.order_number,
-              customerName: o.customer_name || o.customer_email,
-              customerEmail: o.customer_email,
-              totalCents: o.grand_total_cents,
-              currency: o.currency,
-              isProcessed: o.is_processed,
-              projectId: o.project_id,
-              createdAt: o.created_on || o.created_at,
-              status: o.fulfillment_status,
-              items: (o.items || []).map(i => ({
-                id: i.id,
-                name: i.product_name,
-                quantity: i.quantity,
-                priceCents: i.unit_price_cents,
-                sku: i.sku,
-              })),
-              raw: o,
-            })
-          }
-        } catch (err) {
-          console.error('Failed to load Squarespace orders:', err)
-        }
-      }
+      const response = await salesChannelsApi.listOrders({
+        channel: channel === 'all' ? undefined : channel,
+        processed,
+      })
+      const unified: UnifiedOrder[] = response.orders.map((order) => ({
+        id: order.id,
+        channel: order.channel,
+        orderNumber: order.order_number || order.external_order_id,
+        customerName: order.customer_name || order.customer_email || 'Unknown customer',
+        customerEmail: order.customer_email,
+        totalCents: order.total_cents,
+        currency: order.currency,
+        isProcessed: order.is_processed,
+        projectId: order.order_id,
+        createdAt: order.created_at,
+        status: order.status,
+        items: (order.items || []).map(item => ({
+          id: item.id,
+          name: item.title,
+          quantity: item.quantity,
+          priceCents: item.unit_price_cents,
+          sku: item.sku,
+        })),
+        raw: order,
+      }))
 
       // Sort by date descending
       unified.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
@@ -172,63 +130,32 @@ export default function Channels() {
     } finally {
       setLoading(false)
     }
-  }, [channel, orderFilter, etsyStatus?.connected, squarespaceStatus?.connected])
+  }, [channel, orderFilter])
 
   // Load products
   const loadProducts = useCallback(async () => {
     setLoading(true)
     setError(null)
-    const unified: UnifiedProduct[] = []
 
     try {
       // Load templates for linking
       const tpls = await templatesApi.list(true)
       setTemplates(tpls)
 
-      // Load Etsy listings if connected and channel matches
-      if ((channel === 'all' || channel === 'etsy') && etsyStatus?.connected) {
-        try {
-          const listings = await etsyApi.listListings()
-          for (const l of listings) {
-            unified.push({
-              id: l.id,
-              channel: 'etsy',
-              name: l.title,
-              description: l.description,
-              type: l.state,
-              isVisible: l.state === 'active',
-              skus: l.skus || [],
-              priceCents: l.price_cents,
-              linkedTemplateId: l.linked_template?.id,
-              raw: l,
-            })
-          }
-        } catch (err) {
-          console.error('Failed to load Etsy listings:', err)
-        }
-      }
-
-      // Load Squarespace products if connected and channel matches
-      if ((channel === 'all' || channel === 'squarespace') && squarespaceStatus?.connected) {
-        try {
-          const prods = await squarespaceApi.listProducts()
-          for (const p of prods) {
-            unified.push({
-              id: p.id,
-              channel: 'squarespace',
-              name: p.name,
-              description: p.description,
-              type: p.type,
-              isVisible: p.is_visible,
-              skus: (p.variants || []).map(v => v.sku).filter(Boolean),
-              priceCents: p.variants?.[0]?.price_cents,
-              raw: p,
-            })
-          }
-        } catch (err) {
-          console.error('Failed to load Squarespace products:', err)
-        }
-      }
+      const response = await salesChannelsApi.listProducts({
+        channel: channel === 'all' ? undefined : channel,
+      })
+      const unified: UnifiedProduct[] = response.products.map((product) => ({
+        id: product.id,
+        channel: product.channel,
+        name: product.title,
+        description: product.description,
+        type: product.status,
+        isVisible: product.is_visible,
+        skus: (product.variants || []).map(v => v.sku).filter(Boolean) as string[],
+        priceCents: product.price_cents || product.variants?.[0]?.price_cents,
+        raw: product,
+      }))
 
       // Sort by name
       unified.sort((a, b) => a.name.localeCompare(b.name))
@@ -238,7 +165,7 @@ export default function Channels() {
     } finally {
       setLoading(false)
     }
-  }, [channel, etsyStatus?.connected, squarespaceStatus?.connected])
+  }, [channel])
 
   // Load data when tab or filters change
   useEffect(() => {

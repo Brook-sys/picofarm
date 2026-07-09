@@ -5,8 +5,10 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"time"
 
+	"github.com/Brook-sys/picofarm/internal/repository"
 	"github.com/Brook-sys/picofarm/internal/saleschannel"
 	"github.com/go-chi/chi/v5"
 )
@@ -14,11 +16,12 @@ import (
 // SalesChannelHandler exposes provider-neutral sales-channel endpoints.
 type SalesChannelHandler struct {
 	registry *saleschannel.Registry
+	repo     *repository.SalesChannelRepository
 }
 
 // NewSalesChannelHandler creates a provider-neutral sales-channel handler.
-func NewSalesChannelHandler(registry *saleschannel.Registry) *SalesChannelHandler {
-	return &SalesChannelHandler{registry: registry}
+func NewSalesChannelHandler(registry *saleschannel.Registry, repo *repository.SalesChannelRepository) *SalesChannelHandler {
+	return &SalesChannelHandler{registry: registry, repo: repo}
 }
 
 type salesChannelResponse struct {
@@ -36,6 +39,14 @@ type salesChannelSyncRequest struct {
 
 type salesChannelSyncResponse struct {
 	Result saleschannel.SyncResult `json:"result"`
+}
+
+type salesChannelExternalOrdersResponse struct {
+	Orders []saleschannel.ExternalOrder `json:"orders"`
+}
+
+type salesChannelExternalProductsResponse struct {
+	Products []saleschannel.ExternalProduct `json:"products"`
 }
 
 // List returns all registered sales channels with descriptors and current status.
@@ -64,6 +75,72 @@ func (h *SalesChannelHandler) List(w http.ResponseWriter, r *http.Request) {
 	}
 
 	respondJSON(w, http.StatusOK, salesChannelsListResponse{Channels: channels})
+}
+
+// ListExternalOrders returns provider-neutral imported orders from canonical storage.
+// GET /api/sales-channels/orders
+func (h *SalesChannelHandler) ListExternalOrders(w http.ResponseWriter, r *http.Request) {
+	if h == nil || h.repo == nil {
+		respondError(w, http.StatusServiceUnavailable, "sales-channel storage unavailable")
+		return
+	}
+	filter := saleschannel.OrderFilter{
+		Channel: saleschannel.ChannelID(r.URL.Query().Get("channel")),
+		Status:  r.URL.Query().Get("status"),
+		Limit:   parsePositiveIntQuery(r, "limit"),
+		Offset:  parsePositiveIntQuery(r, "offset"),
+	}
+	if processed := r.URL.Query().Get("processed"); processed != "" {
+		value, err := strconv.ParseBool(processed)
+		if err != nil {
+			respondError(w, http.StatusBadRequest, "invalid processed filter")
+			return
+		}
+		filter.Processed = &value
+	}
+	orders, err := h.repo.ListExternalOrders(r.Context(), filter)
+	if err != nil {
+		slog.Error("failed to list external sales-channel orders", "error", err)
+		respondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	for i := range orders {
+		orders[i].RawJSON = ""
+	}
+	respondJSON(w, http.StatusOK, salesChannelExternalOrdersResponse{Orders: orders})
+}
+
+// ListExternalProducts returns provider-neutral imported products/listings from canonical storage.
+// GET /api/sales-channels/products
+func (h *SalesChannelHandler) ListExternalProducts(w http.ResponseWriter, r *http.Request) {
+	if h == nil || h.repo == nil {
+		respondError(w, http.StatusServiceUnavailable, "sales-channel storage unavailable")
+		return
+	}
+	filter := saleschannel.ProductFilter{
+		Channel: saleschannel.ChannelID(r.URL.Query().Get("channel")),
+		Status:  r.URL.Query().Get("status"),
+		Limit:   parsePositiveIntQuery(r, "limit"),
+		Offset:  parsePositiveIntQuery(r, "offset"),
+	}
+	if linked := r.URL.Query().Get("linked"); linked != "" {
+		value, err := strconv.ParseBool(linked)
+		if err != nil {
+			respondError(w, http.StatusBadRequest, "invalid linked filter")
+			return
+		}
+		filter.Linked = &value
+	}
+	products, err := h.repo.ListExternalProducts(r.Context(), filter)
+	if err != nil {
+		slog.Error("failed to list external sales-channel products", "error", err)
+		respondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	for i := range products {
+		products[i].RawJSON = ""
+	}
+	respondJSON(w, http.StatusOK, salesChannelExternalProductsResponse{Products: products})
 }
 
 // Get returns one registered sales channel with descriptor and current status.
@@ -149,6 +226,18 @@ func (h *SalesChannelHandler) providerFromRequest(w http.ResponseWriter, r *http
 	}
 
 	return provider, true
+}
+
+func parsePositiveIntQuery(r *http.Request, key string) int {
+	value := r.URL.Query().Get(key)
+	if value == "" {
+		return 0
+	}
+	parsed, err := strconv.Atoi(value)
+	if err != nil || parsed < 0 {
+		return 0
+	}
+	return parsed
 }
 
 func validSyncKind(kind saleschannel.SyncKind) bool {

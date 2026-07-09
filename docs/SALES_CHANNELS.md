@@ -155,10 +155,10 @@ Representative routes:
 | `GET /api/sales-channels/{channel}/callback` | OAuth callback where supported. |
 | `POST /api/sales-channels/{channel}/sync` | Trigger sync for `orders`, `products`, or `all`. |
 | `GET /api/sales-channels/{channel}/sync-runs` | List sync history. |
-| `GET /api/sales-channels/orders` | List external orders, filterable by channel/connection/processed/status. |
+| `GET /api/sales-channels/orders` | Implemented read-model endpoint. Lists canonical external orders, filterable by `channel`, `processed`, `status`, `limit`, and `offset`. Responses include line items and omit provider `raw_json`. |
 | `GET /api/sales-channels/orders/{id}` | Get one canonical external order. |
 | `POST /api/sales-channels/orders/{id}/process` | Convert external order into internal PicoFarm order/workflow. |
-| `GET /api/sales-channels/products` | List external products/listings, filterable by channel/linked/status. |
+| `GET /api/sales-channels/products` | Implemented read-model endpoint. Lists canonical external products/listings, filterable by `channel`, `linked`, `status`, `limit`, and `offset`. Responses include variants and omit provider `raw_json`. |
 | `GET /api/sales-channels/products/{id}` | Get one canonical external product. |
 | `POST /api/sales-channels/products/{id}/link` | Link product/variant/SKU to a PicoFarm project. |
 | `DELETE /api/sales-channels/products/{id}/link` | Remove a product link. |

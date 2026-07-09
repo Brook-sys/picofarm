@@ -34,7 +34,7 @@ Use this matrix to decide what to manually verify or automate when changing Pico
 - Database schema or migration change: run fresh DB tests, upgrade tests if available, `go test -v ./internal/database ./internal/repository ./internal/service`, then full Go tests.
 - API route/response change: add/update handler tests and check matching TypeScript types.
 - Frontend API client change: run `cd web && npm run lint`, `cd web && npm run build`, and manually exercise the affected page.
-- Sales-channel change: read `docs/SALES_CHANNELS.md`, use fake clients/fixtures, test idempotent sync and secret redaction, then update API/security docs if routes or JSON change.
+- Sales-channel change: read `docs/SALES_CHANNELS.md`, use fake clients/fixtures, test idempotent sync and secret redaction, verify generic read-model routes omit provider `raw_json`, then update API/security docs if routes or JSON change.
 - Printer control or queue change: use fake/manual printers only unless the user explicitly asks for real hardware testing.
 - Upload/delete/backup change: test in temp directories and verify cleanup behavior.
 - Security/CORS/endpoint-policy change: add router tests and document expected local/self-hosted behavior, including `docs/SECURITY_ENDPOINTS.md` for sensitive routes.

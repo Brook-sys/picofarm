@@ -174,7 +174,7 @@ func newSalesChannelTestRouter(t *testing.T, providers ...saleschannel.Provider)
 			t.Fatalf("register provider: %v", err)
 		}
 	}
-	handler := NewSalesChannelHandler(registry)
+	handler := NewSalesChannelHandler(registry, nil)
 	router := chi.NewRouter()
 	router.Route("/api/sales-channels", func(r chi.Router) {
 		r.Post("/{channel}/sync", handler.Sync)
