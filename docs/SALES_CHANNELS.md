@@ -4,7 +4,7 @@ This document is the canonical guide for PicoFarm sales-channel integrations. Us
 
 The goal is a modular, capability-driven architecture where each external marketplace or storefront is implemented as a provider behind a common contract. New contributors should be able to add a channel by following this document without reverse-engineering every existing integration.
 
-> Current status: this document describes the target architecture and migration rules. The current implementation still has provider-specific Etsy, Squarespace, and Shopify services/routes. Do not remove those legacy routes until the generic layer is implemented, tested, documented, and explicitly migrated.
+> Current status: the generic `internal/saleschannel` contracts, provider registry, canonical storage repository, and initial legacy-backed adapters for Etsy, Squarespace, and Shopify are implemented. The public HTTP routes are still provider-specific (`/api/integrations/{provider}/*`); do not remove those legacy routes until the generic `/api/sales-channels/*` layer is implemented, tested, documented, and explicitly migrated.
 
 ## Design goals
 
@@ -50,19 +50,16 @@ The generic target route group is `/api/sales-channels/*`.
 
 ## Target backend shape
 
-Add a provider-neutral package:
+Provider-neutral contracts live in:
 
 ```text
 internal/saleschannel/
   types.go
   provider.go
   registry.go
-  service.go
-  converters.go
-  etsy_adapter.go
-  squarespace_adapter.go
-  shopify_adapter.go
 ```
+
+Initial adapters currently live in `internal/service/sales_channel_adapters.go` so they can wrap existing Etsy, Squarespace, and Shopify services without moving legacy business logic yet. They expose descriptors, capabilities, connection status, and legacy sync entry points while read-model conversion for external orders/products remains a follow-up.
 
 Handlers stay thin in `internal/api`. Business orchestration belongs in `internal/saleschannel` or `internal/service`; persistence belongs in `internal/repository`.
 
