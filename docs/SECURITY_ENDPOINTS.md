@@ -143,8 +143,8 @@ Sales-channel routes are designed in `docs/SALES_CHANNELS.md`. Any new generic `
 | `GET /api/sales-channels/{channel}/callback` | Integration/OAuth | OAuth callback. Validate state and errors. |
 | `POST /api/sales-channels/{channel}/sync` | Integration/write | Imports external orders/products. Use fake clients in tests and sanitize stored errors. |
 | `POST /api/sales-channels/orders/{id}/process` | Integration/write | Converts external order into internal workflow. |
-| `POST /api/sales-channels/products/{id}/link` | Integration/write | Links external product/variant to internal project/SKU. |
-| `DELETE /api/sales-channels/products/{id}/link` | Integration/write | Unlinks external product/variant. |
+| `POST /api/sales-channels/products/{id}/link` | Integration/write | Links external product/variant to internal project/SKU. For Shopee, link only products/variants already imported into canonical storage; do not imply inventory sync until `inventory_write` is implemented. |
+| `DELETE /api/sales-channels/products/{id}/link` | Integration/write | Unlinks external product/variant. For Shopee, keep the operation local/canonical and do not call live Shopee APIs. |
 | `POST /api/sales-channels/{channel}/webhook` | Integration/webhook | Inbound webhook. Stores raw payload/signature for replay but response must not echo them. Verify signatures where provider supports them; for Mercado Livre and Shopee, signature support/requirements must be confirmed from provider docs before accepting live callbacks. |
 | `GET /api/sales-channels/{channel}/webhook-events` | Integration/read/diagnostic | Lists webhook metadata only. Must omit stored payload, signatures, bearer tokens, access/refresh tokens, and provider raw secrets. |
 | `POST /api/sales-channels/{channel}/webhook-events/{id}/reprocess` | Integration/write | Replays inbound event. Must be idempotent and auditable. |
