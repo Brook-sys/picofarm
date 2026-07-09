@@ -1,0 +1,30 @@
+{
+  "id": 2000000001,
+  "date_created": "2026-06-10T12:34:56.000Z",
+  "last_updated": "2026-06-10T14:00:00.000Z",
+  "status": "paid",
+  "total_amount": 129.90,
+  "currency_id": "BRL",
+  "buyer": {
+    "id": 987654321,
+    "nickname": "TEST_BUYER",
+    "first_name": "Test",
+    "last_name": "Buyer",
+    "email": "buyer@example.test"
+  },
+  "order_items": [
+    {
+      "item": {
+        "id": "MLB123456789",
+        "title": "Printed Dragon Miniature",
+        "seller_custom_field": "DRAGON-RED"
+      },
+      "quantity": 1,
+      "unit_price": 129.90,
+      "currency_id": "BRL"
+    }
+  ],
+  "shipping": {
+    "id": 555555555
+  }
+}

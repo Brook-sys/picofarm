@@ -6,6 +6,7 @@ import (
 
 	"github.com/Brook-sys/picofarm/internal/mercadolivre"
 	"github.com/Brook-sys/picofarm/internal/model"
+	"github.com/Brook-sys/picofarm/internal/repository"
 	"github.com/Brook-sys/picofarm/internal/saleschannel"
 	"github.com/google/uuid"
 )
@@ -306,6 +307,8 @@ func (p *ShopifySalesChannelProvider) UnlinkProduct(context.Context, string, uui
 // Tests can provide fakes without network or credentials.
 type MercadoLivreClient interface {
 	GetCurrentUser(ctx context.Context) (*mercadolivre.User, error)
+	ListOrders(ctx context.Context) ([]*mercadolivre.Order, error)
+	GetOrder(ctx context.Context, externalOrderID string) (*mercadolivre.Order, error)
 }
 
 // MercadoLivreSalesChannelProvider exposes the approved Mercado Livre MVP
@@ -313,6 +316,7 @@ type MercadoLivreClient interface {
 // Operational sync/list/link methods remain fail-closed until follow-up cards.
 type MercadoLivreSalesChannelProvider struct {
 	client MercadoLivreClient
+	repo   *repository.SalesChannelRepository
 }
 
 // NewMercadoLivreSalesChannelProvider creates the Mercado Livre provider shell.
@@ -323,6 +327,11 @@ func NewMercadoLivreSalesChannelProvider() *MercadoLivreSalesChannelProvider {
 // NewMercadoLivreSalesChannelProviderWithClient creates a Mercado Livre provider with an injected client.
 func NewMercadoLivreSalesChannelProviderWithClient(client MercadoLivreClient) *MercadoLivreSalesChannelProvider {
 	return &MercadoLivreSalesChannelProvider{client: client}
+}
+
+// NewMercadoLivreSalesChannelProviderWithRepository creates a Mercado Livre provider with client and repository for sync.
+func NewMercadoLivreSalesChannelProviderWithRepository(client MercadoLivreClient, repo *repository.SalesChannelRepository) *MercadoLivreSalesChannelProvider {
+	return &MercadoLivreSalesChannelProvider{client: client, repo: repo}
 }
 
 func (p *MercadoLivreSalesChannelProvider) Descriptor() saleschannel.ProviderDescriptor {
@@ -358,17 +367,133 @@ func (p *MercadoLivreSalesChannelProvider) Status(ctx context.Context) (salescha
 	return status, nil
 }
 
-func (p *MercadoLivreSalesChannelProvider) Sync(_ context.Context, kind saleschannel.SyncKind) (saleschannel.SyncResult, error) {
+func (p *MercadoLivreSalesChannelProvider) Sync(ctx context.Context, kind saleschannel.SyncKind) (saleschannel.SyncResult, error) {
 	result := saleschannel.SyncResult{Channel: saleschannel.ChannelMercadoLivre, Kind: kind}
-	return result, errSalesChannelReadModelPending(saleschannel.ChannelMercadoLivre, "sync")
+	if kind != saleschannel.SyncOrders && kind != saleschannel.SyncAll {
+		return result, errSalesChannelReadModelPending(saleschannel.ChannelMercadoLivre, string(kind))
+	}
+	if p.client == nil || p.repo == nil {
+		return result, errSalesChannelReadModelPending(saleschannel.ChannelMercadoLivre, "sync")
+	}
+	connection, err := p.upsertConnection(ctx)
+	if err != nil {
+		return result, err
+	}
+	orders, err := p.client.ListOrders(ctx)
+	if err != nil {
+		return result, fmt.Errorf("mercado_livre list orders: %w", err)
+	}
+	for _, order := range orders {
+		if order == nil {
+			result.Skipped++
+			continue
+		}
+		external := mercadoLivreExternalOrder(order)
+		external.ConnectionID = connection.ID
+		stored, err := p.repo.GetExternalOrderByProviderID(ctx, connection.ID, external.ExternalOrderID)
+		if err != nil {
+			return result, err
+		}
+		if err := p.repo.UpsertExternalOrder(ctx, &external); err != nil {
+			return result, err
+		}
+		result.TotalFetched++
+		if stored == nil {
+			result.Created++
+		} else {
+			result.Updated++
+		}
+	}
+	return result, nil
 }
 
-func (p *MercadoLivreSalesChannelProvider) ListOrders(context.Context, saleschannel.OrderFilter) ([]saleschannel.ExternalOrder, error) {
-	return nil, errSalesChannelReadModelPending(saleschannel.ChannelMercadoLivre, "orders")
+func (p *MercadoLivreSalesChannelProvider) ListOrders(ctx context.Context, filter saleschannel.OrderFilter) ([]saleschannel.ExternalOrder, error) {
+	if p.client == nil {
+		return nil, errSalesChannelReadModelPending(saleschannel.ChannelMercadoLivre, "orders")
+	}
+	order, err := p.client.GetOrder(ctx, filter.Status)
+	if err != nil {
+		return nil, err
+	}
+	if order == nil {
+		return []saleschannel.ExternalOrder{}, nil
+	}
+	return []saleschannel.ExternalOrder{mercadoLivreExternalOrder(order)}, nil
 }
 
-func (p *MercadoLivreSalesChannelProvider) GetOrder(context.Context, string) (*saleschannel.ExternalOrder, error) {
-	return nil, errSalesChannelReadModelPending(saleschannel.ChannelMercadoLivre, "order")
+func (p *MercadoLivreSalesChannelProvider) GetOrder(ctx context.Context, externalID string) (*saleschannel.ExternalOrder, error) {
+	if p.client == nil {
+		return nil, errSalesChannelReadModelPending(saleschannel.ChannelMercadoLivre, "order")
+	}
+	order, err := p.client.GetOrder(ctx, externalID)
+	if err != nil {
+		return nil, err
+	}
+	if order == nil {
+		return nil, nil
+	}
+	external := mercadoLivreExternalOrder(order)
+	return &external, nil
+}
+
+func mercadoLivreExternalOrder(order *mercadolivre.Order) saleschannel.ExternalOrder {
+	external := saleschannel.ExternalOrder{
+		Channel:         saleschannel.ChannelMercadoLivre,
+		ExternalOrderID: fmt.Sprintf("%d", order.ID),
+		OrderNumber:     fmt.Sprintf("%d", order.ID),
+		CustomerName:    mercadoLivreBuyerName(order),
+		CustomerEmail:   order.Buyer.Email,
+		TotalCents:      int(order.TotalAmount * 100),
+		Currency:        order.CurrencyID,
+		Status:          order.Status,
+		RawJSON:         "{}",
+	}
+	for _, item := range order.Items {
+		external.Items = append(external.Items, saleschannel.ExternalOrderItem{
+			ExternalLineItemID: item.Item.ID,
+			SKU:                item.Item.SKU,
+			Title:              item.Item.Title,
+			Quantity:           item.Quantity,
+			UnitPriceCents:     int(item.UnitPrice * 100),
+			Currency:           item.CurrencyID,
+		})
+	}
+	return external
+}
+
+func mercadoLivreBuyerName(order *mercadolivre.Order) string {
+	if order.Buyer.Nickname != "" {
+		return order.Buyer.Nickname
+	}
+	name := order.Buyer.FirstName
+	if order.Buyer.LastName != "" {
+		if name != "" {
+			name += " "
+		}
+		name += order.Buyer.LastName
+	}
+	return name
+}
+
+func (p *MercadoLivreSalesChannelProvider) upsertConnection(ctx context.Context) (*saleschannel.Connection, error) {
+	if p.repo == nil {
+		return nil, errSalesChannelReadModelPending(saleschannel.ChannelMercadoLivre, "connection")
+	}
+	user, err := p.client.GetCurrentUser(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("mercado_livre user: %w", err)
+	}
+	connection := &saleschannel.Connection{
+		Channel:      saleschannel.ChannelMercadoLivre,
+		AccountID:    fmt.Sprintf("%d", user.ID),
+		DisplayName:  user.Nickname,
+		Status:       saleschannel.ConnectionStatusConnected,
+		Capabilities: []saleschannel.Capability{saleschannel.CapabilityOAuth, saleschannel.CapabilityOrdersRead, saleschannel.CapabilityProductsRead, saleschannel.CapabilityInventoryWrite, saleschannel.CapabilityWebhooks},
+	}
+	if err := p.repo.UpsertConnection(ctx, connection); err != nil {
+		return nil, err
+	}
+	return connection, nil
 }
 
 func (p *MercadoLivreSalesChannelProvider) ProcessOrder(context.Context, string) (*model.Order, error) {
