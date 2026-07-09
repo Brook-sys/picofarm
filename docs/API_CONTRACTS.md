@@ -63,7 +63,7 @@ Keep these literal sets synchronized between Go and TypeScript.
 | Quote status | `model.QuoteStatus` | `QuoteStatus` | `draft`, `sent`, `accepted`, `rejected`, `expired` |
 | Quote line item type | `model.QuoteLineItemType` | `QuoteLineItemType` | `printing`, `post_processing`, `consulting`, `design`, `other`, `labor`, `consumables`, `shipping`, `finishing` |
 | Discount type | `model.DiscountType` | `DiscountType` | `none`, `flat`, `percent` |
-| Sales-channel ID | `saleschannel.ChannelID` | `SalesChannelID` | `etsy`, `squarespace`, `shopify` |
+| Sales-channel ID | `saleschannel.ChannelID` | `SalesChannelID` | `etsy`, `squarespace`, `shopify`, `mercado_livre`, `shopee` |
 | Sales-channel auth type | `saleschannel.ProviderDescriptor.AuthType` | `SalesChannelAuthType` | `oauth`, `api_key`, `manual` |
 | Sales-channel capability | `saleschannel.Capability` | `SalesChannelCapability` | `oauth`, `api_key`, `orders_read`, `products_read`, `inventory_write`, `webhooks` |
 | Sales-channel connection state | `saleschannel.ConnectionState` | pending feature-local type | `disconnected`, `connected`, `needs_attention` |

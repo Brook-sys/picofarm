@@ -25,6 +25,7 @@ func TestSalesChannelAdapters_DescriptorsExposeCapabilities(t *testing.T) {
 		NewSquarespaceSalesChannelProvider(NewSquarespaceService(repos.Squarespace)),
 		NewShopifySalesChannelProvider(NewShopifyService(repos.Shopify, nil, nil)),
 		NewMercadoLivreSalesChannelProvider(),
+		NewShopeeSalesChannelProvider(),
 	}
 
 	want := map[saleschannel.ChannelID]saleschannel.ProviderDescriptor{
@@ -51,6 +52,12 @@ func TestSalesChannelAdapters_DescriptorsExposeCapabilities(t *testing.T) {
 			DisplayName:  "Mercado Livre",
 			AuthType:     "oauth",
 			Capabilities: []saleschannel.Capability{saleschannel.CapabilityOAuth, saleschannel.CapabilityOrdersRead, saleschannel.CapabilityProductsRead, saleschannel.CapabilityInventoryWrite, saleschannel.CapabilityWebhooks},
+		},
+		saleschannel.ChannelShopee: {
+			ID:           saleschannel.ChannelShopee,
+			DisplayName:  "Shopee",
+			AuthType:     "oauth",
+			Capabilities: []saleschannel.Capability{saleschannel.CapabilityOAuth, saleschannel.CapabilityOrdersRead, saleschannel.CapabilityProductsRead},
 		},
 	}
 
@@ -286,7 +293,7 @@ func assertInitialSalesChannelRegistry(t *testing.T, services *Services) {
 	for _, descriptor := range descriptors {
 		got = append(got, descriptor.ID)
 	}
-	want := []saleschannel.ChannelID{saleschannel.ChannelEtsy, saleschannel.ChannelSquarespace, saleschannel.ChannelShopify, saleschannel.ChannelMercadoLivre}
+	want := []saleschannel.ChannelID{saleschannel.ChannelEtsy, saleschannel.ChannelSquarespace, saleschannel.ChannelShopify, saleschannel.ChannelMercadoLivre, saleschannel.ChannelShopee}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("expected provider order %v, got %v", want, got)
 	}

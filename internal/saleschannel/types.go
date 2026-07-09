@@ -14,6 +14,7 @@ const (
 	ChannelSquarespace  ChannelID = "squarespace"
 	ChannelShopify      ChannelID = "shopify"
 	ChannelMercadoLivre ChannelID = "mercado_livre"
+	ChannelShopee       ChannelID = "shopee"
 )
 
 // Capability describes an optional feature supported by a provider.

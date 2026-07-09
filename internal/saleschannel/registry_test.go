@@ -92,6 +92,7 @@ func TestRegistryDescriptorsAreReturnedInRegistrationOrder(t *testing.T) {
 		{descriptor: ProviderDescriptor{ID: ChannelEtsy, DisplayName: "Etsy", Capabilities: []Capability{CapabilityOAuth, CapabilityOrdersRead}}},
 		{descriptor: ProviderDescriptor{ID: ChannelSquarespace, DisplayName: "Squarespace", Capabilities: []Capability{CapabilityAPIKey, CapabilityProductsRead}}},
 		{descriptor: ProviderDescriptor{ID: ChannelShopify, DisplayName: "Shopify", Capabilities: []Capability{CapabilityOAuth}}},
+		{descriptor: ProviderDescriptor{ID: ChannelShopee, DisplayName: "Shopee", Capabilities: []Capability{CapabilityOAuth, CapabilityOrdersRead, CapabilityProductsRead}}},
 	}
 	for _, provider := range providers {
 		if err := registry.Register(provider); err != nil {
@@ -105,7 +106,7 @@ func TestRegistryDescriptorsAreReturnedInRegistrationOrder(t *testing.T) {
 		gotIDs = append(gotIDs, descriptor.ID)
 	}
 
-	wantIDs := []ChannelID{ChannelEtsy, ChannelSquarespace, ChannelShopify}
+	wantIDs := []ChannelID{ChannelEtsy, ChannelSquarespace, ChannelShopify, ChannelShopee}
 	if !reflect.DeepEqual(gotIDs, wantIDs) {
 		t.Fatalf("expected descriptor IDs %v, got %v", wantIDs, gotIDs)
 	}
