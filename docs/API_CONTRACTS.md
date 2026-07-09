@@ -255,7 +255,7 @@ Primary response types:
 
 Representative route groups:
 
-- Generic read-only sales-channel routes: `GET /api/sales-channels` and `GET /api/sales-channels/{channel}` (see `docs/SALES_CHANNELS.md`)
+- Generic sales-channel routes implemented so far: `GET /api/sales-channels`, `GET /api/sales-channels/{channel}`, and `POST /api/sales-channels/{channel}/sync` (see `docs/SALES_CHANNELS.md`)
 - `/api/integrations/etsy/*`
 - `/api/integrations/squarespace/*`
 - `/api/integrations/shopify/*`

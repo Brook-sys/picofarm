@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -11,6 +12,8 @@ import (
 
 	"github.com/Brook-sys/picofarm/internal/model"
 	"github.com/Brook-sys/picofarm/internal/saleschannel"
+	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 )
 
 func TestSalesChannelHandler_ListReturnsDescriptorsAndStatus(t *testing.T) {
@@ -107,4 +110,114 @@ func TestSalesChannelHandler_GetUnknownChannelReturns404(t *testing.T) {
 	if rr.Code != http.StatusNotFound {
 		t.Fatalf("expected 404, got %d: %s", rr.Code, rr.Body.String())
 	}
+}
+
+func TestSalesChannelHandler_SyncDispatchesProviderNeutralSync(t *testing.T) {
+	provider := &fakeSalesChannelProvider{
+		descriptor: saleschannel.ProviderDescriptor{
+			ID:           saleschannel.ChannelEtsy,
+			DisplayName:  "Etsy",
+			Capabilities: []saleschannel.Capability{saleschannel.CapabilityOrdersRead},
+		},
+	}
+	router := newSalesChannelTestRouter(t, provider)
+
+	body := bytes.NewBufferString(`{"kind":"orders"}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/sales-channels/etsy/sync", body)
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+
+	var got salesChannelSyncResponse
+	if err := json.NewDecoder(rr.Body).Decode(&got); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if got.Result.Channel != saleschannel.ChannelEtsy {
+		t.Fatalf("expected Etsy sync result, got %q", got.Result.Channel)
+	}
+	if got.Result.Kind != saleschannel.SyncOrders {
+		t.Fatalf("expected orders sync kind, got %q", got.Result.Kind)
+	}
+	if got.Result.StartedAt.IsZero() || got.Result.FinishedAt.IsZero() {
+		t.Fatalf("expected sync timestamps to be populated: %+v", got.Result)
+	}
+}
+
+func TestSalesChannelHandler_SyncRejectsUnsupportedCapability(t *testing.T) {
+	provider := &fakeSalesChannelProvider{
+		descriptor: saleschannel.ProviderDescriptor{
+			ID:           saleschannel.ChannelShopify,
+			DisplayName:  "Shopify",
+			Capabilities: []saleschannel.Capability{saleschannel.CapabilityOrdersRead},
+		},
+	}
+	router := newSalesChannelTestRouter(t, provider)
+
+	body := bytes.NewBufferString(`{"kind":"products"}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/sales-channels/shopify/sync", body)
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", rr.Code, rr.Body.String())
+	}
+}
+
+func newSalesChannelTestRouter(t *testing.T, providers ...saleschannel.Provider) http.Handler {
+	t.Helper()
+	registry := saleschannel.NewRegistry()
+	for _, provider := range providers {
+		if err := registry.Register(provider); err != nil {
+			t.Fatalf("register provider: %v", err)
+		}
+	}
+	handler := NewSalesChannelHandler(registry)
+	router := chi.NewRouter()
+	router.Route("/api/sales-channels", func(r chi.Router) {
+		r.Post("/{channel}/sync", handler.Sync)
+	})
+	return router
+}
+
+type fakeSalesChannelProvider struct {
+	descriptor saleschannel.ProviderDescriptor
+}
+
+func (p *fakeSalesChannelProvider) Descriptor() saleschannel.ProviderDescriptor {
+	return p.descriptor
+}
+
+func (p *fakeSalesChannelProvider) Status(context.Context) (saleschannel.ConnectionStatus, error) {
+	return saleschannel.ConnectionStatus{Channel: p.descriptor.ID, Connected: true}, nil
+}
+
+func (p *fakeSalesChannelProvider) Sync(_ context.Context, kind saleschannel.SyncKind) (saleschannel.SyncResult, error) {
+	return saleschannel.SyncResult{Channel: p.descriptor.ID, Kind: kind, TotalFetched: 3}, nil
+}
+
+func (p *fakeSalesChannelProvider) ListOrders(context.Context, saleschannel.OrderFilter) ([]saleschannel.ExternalOrder, error) {
+	return nil, nil
+}
+
+func (p *fakeSalesChannelProvider) GetOrder(context.Context, string) (*saleschannel.ExternalOrder, error) {
+	return nil, nil
+}
+
+func (p *fakeSalesChannelProvider) ProcessOrder(context.Context, string) (*model.Order, error) {
+	return nil, nil
+}
+
+func (p *fakeSalesChannelProvider) ListProducts(context.Context, saleschannel.ProductFilter) ([]saleschannel.ExternalProduct, error) {
+	return nil, nil
+}
+
+func (p *fakeSalesChannelProvider) LinkProduct(context.Context, string, uuid.UUID, string) error {
+	return nil
+}
+
+func (p *fakeSalesChannelProvider) UnlinkProduct(context.Context, string, uuid.UUID) error {
+	return nil
 }
