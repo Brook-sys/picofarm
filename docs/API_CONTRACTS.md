@@ -258,7 +258,7 @@ Primary response types:
 
 Representative route groups:
 
-- Generic sales-channel routes implemented so far: `GET /api/sales-channels`, `GET /api/sales-channels/{channel}`, `POST /api/sales-channels/{channel}/sync`, `GET /api/sales-channels/orders`, and `GET /api/sales-channels/products` (see `docs/SALES_CHANNELS.md`)
+- Generic sales-channel routes implemented so far: `GET /api/sales-channels`, `GET /api/sales-channels/{channel}`, `POST /api/sales-channels/{channel}/sync`, `GET /api/sales-channels/orders`, `POST /api/sales-channels/orders/{id}/process`, `GET /api/sales-channels/products`, `POST /api/sales-channels/products/{id}/link`, and `DELETE /api/sales-channels/products/{id}/link` (see `docs/SALES_CHANNELS.md`)
 - Planned generic sales-channel connection routes: `POST /api/sales-channels/{channel}/connect`, `POST /api/sales-channels/{channel}/disconnect`, `GET /api/sales-channels/{channel}/auth-url`, and `GET /api/sales-channels/{channel}/callback`. These must preserve snake_case, capability errors, OAuth state validation, and secret-redaction semantics before implementation.
 - `/api/integrations/etsy/*`
 - `/api/integrations/squarespace/*`
@@ -269,7 +269,7 @@ Primary contracts live in:
 
 - `internal/saleschannel/*.go` for provider-neutral descriptors, capabilities, connection status, sync results, external orders/products, sync runs, and product links
 - `internal/service/sales_channel_adapters.go` for the current legacy-backed Etsy/Squarespace/Shopify provider adapters
-- `internal/api/sales_channel_handler.go` for the current generic read-only HTTP response wrappers
+- `internal/api/sales_channel_handler.go` for generic HTTP wrappers covering descriptors/status, sync, read-model lists, process-order, and product link/unlink
 - `internal/model/etsy.go`
 - `internal/model/squarespace.go`
 - Shopify/Bambu model shapes in `internal/model/models.go`
