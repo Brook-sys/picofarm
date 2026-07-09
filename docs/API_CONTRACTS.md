@@ -67,6 +67,9 @@ Keep these literal sets synchronized between Go and TypeScript.
 | Sales-channel auth type | `saleschannel.ProviderDescriptor.AuthType` | `SalesChannelAuthType` | `oauth`, `api_key`, `manual` |
 | Sales-channel capability | `saleschannel.Capability` | `SalesChannelCapability` | `oauth`, `api_key`, `orders_read`, `products_read`, `inventory_write`, `webhooks` |
 | Sales-channel connection state | `saleschannel.ConnectionState` | pending feature-local type | `disconnected`, `connected`, `needs_attention` |
+| Planned sales-channel connect request | future `saleschannel.ConnectRequest` | future `SalesChannelConnectRequest` | Provider-specific config accepted, secrets never echoed |
+| Planned sales-channel auth URL response | future `saleschannel.AuthURLResult` | future `SalesChannelAuthUrlResult` | `auth_url`, `state`, `expires_at`; no tokens/secrets |
+| Planned sales-channel disconnect request | future `saleschannel.DisconnectRequest` | future `SalesChannelDisconnectRequest` | `connection_id`, optional future `revoke_remote` |
 | Sales-channel sync kind | `saleschannel.SyncKind` | pending feature-local type | `orders`, `products`, `all` |
 | Sales-channel sync run status | `saleschannel.SyncRunStatus` | pending feature-local type | `pending`, `running`, `succeeded`, `failed` |
 
@@ -256,6 +259,7 @@ Primary response types:
 Representative route groups:
 
 - Generic sales-channel routes implemented so far: `GET /api/sales-channels`, `GET /api/sales-channels/{channel}`, `POST /api/sales-channels/{channel}/sync`, `GET /api/sales-channels/orders`, and `GET /api/sales-channels/products` (see `docs/SALES_CHANNELS.md`)
+- Planned generic sales-channel connection routes: `POST /api/sales-channels/{channel}/connect`, `POST /api/sales-channels/{channel}/disconnect`, `GET /api/sales-channels/{channel}/auth-url`, and `GET /api/sales-channels/{channel}/callback`. These must preserve snake_case, capability errors, OAuth state validation, and secret-redaction semantics before implementation.
 - `/api/integrations/etsy/*`
 - `/api/integrations/squarespace/*`
 - `/api/integrations/shopify/*`

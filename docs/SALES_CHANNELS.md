@@ -100,6 +100,36 @@ Required concepts:
 
 Providers may return a clear unsupported-capability error when a method does not apply. The handler/service should translate unsupported operations into a stable API error without panics.
 
+### Provider-neutral connect/auth plan
+
+Generic connection endpoints should be planned before legacy credentials move behind `/api/sales-channels/*`. Keep the first implementation as a thin orchestration layer over provider-specific services rather than a credentials rewrite.
+
+Contract additions should introduce small typed request/response structs in `internal/saleschannel`:
+
+- `ConnectRequest`: provider `channel`, optional `connection_id`, auth method, and provider-specific settings in a sanitized `config` map. Secrets such as API keys are accepted from the request body but are never echoed back.
+- `ConnectResult`: channel, connection state, display/account metadata, and a redacted `requires_action`/`message` when additional OAuth or setup work is needed.
+- `AuthURLRequest`: channel, optional `redirect_uri`, optional provider settings such as Shopify `shop`, and a server-generated `state`.
+- `AuthURLResult`: `auth_url`, `state`, and `expires_at`; never include client secrets, code verifier, access tokens, refresh tokens, or signed headers.
+- `CallbackRequest`: channel, provider callback query, and verified `state`. OAuth `code` is accepted only at the handler/service boundary and is not logged or returned.
+- `DisconnectRequest`: channel and optional `connection_id`, with a future `revoke_remote` flag when provider APIs support token revocation.
+
+Provider behavior by auth family:
+
+| Auth family | Providers | Generic flow | Notes |
+| --- | --- | --- | --- |
+| OAuth | Etsy, Shopify, Mercado Livre | `GET /auth-url` creates/validates state and returns URL; `/callback` validates state then delegates token exchange. | State must be unguessable, single-use where supported, and tied to redirect/provider metadata. Callback errors must be sanitized before redirect/query strings are built. |
+| API key | Squarespace, future API-key providers | `POST /connect` accepts `{ "api_key": "[REDACTED]" }`, validates with a fakeable provider service, persists only through the existing credential path, and returns redacted connection metadata. | Never return the key, store it in `Connection.ConfigJSON`, or include it in sync-run errors. |
+| Signed partner API | Shopee | `POST /connect` should accept partner/shop identifiers and secret material as `[REDACTED]`; provider client owns HMAC signing. | Tests should assert signing inputs without real credentials. |
+| Manual/import-only | OLX fallback, CSV/manual | `POST /connect` creates local metadata only and reports limited capabilities. | Do not imply live API support until provider availability is validated. |
+
+Implementation sequence:
+
+1. Add connection/auth interfaces only after this plan is accepted: `Connector`, `OAuthConnector`, and/or optional methods on provider adapters. Keep unsupported methods explicit.
+2. Add generic handler tests first for unknown channel, unsupported capability, missing required body fields, OAuth state errors, and redaction of `api_key`, `client_secret`, `code`, access/refresh tokens, and signed headers.
+3. Wire legacy-backed adapters one provider at a time: Squarespace API-key connect/disconnect first, Etsy OAuth auth-url/callback next, Shopify OAuth after state validation is consistent.
+4. Keep legacy `/api/integrations/{provider}/*` routes as compatibility wrappers until the generic flow has equivalent tests and UI support.
+5. Update `web/src/pages/Channels.tsx` only after backend contracts are stable; the UI should render connect actions from `AuthType` and capabilities.
+
 ### Registry
 
 The registry is responsible for:
@@ -149,10 +179,10 @@ Representative routes:
 | --- | --- |
 | `GET /api/sales-channels` | List registered provider descriptors, capabilities, and connection status. |
 | `GET /api/sales-channels/{channel}` | Descriptor, capabilities, and connection status for one provider. |
-| `POST /api/sales-channels/{channel}/connect` | Connect/configure a provider, with provider-specific body validated by adapter. |
-| `POST /api/sales-channels/{channel}/disconnect` | Disconnect provider or connection. |
-| `GET /api/sales-channels/{channel}/auth-url` | Start OAuth where supported. |
-| `GET /api/sales-channels/{channel}/callback` | OAuth callback where supported. |
+| `POST /api/sales-channels/{channel}/connect` | Planned generic connect/configure endpoint. Body is provider-specific but must be validated by the adapter and must never be echoed with secrets. |
+| `POST /api/sales-channels/{channel}/disconnect` | Planned generic disconnect endpoint for one provider or connection; should revoke remote credentials only when explicitly supported. |
+| `GET /api/sales-channels/{channel}/auth-url` | Planned OAuth start endpoint. Generates/validates state and returns a URL without secrets. |
+| `GET /api/sales-channels/{channel}/callback` | Planned OAuth callback endpoint. Validates state, sanitizes provider errors, and redirects without leaking codes/tokens. |
 | `POST /api/sales-channels/{channel}/sync` | Trigger sync for `orders`, `products`, or `all`. |
 | `GET /api/sales-channels/{channel}/sync-runs` | List sync history. |
 | `GET /api/sales-channels/orders` | Implemented read-model endpoint. Lists canonical external orders, filterable by `channel`, `processed`, `status`, `limit`, and `offset`. Responses include line items and omit provider `raw_json`. |
