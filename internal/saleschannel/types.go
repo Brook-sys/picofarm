@@ -10,9 +10,10 @@ import (
 type ChannelID string
 
 const (
-	ChannelEtsy        ChannelID = "etsy"
-	ChannelSquarespace ChannelID = "squarespace"
-	ChannelShopify     ChannelID = "shopify"
+	ChannelEtsy         ChannelID = "etsy"
+	ChannelSquarespace  ChannelID = "squarespace"
+	ChannelShopify      ChannelID = "shopify"
+	ChannelMercadoLivre ChannelID = "mercado_livre"
 )
 
 // Capability describes an optional feature supported by a provider.

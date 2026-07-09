@@ -301,6 +301,67 @@ func (p *ShopifySalesChannelProvider) UnlinkProduct(context.Context, string, uui
 	return errSalesChannelReadModelPending(saleschannel.ChannelShopify, "unlink_product")
 }
 
+// MercadoLivreSalesChannelProvider exposes the approved Mercado Livre MVP
+// contract before the live client is implemented. It keeps the provider visible
+// to descriptor/capability discovery while every operational method fails
+// closed with clear pending-adapter errors.
+type MercadoLivreSalesChannelProvider struct{}
+
+// NewMercadoLivreSalesChannelProvider creates the Mercado Livre provider shell.
+func NewMercadoLivreSalesChannelProvider() *MercadoLivreSalesChannelProvider {
+	return &MercadoLivreSalesChannelProvider{}
+}
+
+func (p *MercadoLivreSalesChannelProvider) Descriptor() saleschannel.ProviderDescriptor {
+	return saleschannel.ProviderDescriptor{
+		ID:          saleschannel.ChannelMercadoLivre,
+		DisplayName: "Mercado Livre",
+		Description: "Mercado Livre marketplace integration for OAuth, orders, listings, inventory, and notifications. Live sync is implemented in follow-up cards.",
+		Capabilities: []saleschannel.Capability{
+			saleschannel.CapabilityOAuth,
+			saleschannel.CapabilityOrdersRead,
+			saleschannel.CapabilityProductsRead,
+			saleschannel.CapabilityInventoryWrite,
+			saleschannel.CapabilityWebhooks,
+		},
+		AuthType: "oauth",
+		DocsURL:  "docs/SALES_CHANNELS.md#mercado-livre-discovery-matrix",
+	}
+}
+
+func (p *MercadoLivreSalesChannelProvider) Status(context.Context) (saleschannel.ConnectionStatus, error) {
+	return saleschannel.ConnectionStatus{Channel: saleschannel.ChannelMercadoLivre}, nil
+}
+
+func (p *MercadoLivreSalesChannelProvider) Sync(_ context.Context, kind saleschannel.SyncKind) (saleschannel.SyncResult, error) {
+	result := saleschannel.SyncResult{Channel: saleschannel.ChannelMercadoLivre, Kind: kind}
+	return result, errSalesChannelReadModelPending(saleschannel.ChannelMercadoLivre, "sync")
+}
+
+func (p *MercadoLivreSalesChannelProvider) ListOrders(context.Context, saleschannel.OrderFilter) ([]saleschannel.ExternalOrder, error) {
+	return nil, errSalesChannelReadModelPending(saleschannel.ChannelMercadoLivre, "orders")
+}
+
+func (p *MercadoLivreSalesChannelProvider) GetOrder(context.Context, string) (*saleschannel.ExternalOrder, error) {
+	return nil, errSalesChannelReadModelPending(saleschannel.ChannelMercadoLivre, "order")
+}
+
+func (p *MercadoLivreSalesChannelProvider) ProcessOrder(context.Context, string) (*model.Order, error) {
+	return nil, errSalesChannelReadModelPending(saleschannel.ChannelMercadoLivre, "process_order")
+}
+
+func (p *MercadoLivreSalesChannelProvider) ListProducts(context.Context, saleschannel.ProductFilter) ([]saleschannel.ExternalProduct, error) {
+	return nil, errSalesChannelReadModelPending(saleschannel.ChannelMercadoLivre, "products")
+}
+
+func (p *MercadoLivreSalesChannelProvider) LinkProduct(context.Context, string, uuid.UUID, string) error {
+	return errSalesChannelReadModelPending(saleschannel.ChannelMercadoLivre, "link_product")
+}
+
+func (p *MercadoLivreSalesChannelProvider) UnlinkProduct(context.Context, string, uuid.UUID) error {
+	return errSalesChannelReadModelPending(saleschannel.ChannelMercadoLivre, "unlink_product")
+}
+
 func saleschannelSyncResultFromLegacy(result saleschannel.SyncResult, legacy *model.SyncResult) saleschannel.SyncResult {
 	if legacy == nil {
 		return result

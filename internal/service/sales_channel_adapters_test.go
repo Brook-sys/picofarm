@@ -22,6 +22,7 @@ func TestSalesChannelAdapters_DescriptorsExposeCapabilities(t *testing.T) {
 		NewEtsySalesChannelProvider(NewEtsyService(repos.Etsy, "client-id", "http://localhost/callback", &SettingsService{repo: repos.Settings})),
 		NewSquarespaceSalesChannelProvider(NewSquarespaceService(repos.Squarespace)),
 		NewShopifySalesChannelProvider(NewShopifyService(repos.Shopify, nil, nil)),
+		NewMercadoLivreSalesChannelProvider(),
 	}
 
 	want := map[saleschannel.ChannelID]saleschannel.ProviderDescriptor{
@@ -42,6 +43,12 @@ func TestSalesChannelAdapters_DescriptorsExposeCapabilities(t *testing.T) {
 			DisplayName:  "Shopify",
 			AuthType:     "oauth",
 			Capabilities: []saleschannel.Capability{saleschannel.CapabilityOAuth, saleschannel.CapabilityOrdersRead},
+		},
+		saleschannel.ChannelMercadoLivre: {
+			ID:           saleschannel.ChannelMercadoLivre,
+			DisplayName:  "Mercado Livre",
+			AuthType:     "oauth",
+			Capabilities: []saleschannel.Capability{saleschannel.CapabilityOAuth, saleschannel.CapabilityOrdersRead, saleschannel.CapabilityProductsRead, saleschannel.CapabilityInventoryWrite, saleschannel.CapabilityWebhooks},
 		},
 	}
 
@@ -144,7 +151,7 @@ func assertInitialSalesChannelRegistry(t *testing.T, services *Services) {
 	for _, descriptor := range descriptors {
 		got = append(got, descriptor.ID)
 	}
-	want := []saleschannel.ChannelID{saleschannel.ChannelEtsy, saleschannel.ChannelSquarespace, saleschannel.ChannelShopify}
+	want := []saleschannel.ChannelID{saleschannel.ChannelEtsy, saleschannel.ChannelSquarespace, saleschannel.ChannelShopify, saleschannel.ChannelMercadoLivre}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("expected provider order %v, got %v", want, got)
 	}
