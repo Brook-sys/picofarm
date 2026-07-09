@@ -27,6 +27,62 @@ type EtsySalesChannelProvider struct {
 	svc *EtsyService
 }
 
+// ShopeeSalesChannelProvider is the conservative MVP descriptor for Shopee.
+// Live auth, sync, inventory, and webhook behavior are added in later SHP cards.
+type ShopeeSalesChannelProvider struct{}
+
+// NewShopeeSalesChannelProvider creates a Shopee provider descriptor skeleton.
+func NewShopeeSalesChannelProvider() *ShopeeSalesChannelProvider {
+	return &ShopeeSalesChannelProvider{}
+}
+
+func (p *ShopeeSalesChannelProvider) Descriptor() saleschannel.ProviderDescriptor {
+	return saleschannel.ProviderDescriptor{
+		ID:          saleschannel.ChannelShopee,
+		DisplayName: "Shopee",
+		Description: "Shopee Open Platform MVP integration for OAuth shop authorization plus signed V2 order and product reads.",
+		Capabilities: []saleschannel.Capability{
+			saleschannel.CapabilityOAuth,
+			saleschannel.CapabilityOrdersRead,
+			saleschannel.CapabilityProductsRead,
+		},
+		AuthType: "oauth",
+		DocsURL:  "docs/SALES_CHANNELS.md#shopee-mvp-and-capability-matrix",
+	}
+}
+
+func (p *ShopeeSalesChannelProvider) Status(context.Context) (saleschannel.ConnectionStatus, error) {
+	return saleschannel.ConnectionStatus{Channel: saleschannel.ChannelShopee}, nil
+}
+
+func (p *ShopeeSalesChannelProvider) Sync(ctx context.Context, kind saleschannel.SyncKind) (saleschannel.SyncResult, error) {
+	return saleschannel.SyncResult{Channel: saleschannel.ChannelShopee, Kind: kind}, errSalesChannelReadModelPending(saleschannel.ChannelShopee, fmt.Sprintf("sync_%s", kind))
+}
+
+func (p *ShopeeSalesChannelProvider) ListOrders(context.Context, saleschannel.OrderFilter) ([]saleschannel.ExternalOrder, error) {
+	return nil, errSalesChannelReadModelPending(saleschannel.ChannelShopee, "orders")
+}
+
+func (p *ShopeeSalesChannelProvider) GetOrder(context.Context, string) (*saleschannel.ExternalOrder, error) {
+	return nil, errSalesChannelReadModelPending(saleschannel.ChannelShopee, "order")
+}
+
+func (p *ShopeeSalesChannelProvider) ProcessOrder(context.Context, string) (*model.Order, error) {
+	return nil, errSalesChannelReadModelPending(saleschannel.ChannelShopee, "process_order")
+}
+
+func (p *ShopeeSalesChannelProvider) ListProducts(context.Context, saleschannel.ProductFilter) ([]saleschannel.ExternalProduct, error) {
+	return nil, errSalesChannelReadModelPending(saleschannel.ChannelShopee, "products")
+}
+
+func (p *ShopeeSalesChannelProvider) LinkProduct(context.Context, string, uuid.UUID, string) error {
+	return errSalesChannelReadModelPending(saleschannel.ChannelShopee, "link_product")
+}
+
+func (p *ShopeeSalesChannelProvider) UnlinkProduct(context.Context, string, uuid.UUID) error {
+	return errSalesChannelReadModelPending(saleschannel.ChannelShopee, "unlink_product")
+}
+
 // NewEtsySalesChannelProvider creates an Etsy sales-channel adapter.
 func NewEtsySalesChannelProvider(svc *EtsyService) *EtsySalesChannelProvider {
 	return &EtsySalesChannelProvider{svc: svc}

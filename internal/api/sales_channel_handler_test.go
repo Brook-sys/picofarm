@@ -55,7 +55,7 @@ func TestSalesChannelHandler_ListReturnsDescriptorsAndStatus(t *testing.T) {
 	for _, channel := range got.Channels {
 		ids = append(ids, channel.Descriptor.ID)
 	}
-	wantIDs := []saleschannel.ChannelID{saleschannel.ChannelEtsy, saleschannel.ChannelSquarespace, saleschannel.ChannelShopify, saleschannel.ChannelMercadoLivre}
+	wantIDs := []saleschannel.ChannelID{saleschannel.ChannelEtsy, saleschannel.ChannelSquarespace, saleschannel.ChannelShopify, saleschannel.ChannelMercadoLivre, saleschannel.ChannelShopee}
 	if !reflect.DeepEqual(ids, wantIDs) {
 		t.Fatalf("expected channel order %v, got %v", wantIDs, ids)
 	}
@@ -77,6 +77,17 @@ func TestSalesChannelHandler_ListReturnsDescriptorsAndStatus(t *testing.T) {
 	}
 	if shopify.Descriptor.Supports(saleschannel.CapabilityProductsRead) {
 		t.Fatalf("Shopify should not advertise product sync capability yet")
+	}
+
+	shopee := got.Channels[4]
+	if shopee.Status.Connected {
+		t.Fatalf("expected Shopee to start disconnected")
+	}
+	if !shopee.Descriptor.Supports(saleschannel.CapabilityOrdersRead) || !shopee.Descriptor.Supports(saleschannel.CapabilityProductsRead) {
+		t.Fatalf("expected Shopee descriptor to advertise read-only MVP capabilities: %+v", shopee.Descriptor.Capabilities)
+	}
+	if shopee.Descriptor.Supports(saleschannel.CapabilityInventoryWrite) || shopee.Descriptor.Supports(saleschannel.CapabilityWebhooks) {
+		t.Fatalf("Shopee should not advertise post-MVP gated capabilities yet: %+v", shopee.Descriptor.Capabilities)
 	}
 }
 
