@@ -4,7 +4,7 @@ This document is the canonical guide for PicoFarm sales-channel integrations. Us
 
 The goal is a modular, capability-driven architecture where each external marketplace or storefront is implemented as a provider behind a common contract. New contributors should be able to add a channel by following this document without reverse-engineering every existing integration.
 
-> Current status: the generic `internal/saleschannel` contracts, provider registry, canonical storage repository, and initial legacy-backed adapters for Etsy, Squarespace, and Shopify are implemented. The public HTTP routes are still provider-specific (`/api/integrations/{provider}/*`); do not remove those legacy routes until the generic `/api/sales-channels/*` layer is implemented, tested, documented, and explicitly migrated.
+> Current status: the generic `internal/saleschannel` contracts, provider registry, canonical storage repository, initial legacy-backed adapters for Etsy, Squarespace, and Shopify, and read-only generic HTTP routes are implemented. Existing provider-specific routes (`/api/integrations/{provider}/*`) remain supported while write/sync/connect flows continue to migrate behind `/api/sales-channels/*`.
 
 ## Design goals
 
@@ -40,13 +40,13 @@ Existing provider-specific integration code lives in these areas:
 | Squarespace | `internal/model/squarespace.go`, `internal/repository/squarespace.go`, `internal/service/squarespace.go`, `internal/api/squarespace_handler.go` | `internal/squarespace/client.go` | API-key style connection, orders/products sync and links. |
 | Shopify | `internal/repository/shopify.go`, `internal/service/shopify.go`, `internal/api/shopify_handler.go`, Shopify model shapes in `internal/model/models.go` | service-level HTTP/OAuth code | Existing support is partial and should be exposed by capabilities, not assumptions. |
 
-Current route groups remain supported during migration:
+Current provider-specific route groups remain supported during migration:
 
 - `/api/integrations/etsy/*`
 - `/api/integrations/squarespace/*`
 - `/api/integrations/shopify/*`
 
-The generic target route group is `/api/sales-channels/*`.
+The generic route group starts at `/api/sales-channels/*`.
 
 ## Target backend shape
 
@@ -60,6 +60,8 @@ internal/saleschannel/
 ```
 
 Initial adapters currently live in `internal/service/sales_channel_adapters.go` so they can wrap existing Etsy, Squarespace, and Shopify services without moving legacy business logic yet. They expose descriptors, capabilities, connection status, and legacy sync entry points while read-model conversion for external orders/products remains a follow-up.
+
+Read-only generic API handlers live in `internal/api/sales_channel_handler.go`. They expose registered provider descriptors and current connection status for all providers or one provider without returning credentials, OAuth codes, API keys, or raw provider payloads.
 
 Handlers stay thin in `internal/api`. Business orchestration belongs in `internal/saleschannel` or `internal/service`; persistence belongs in `internal/repository`.
 
@@ -143,9 +145,8 @@ Representative routes:
 
 | Route | Purpose |
 | --- | --- |
-| `GET /api/sales-channels` | List provider descriptors and capabilities. |
-| `GET /api/sales-channels/status` | List connection/sync status for all providers. |
-| `GET /api/sales-channels/{channel}/status` | Status for one provider. |
+| `GET /api/sales-channels` | List registered provider descriptors, capabilities, and connection status. |
+| `GET /api/sales-channels/{channel}` | Descriptor, capabilities, and connection status for one provider. |
 | `POST /api/sales-channels/{channel}/connect` | Connect/configure a provider, with provider-specific body validated by adapter. |
 | `POST /api/sales-channels/{channel}/disconnect` | Disconnect provider or connection. |
 | `GET /api/sales-channels/{channel}/auth-url` | Start OAuth where supported. |

@@ -63,6 +63,12 @@ Keep these literal sets synchronized between Go and TypeScript.
 | Quote status | `model.QuoteStatus` | `QuoteStatus` | `draft`, `sent`, `accepted`, `rejected`, `expired` |
 | Quote line item type | `model.QuoteLineItemType` | `QuoteLineItemType` | `printing`, `post_processing`, `consulting`, `design`, `other`, `labor`, `consumables`, `shipping`, `finishing` |
 | Discount type | `model.DiscountType` | `DiscountType` | `none`, `flat`, `percent` |
+| Sales-channel ID | `saleschannel.ChannelID` | pending feature-local type | `etsy`, `squarespace`, `shopify` |
+| Sales-channel auth type | `saleschannel.AuthType` | pending feature-local type | `oauth`, `api_key`, `manual` |
+| Sales-channel capability | `saleschannel.Capability` | pending feature-local type | `oauth`, `api_key`, `orders_read`, `products_read`, `inventory_write`, `webhooks` |
+| Sales-channel connection state | `saleschannel.ConnectionState` | pending feature-local type | `disconnected`, `connected`, `needs_attention`, `syncing` |
+| Sales-channel sync kind | `saleschannel.SyncKind` | pending feature-local type | `orders`, `products`, `all` |
+| Sales-channel sync run status | `saleschannel.SyncRunStatus` | pending feature-local type | `pending`, `running`, `succeeded`, `failed` |
 
 Do not add frontend-only enum values unless the backend explicitly returns them or the type is clearly marked as UI-local.
 
@@ -249,7 +255,7 @@ Primary response types:
 
 Representative route groups:
 
-- Target generic sales-channel routes: `/api/sales-channels/*` (see `docs/SALES_CHANNELS.md`)
+- Generic read-only sales-channel routes: `GET /api/sales-channels` and `GET /api/sales-channels/{channel}` (see `docs/SALES_CHANNELS.md`)
 - `/api/integrations/etsy/*`
 - `/api/integrations/squarespace/*`
 - `/api/integrations/shopify/*`
@@ -259,6 +265,7 @@ Primary contracts live in:
 
 - `internal/saleschannel/*.go` for provider-neutral descriptors, capabilities, connection status, sync results, external orders/products, sync runs, and product links
 - `internal/service/sales_channel_adapters.go` for the current legacy-backed Etsy/Squarespace/Shopify provider adapters
+- `internal/api/sales_channel_handler.go` for the current generic read-only HTTP response wrappers
 - `internal/model/etsy.go`
 - `internal/model/squarespace.go`
 - Shopify/Bambu model shapes in `internal/model/models.go`
