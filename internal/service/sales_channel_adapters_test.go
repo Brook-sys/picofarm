@@ -11,6 +11,7 @@ import (
 	"github.com/Brook-sys/picofarm/internal/database"
 	"github.com/Brook-sys/picofarm/internal/mercadolivre"
 	"github.com/Brook-sys/picofarm/internal/model"
+	"github.com/Brook-sys/picofarm/internal/olx"
 	"github.com/Brook-sys/picofarm/internal/printer"
 	"github.com/Brook-sys/picofarm/internal/realtime"
 	"github.com/Brook-sys/picofarm/internal/repository"
@@ -421,6 +422,50 @@ func TestShopeeSalesChannelProvider_SyncProductsUpsertsExternalProductsIdempoten
 	}
 }
 
+func TestOLXSalesChannelProvider_SyncProductsUpsertsExternalProductsIdempotently(t *testing.T) {
+	repos := openSalesChannelAdapterRepos(t)
+	ctx := context.Background()
+	settings := &SettingsService{repo: repos.Settings}
+	_ = settings.Set(ctx, "olx_api_key", "fake-olx-key")
+	provider := NewOLXSalesChannelProviderWithRepository(settings, fakeOLXClient{accountID: "olx-account-123", name: "PicoFarm OLX"}, repos.SalesChannels)
+
+	result, err := provider.Sync(ctx, saleschannel.SyncProducts)
+	if err != nil {
+		t.Fatalf("sync products: %v", err)
+	}
+	if result.TotalFetched != 1 || result.Created != 1 || result.Updated != 0 || result.Skipped != 0 {
+		t.Fatalf("unexpected first sync result: %+v", result)
+	}
+
+	products, err := repos.SalesChannels.ListExternalProducts(ctx, saleschannel.ProductFilter{Channel: saleschannel.ChannelOLX})
+	if err != nil {
+		t.Fatalf("list stored products: %v", err)
+	}
+	if len(products) != 1 {
+		t.Fatalf("expected 1 stored product, got %d", len(products))
+	}
+	firstID := products[0].ID
+	if products[0].ExternalProductID != "olx-ad-1" || products[0].Title != "Miniatura dragão 3D" || products[0].PriceCents != 12990 || products[0].Currency != "BRL" {
+		t.Fatalf("unexpected stored product: %+v", products[0])
+	}
+
+	result, err = provider.Sync(ctx, saleschannel.SyncProducts)
+	if err != nil {
+		t.Fatalf("sync products second: %v", err)
+	}
+	if result.TotalFetched != 1 || result.Created != 0 || result.Updated != 1 || result.Skipped != 0 {
+		t.Fatalf("unexpected second sync result: %+v", result)
+	}
+
+	products, err = repos.SalesChannels.ListExternalProducts(ctx, saleschannel.ProductFilter{Channel: saleschannel.ChannelOLX})
+	if err != nil {
+		t.Fatalf("list stored products second: %v", err)
+	}
+	if len(products) != 1 || products[0].ID != firstID {
+		t.Fatalf("expected idempotent upsert to keep one row with ID %s, got %+v", firstID, products)
+	}
+}
+
 func TestShopeeSalesChannelProvider_SyncSanitizesRateLimitErrors(t *testing.T) {
 	provider := NewShopeeSalesChannelProviderWithRepository(fakeShopeeClient{
 		err: errors.New("429 rate limit sign=abcdef access_token=secret-token partner_key=secret-key"),
@@ -503,6 +548,22 @@ func (f fakeOLXClient) ValidateAPIKey(context.Context, string) (string, string, 
 		return "", "", f.err
 	}
 	return f.accountID, f.name, nil
+}
+
+func (f fakeOLXClient) ListAds(context.Context, string) ([]olx.Ad, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	return []olx.Ad{{
+		ID:          "olx-ad-1",
+		Title:       "Miniatura dragão 3D",
+		Description: "Impresso sob demanda",
+		URL:         "https://www.olx.com.br/item/olx-ad-1",
+		Status:      "active",
+		PriceCents:  12990,
+		Currency:    "BRL",
+		Visible:     true,
+	}}, nil
 }
 
 type fakeMercadoLivreClient struct {

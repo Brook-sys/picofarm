@@ -7,6 +7,7 @@ import (
 
 	"github.com/Brook-sys/picofarm/internal/mercadolivre"
 	"github.com/Brook-sys/picofarm/internal/model"
+	"github.com/Brook-sys/picofarm/internal/olx"
 	"github.com/Brook-sys/picofarm/internal/repository"
 	"github.com/Brook-sys/picofarm/internal/saleschannel"
 	"github.com/Brook-sys/picofarm/internal/shopee"
@@ -150,9 +151,10 @@ func (p *ShopeeSalesChannelProvider) UnlinkProduct(context.Context, string, uuid
 	return errSalesChannelReadModelPending(saleschannel.ChannelShopee, "unlink_product")
 }
 
-// OLXClient is the fakeable OLX Brasil client surface used for credential validation.
+// OLXClient is the fakeable OLX Brasil client surface used for credential validation and ads sync.
 type OLXClient interface {
 	ValidateAPIKey(ctx context.Context, apiKey string) (accountID, displayName string, err error)
+	ListAds(ctx context.Context, apiKey string) ([]olx.Ad, error)
 }
 
 // OLXSalesChannelProvider exposes the approved partial OLX Brasil MVP.
@@ -161,6 +163,7 @@ type OLXClient interface {
 type OLXSalesChannelProvider struct {
 	settings *SettingsService
 	client   OLXClient
+	repo     *repository.SalesChannelRepository
 }
 
 func NewOLXSalesChannelProvider() *OLXSalesChannelProvider {
@@ -169,6 +172,10 @@ func NewOLXSalesChannelProvider() *OLXSalesChannelProvider {
 
 func NewOLXSalesChannelProviderWithSettings(settings *SettingsService, client OLXClient) *OLXSalesChannelProvider {
 	return &OLXSalesChannelProvider{settings: settings, client: client}
+}
+
+func NewOLXSalesChannelProviderWithRepository(settings *SettingsService, client OLXClient, repo *repository.SalesChannelRepository) *OLXSalesChannelProvider {
+	return &OLXSalesChannelProvider{settings: settings, client: client, repo: repo}
 }
 
 func (p *OLXSalesChannelProvider) Descriptor() saleschannel.ProviderDescriptor {
@@ -209,8 +216,53 @@ func (p *OLXSalesChannelProvider) Status(ctx context.Context) (saleschannel.Conn
 	return status, nil
 }
 
-func (p *OLXSalesChannelProvider) Sync(context.Context, saleschannel.SyncKind) (saleschannel.SyncResult, error) {
-	return saleschannel.SyncResult{Channel: saleschannel.ChannelOLX}, errSalesChannelReadModelPending(saleschannel.ChannelOLX, "manual_import")
+func (p *OLXSalesChannelProvider) Sync(ctx context.Context, kind saleschannel.SyncKind) (saleschannel.SyncResult, error) {
+	result := saleschannel.SyncResult{Channel: saleschannel.ChannelOLX, Kind: kind}
+	if kind != saleschannel.SyncProducts && kind != saleschannel.SyncAll {
+		return result, errSalesChannelReadModelPending(saleschannel.ChannelOLX, string(kind))
+	}
+	if p == nil || p.settings == nil || p.client == nil || p.repo == nil {
+		return result, errSalesChannelReadModelPending(saleschannel.ChannelOLX, "sync")
+	}
+	apiKey, err := p.olxAPIKey(ctx)
+	if err != nil {
+		return result, err
+	}
+	accountID, displayName, err := p.client.ValidateAPIKey(ctx, apiKey)
+	if err != nil {
+		return result, fmt.Errorf("olx account: %s", saleschannel.SanitizeErrorMessage(err.Error()))
+	}
+	connection := &saleschannel.Connection{
+		Channel:      saleschannel.ChannelOLX,
+		AccountID:    accountID,
+		DisplayName:  displayName,
+		Status:       saleschannel.ConnectionStatusConnected,
+		Capabilities: []saleschannel.Capability{saleschannel.CapabilityProductsRead, saleschannel.CapabilityWebhooks},
+	}
+	if err := p.repo.UpsertConnection(ctx, connection); err != nil {
+		return result, err
+	}
+	ads, err := p.client.ListAds(ctx, apiKey)
+	if err != nil {
+		return result, fmt.Errorf("olx list ads: %s", saleschannel.SanitizeErrorMessage(err.Error()))
+	}
+	for _, ad := range ads {
+		external := olxExternalProduct(ad, connection.ID)
+		stored, err := p.repo.GetExternalProductByProviderID(ctx, connection.ID, external.ExternalProductID)
+		if err != nil {
+			return result, err
+		}
+		if err := p.repo.UpsertExternalProduct(ctx, &external); err != nil {
+			return result, err
+		}
+		result.TotalFetched++
+		if stored == nil {
+			result.Created++
+		} else {
+			result.Updated++
+		}
+	}
+	return result, nil
 }
 
 func (p *OLXSalesChannelProvider) ListOrders(context.Context, saleschannel.OrderFilter) ([]saleschannel.ExternalOrder, error) {
@@ -225,8 +277,12 @@ func (p *OLXSalesChannelProvider) ProcessOrder(context.Context, string) (*model.
 	return nil, errSalesChannelReadModelPending(saleschannel.ChannelOLX, "process_order")
 }
 
-func (p *OLXSalesChannelProvider) ListProducts(context.Context, saleschannel.ProductFilter) ([]saleschannel.ExternalProduct, error) {
-	return []saleschannel.ExternalProduct{}, nil
+func (p *OLXSalesChannelProvider) ListProducts(ctx context.Context, filter saleschannel.ProductFilter) ([]saleschannel.ExternalProduct, error) {
+	if p.repo != nil {
+		filter.Channel = saleschannel.ChannelOLX
+		return p.repo.ListExternalProducts(ctx, filter)
+	}
+	return nil, errSalesChannelReadModelPending(saleschannel.ChannelOLX, "products")
 }
 
 func (p *OLXSalesChannelProvider) LinkProduct(context.Context, string, uuid.UUID, string) error {
@@ -235,6 +291,38 @@ func (p *OLXSalesChannelProvider) LinkProduct(context.Context, string, uuid.UUID
 
 func (p *OLXSalesChannelProvider) UnlinkProduct(context.Context, string, uuid.UUID) error {
 	return errSalesChannelReadModelPending(saleschannel.ChannelOLX, "unlink_product")
+}
+
+func (p *OLXSalesChannelProvider) olxAPIKey(ctx context.Context) (string, error) {
+	setting, err := p.settings.Get(ctx, "olx_api_key")
+	if err != nil {
+		return "", err
+	}
+	if setting == nil || setting.Value == "" {
+		return "", fmt.Errorf("OLX API key not configured")
+	}
+	return setting.Value, nil
+}
+
+func olxExternalProduct(ad olx.Ad, connectionID uuid.UUID) saleschannel.ExternalProduct {
+	return saleschannel.ExternalProduct{
+		ConnectionID:      connectionID,
+		Channel:           saleschannel.ChannelOLX,
+		ExternalProductID: ad.ID,
+		Title:             ad.Title,
+		Description:       ad.Description,
+		URL:               ad.URL,
+		Status:            ad.Status,
+		IsVisible:         ad.Visible,
+		PriceCents:        ad.PriceCents,
+		Currency:          ad.Currency,
+		Variants: []saleschannel.ExternalProductVariant{{
+			ExternalVariantID: ad.ID,
+			Title:             ad.Title,
+			PriceCents:        ad.PriceCents,
+			Currency:          ad.Currency,
+		}},
+	}
 }
 
 func (p *ShopeeSalesChannelProvider) upsertConnection(ctx context.Context) (*saleschannel.Connection, error) {
