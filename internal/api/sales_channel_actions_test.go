@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/Brook-sys/picofarm/internal/model"
@@ -118,6 +119,72 @@ func TestSalesChannelHandler_LinkAndUnlinkExternalProduct(t *testing.T) {
 	}
 	if len(links) != 0 {
 		t.Fatalf("expected links to be removed, got %#v", links)
+	}
+}
+
+func TestSalesChannelHandler_LinkAndUnlinkShopeeProductVariant(t *testing.T) {
+	env := newTestEnv(t)
+	ctx := context.Background()
+	connection := seedSalesChannelConnection(t, ctx, env, saleschannel.ChannelShopee)
+	project := seedSalesChannelProject(t, ctx, env, "Shopee Dragon", "MODEL-RED")
+	product := &saleschannel.ExternalProduct{
+		ConnectionID:      connection.ID,
+		Channel:           saleschannel.ChannelShopee,
+		ExternalProductID: "1001",
+		Title:             "Dragon Miniature",
+		Status:            "NORMAL",
+		IsVisible:         true,
+		Currency:          "BRL",
+		Variants: []saleschannel.ExternalProductVariant{
+			{ExternalVariantID: "2002", SKU: "MODEL-RED", Title: "Red", PriceCents: 8990, Currency: "BRL"},
+		},
+	}
+	seedExternalProduct(t, ctx, env, product)
+
+	body := map[string]any{
+		"project_id":          project.ID.String(),
+		"external_variant_id": product.Variants[0].ID.String(),
+		"sku":                 "MODEL-RED",
+		"sync_inventory":      false,
+	}
+	payload, _ := json.Marshal(body)
+	req := httptest.NewRequest(http.MethodPost, "/api/sales-channels/products/"+product.ID.String()+"/link", bytes.NewReader(payload))
+	rr := httptest.NewRecorder()
+	env.handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("link status = %d, body = %s", rr.Code, rr.Body.String())
+	}
+	links, err := env.repos.SalesChannels.ListProductLinks(ctx, product.ID)
+	if err != nil {
+		t.Fatalf("list Shopee product links: %v", err)
+	}
+	if len(links) != 1 || links[0].Channel != saleschannel.ChannelShopee || links[0].ProjectID != project.ID || links[0].ExternalVariantID == nil || *links[0].ExternalVariantID != product.Variants[0].ID || links[0].SyncInventory {
+		t.Fatalf("unexpected Shopee links after link: %#v", links)
+	}
+
+	listReq := httptest.NewRequest(http.MethodGet, "/api/sales-channels/products?channel=shopee&linked=true", nil)
+	listRR := httptest.NewRecorder()
+	env.handler.ServeHTTP(listRR, listReq)
+	if listRR.Code != http.StatusOK {
+		t.Fatalf("list linked status = %d, body = %s", listRR.Code, listRR.Body.String())
+	}
+	if strings.Contains(listRR.Body.String(), "raw_json") {
+		t.Fatalf("linked Shopee product response should omit raw_json: %s", listRR.Body.String())
+	}
+
+	req = httptest.NewRequest(http.MethodDelete, "/api/sales-channels/products/"+product.ID.String()+"/link", bytes.NewReader(payload))
+	rr = httptest.NewRecorder()
+	env.handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("unlink status = %d, body = %s", rr.Code, rr.Body.String())
+	}
+	links, err = env.repos.SalesChannels.ListProductLinks(ctx, product.ID)
+	if err != nil {
+		t.Fatalf("list Shopee product links after unlink: %v", err)
+	}
+	if len(links) != 0 {
+		t.Fatalf("expected Shopee links to be removed, got %#v", links)
 	}
 }
 
