@@ -1062,6 +1062,137 @@ CREATE TABLE IF NOT EXISTS quote_events (
 CREATE INDEX IF NOT EXISTS idx_quote_events_quote ON quote_events(quote_id);
 
 -- ============================================
+-- Sales Channel Canonical Storage
+-- ============================================
+
+CREATE TABLE IF NOT EXISTS sales_channel_connections (
+    id TEXT PRIMARY KEY,
+    channel TEXT NOT NULL,
+    account_id TEXT NOT NULL,
+    display_name TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'disconnected',
+    capabilities_json TEXT NOT NULL DEFAULT '[]',
+    config_json TEXT NOT NULL DEFAULT '{}',
+    last_order_sync_at TEXT,
+    last_product_sync_at TEXT,
+    last_error TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(channel, account_id)
+);
+CREATE INDEX IF NOT EXISTS idx_sales_channel_connections_channel ON sales_channel_connections(channel);
+CREATE INDEX IF NOT EXISTS idx_sales_channel_connections_status ON sales_channel_connections(status);
+
+CREATE TABLE IF NOT EXISTS sales_channel_sync_runs (
+    id TEXT PRIMARY KEY,
+    connection_id TEXT NOT NULL REFERENCES sales_channel_connections(id) ON DELETE CASCADE,
+    channel TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    status TEXT NOT NULL,
+    total_fetched INTEGER NOT NULL DEFAULT 0,
+    created_count INTEGER NOT NULL DEFAULT 0,
+    updated_count INTEGER NOT NULL DEFAULT 0,
+    skipped_count INTEGER NOT NULL DEFAULT 0,
+    error_count INTEGER NOT NULL DEFAULT 0,
+    last_error TEXT NOT NULL DEFAULT '',
+    started_at TEXT NOT NULL,
+    finished_at TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_sales_channel_sync_runs_connection ON sales_channel_sync_runs(connection_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_sales_channel_sync_runs_channel ON sales_channel_sync_runs(channel, kind, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS sales_channel_external_orders (
+    id TEXT PRIMARY KEY,
+    connection_id TEXT NOT NULL REFERENCES sales_channel_connections(id) ON DELETE CASCADE,
+    channel TEXT NOT NULL,
+    external_order_id TEXT NOT NULL,
+    order_id TEXT REFERENCES orders(id) ON DELETE SET NULL,
+    order_number TEXT NOT NULL DEFAULT '',
+    customer_name TEXT NOT NULL DEFAULT '',
+    customer_email TEXT NOT NULL DEFAULT '',
+    total_cents INTEGER NOT NULL DEFAULT 0,
+    currency TEXT NOT NULL DEFAULT 'USD',
+    status TEXT NOT NULL DEFAULT '',
+    is_processed INTEGER NOT NULL DEFAULT 0,
+    raw_json TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(connection_id, external_order_id)
+);
+CREATE INDEX IF NOT EXISTS idx_sales_channel_external_orders_channel ON sales_channel_external_orders(channel, external_order_id);
+CREATE INDEX IF NOT EXISTS idx_sales_channel_external_orders_processed ON sales_channel_external_orders(is_processed);
+CREATE INDEX IF NOT EXISTS idx_sales_channel_external_orders_order ON sales_channel_external_orders(order_id);
+
+CREATE TABLE IF NOT EXISTS sales_channel_external_order_items (
+    id TEXT PRIMARY KEY,
+    external_order_id TEXT NOT NULL REFERENCES sales_channel_external_orders(id) ON DELETE CASCADE,
+    external_line_item_id TEXT NOT NULL,
+    sku TEXT NOT NULL DEFAULT '',
+    title TEXT NOT NULL DEFAULT '',
+    quantity INTEGER NOT NULL DEFAULT 1,
+    unit_price_cents INTEGER NOT NULL DEFAULT 0,
+    currency TEXT NOT NULL DEFAULT 'USD',
+    project_id TEXT REFERENCES projects(id) ON DELETE SET NULL,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(external_order_id, external_line_item_id)
+);
+CREATE INDEX IF NOT EXISTS idx_sales_channel_external_order_items_order ON sales_channel_external_order_items(external_order_id);
+CREATE INDEX IF NOT EXISTS idx_sales_channel_external_order_items_sku ON sales_channel_external_order_items(sku);
+
+CREATE TABLE IF NOT EXISTS sales_channel_external_products (
+    id TEXT PRIMARY KEY,
+    connection_id TEXT NOT NULL REFERENCES sales_channel_connections(id) ON DELETE CASCADE,
+    channel TEXT NOT NULL,
+    external_product_id TEXT NOT NULL,
+    title TEXT NOT NULL DEFAULT '',
+    description TEXT NOT NULL DEFAULT '',
+    url TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT '',
+    is_visible INTEGER NOT NULL DEFAULT 1,
+    price_cents INTEGER NOT NULL DEFAULT 0,
+    currency TEXT NOT NULL DEFAULT 'USD',
+    raw_json TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(connection_id, external_product_id)
+);
+CREATE INDEX IF NOT EXISTS idx_sales_channel_external_products_channel ON sales_channel_external_products(channel, external_product_id);
+CREATE INDEX IF NOT EXISTS idx_sales_channel_external_products_status ON sales_channel_external_products(status);
+
+CREATE TABLE IF NOT EXISTS sales_channel_external_product_variants (
+    id TEXT PRIMARY KEY,
+    external_product_id TEXT NOT NULL REFERENCES sales_channel_external_products(id) ON DELETE CASCADE,
+    external_variant_id TEXT NOT NULL,
+    sku TEXT NOT NULL DEFAULT '',
+    title TEXT NOT NULL DEFAULT '',
+    price_cents INTEGER NOT NULL DEFAULT 0,
+    currency TEXT NOT NULL DEFAULT 'USD',
+    stock_quantity INTEGER,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(external_product_id, external_variant_id)
+);
+CREATE INDEX IF NOT EXISTS idx_sales_channel_external_product_variants_product ON sales_channel_external_product_variants(external_product_id);
+CREATE INDEX IF NOT EXISTS idx_sales_channel_external_product_variants_sku ON sales_channel_external_product_variants(sku);
+
+CREATE TABLE IF NOT EXISTS sales_channel_product_links (
+    id TEXT PRIMARY KEY,
+    connection_id TEXT NOT NULL REFERENCES sales_channel_connections(id) ON DELETE CASCADE,
+    channel TEXT NOT NULL,
+    external_product_id TEXT NOT NULL REFERENCES sales_channel_external_products(id) ON DELETE CASCADE,
+    external_variant_id TEXT REFERENCES sales_channel_external_product_variants(id) ON DELETE CASCADE,
+    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    sku TEXT NOT NULL DEFAULT '',
+    sync_inventory INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(external_product_id, external_variant_id, project_id)
+);
+CREATE INDEX IF NOT EXISTS idx_sales_channel_product_links_project ON sales_channel_product_links(project_id);
+CREATE INDEX IF NOT EXISTS idx_sales_channel_product_links_connection ON sales_channel_product_links(connection_id);
+
+-- ============================================
 -- Shopify Integration (Phase 3)
 -- ============================================
 

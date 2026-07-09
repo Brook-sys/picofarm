@@ -62,6 +62,32 @@ func (d ProviderDescriptor) Supports(capability Capability) bool {
 	return false
 }
 
+// ConnectionState describes whether a channel account can be used.
+type ConnectionState string
+
+const (
+	ConnectionStatusDisconnected   ConnectionState = "disconnected"
+	ConnectionStatusConnected      ConnectionState = "connected"
+	ConnectionStatusNeedsAttention ConnectionState = "needs_attention"
+)
+
+// Connection is stored metadata for a configured channel account. Credential
+// material must live outside this struct or be stored redacted/encrypted.
+type Connection struct {
+	ID              uuid.UUID       `json:"id"`
+	Channel         ChannelID       `json:"channel"`
+	AccountID       string          `json:"account_id"`
+	DisplayName     string          `json:"display_name"`
+	Status          ConnectionState `json:"status"`
+	Capabilities    []Capability    `json:"capabilities"`
+	ConfigJSON      string          `json:"config_json,omitempty"`
+	LastOrderSync   *time.Time      `json:"last_order_sync_at,omitempty"`
+	LastProductSync *time.Time      `json:"last_product_sync_at,omitempty"`
+	LastError       string          `json:"last_error,omitempty"`
+	CreatedAt       time.Time       `json:"created_at"`
+	UpdatedAt       time.Time       `json:"updated_at"`
+}
+
 // ConnectionStatus is the canonical status returned by a provider.
 type ConnectionStatus struct {
 	Channel           ChannelID  `json:"channel"`
@@ -95,6 +121,42 @@ type SyncResult struct {
 	FinishedAt   time.Time `json:"finished_at"`
 }
 
+// SyncRunStatus is the persisted lifecycle state for a sync attempt.
+type SyncRunStatus string
+
+const (
+	SyncRunStatusRunning   SyncRunStatus = "running"
+	SyncRunStatusSucceeded SyncRunStatus = "succeeded"
+	SyncRunStatusFailed    SyncRunStatus = "failed"
+)
+
+// SyncRun stores one provider sync attempt.
+type SyncRun struct {
+	ID           uuid.UUID     `json:"id"`
+	ConnectionID uuid.UUID     `json:"connection_id"`
+	Channel      ChannelID     `json:"channel"`
+	Kind         SyncKind      `json:"kind"`
+	Status       SyncRunStatus `json:"status"`
+	TotalFetched int           `json:"total_fetched"`
+	Created      int           `json:"created"`
+	Updated      int           `json:"updated"`
+	Skipped      int           `json:"skipped"`
+	Errors       int           `json:"errors"`
+	LastError    string        `json:"last_error,omitempty"`
+	StartedAt    time.Time     `json:"started_at"`
+	FinishedAt   *time.Time    `json:"finished_at,omitempty"`
+	CreatedAt    time.Time     `json:"created_at"`
+}
+
+// SyncRunFilter constrains sync-run listing.
+type SyncRunFilter struct {
+	ConnectionID uuid.UUID
+	Channel      ChannelID
+	Kind         SyncKind
+	Limit        int
+	Offset       int
+}
+
 // OrderFilter constrains external order listing.
 type OrderFilter struct {
 	Channel   ChannelID
@@ -107,6 +169,7 @@ type OrderFilter struct {
 // ExternalOrder is a provider-neutral imported order/receipt.
 type ExternalOrder struct {
 	ID              uuid.UUID           `json:"id"`
+	ConnectionID    uuid.UUID           `json:"connection_id"`
 	Channel         ChannelID           `json:"channel"`
 	ExternalOrderID string              `json:"external_order_id"`
 	OrderID         *uuid.UUID          `json:"order_id,omitempty"`
@@ -117,6 +180,7 @@ type ExternalOrder struct {
 	Currency        string              `json:"currency"`
 	Status          string              `json:"status,omitempty"`
 	IsProcessed     bool                `json:"is_processed"`
+	RawJSON         string              `json:"raw_json,omitempty"`
 	CreatedAt       time.Time           `json:"created_at"`
 	UpdatedAt       time.Time           `json:"updated_at"`
 	Items           []ExternalOrderItem `json:"items,omitempty"`
@@ -147,6 +211,7 @@ type ProductFilter struct {
 // ExternalProduct is a provider-neutral imported product/listing.
 type ExternalProduct struct {
 	ID                uuid.UUID                `json:"id"`
+	ConnectionID      uuid.UUID                `json:"connection_id"`
 	Channel           ChannelID                `json:"channel"`
 	ExternalProductID string                   `json:"external_product_id"`
 	Title             string                   `json:"title"`
@@ -156,6 +221,7 @@ type ExternalProduct struct {
 	IsVisible         bool                     `json:"is_visible"`
 	PriceCents        int                      `json:"price_cents,omitempty"`
 	Currency          string                   `json:"currency,omitempty"`
+	RawJSON           string                   `json:"raw_json,omitempty"`
 	Variants          []ExternalProductVariant `json:"variants,omitempty"`
 }
 
@@ -169,4 +235,18 @@ type ExternalProductVariant struct {
 	PriceCents        int       `json:"price_cents,omitempty"`
 	Currency          string    `json:"currency,omitempty"`
 	StockQuantity     *int      `json:"stock_quantity,omitempty"`
+}
+
+// ProductLink maps an external product/variant/SKU to a PicoFarm project.
+type ProductLink struct {
+	ID                uuid.UUID  `json:"id"`
+	ConnectionID      uuid.UUID  `json:"connection_id"`
+	Channel           ChannelID  `json:"channel"`
+	ExternalProductID uuid.UUID  `json:"external_product_id"`
+	ExternalVariantID *uuid.UUID `json:"external_variant_id,omitempty"`
+	ProjectID         uuid.UUID  `json:"project_id"`
+	SKU               string     `json:"sku,omitempty"`
+	SyncInventory     bool       `json:"sync_inventory"`
+	CreatedAt         time.Time  `json:"created_at"`
+	UpdatedAt         time.Time  `json:"updated_at"`
 }
