@@ -1287,6 +1287,26 @@ export const salesChannelsApi = {
   list: () => fetchApi<import('../types').SalesChannelsListResponse>('/sales-channels'),
   get: (channel: import('../types').SalesChannelID) =>
     fetchApi<import('../types').SalesChannelSummary>(`/sales-channels/${channel}`),
+  listOrders: (params?: { channel?: import('../types').SalesChannelID; processed?: boolean; status?: string; limit?: number; offset?: number }) => {
+    const searchParams = new URLSearchParams()
+    if (params?.channel) searchParams.set('channel', params.channel)
+    if (params?.processed !== undefined) searchParams.set('processed', String(params.processed))
+    if (params?.status) searchParams.set('status', params.status)
+    if (params?.limit) searchParams.set('limit', String(params.limit))
+    if (params?.offset) searchParams.set('offset', String(params.offset))
+    const query = searchParams.toString()
+    return fetchApi<import('../types').SalesChannelExternalOrdersResponse>(`/sales-channels/orders${query ? `?${query}` : ''}`)
+  },
+  listProducts: (params?: { channel?: import('../types').SalesChannelID; linked?: boolean; status?: string; limit?: number; offset?: number }) => {
+    const searchParams = new URLSearchParams()
+    if (params?.channel) searchParams.set('channel', params.channel)
+    if (params?.linked !== undefined) searchParams.set('linked', String(params.linked))
+    if (params?.status) searchParams.set('status', params.status)
+    if (params?.limit) searchParams.set('limit', String(params.limit))
+    if (params?.offset) searchParams.set('offset', String(params.offset))
+    const query = searchParams.toString()
+    return fetchApi<import('../types').SalesChannelExternalProductsResponse>(`/sales-channels/products${query ? `?${query}` : ''}`)
+  },
   sync: (channel: import('../types').SalesChannelID, kind: import('../types').SalesChannelSyncKind = 'all') =>
     fetchApi<import('../types').SalesChannelSyncResponse>(`/sales-channels/${channel}/sync`, {
       method: 'POST',

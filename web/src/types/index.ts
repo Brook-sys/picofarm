@@ -1259,6 +1259,70 @@ export interface SalesChannelSyncResponse {
   result: SalesChannelSyncResult
 }
 
+export interface SalesChannelExternalOrderItem {
+  id: string
+  external_order_id: string
+  external_line_item_id: string
+  sku?: string
+  title: string
+  quantity: number
+  unit_price_cents: number
+  currency: string
+  project_id?: string
+}
+
+export interface SalesChannelExternalOrder {
+  id: string
+  connection_id: string
+  channel: SalesChannelID
+  external_order_id: string
+  order_id?: string
+  order_number: string
+  customer_name: string
+  customer_email?: string
+  total_cents: number
+  currency: string
+  status?: string
+  is_processed: boolean
+  created_at: string
+  updated_at: string
+  items?: SalesChannelExternalOrderItem[]
+}
+
+export interface SalesChannelExternalProductVariant {
+  id: string
+  external_product_id: string
+  external_variant_id: string
+  sku?: string
+  title: string
+  price_cents?: number
+  currency?: string
+  stock_quantity?: number
+}
+
+export interface SalesChannelExternalProduct {
+  id: string
+  connection_id: string
+  channel: SalesChannelID
+  external_product_id: string
+  title: string
+  description?: string
+  url?: string
+  status?: string
+  is_visible: boolean
+  price_cents?: number
+  currency?: string
+  variants?: SalesChannelExternalProductVariant[]
+}
+
+export interface SalesChannelExternalOrdersResponse {
+  orders: SalesChannelExternalOrder[]
+}
+
+export interface SalesChannelExternalProductsResponse {
+  products: SalesChannelExternalProduct[]
+}
+
 // Bambu Cloud types
 export interface CloudDevice {
   dev_id: string

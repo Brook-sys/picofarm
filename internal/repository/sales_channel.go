@@ -275,6 +275,55 @@ func (r *SalesChannelRepository) GetExternalOrderByProviderID(ctx context.Contex
 	return order, nil
 }
 
+// ListExternalOrders returns provider-neutral imported orders with optional filters.
+func (r *SalesChannelRepository) ListExternalOrders(ctx context.Context, filter saleschannel.OrderFilter) ([]saleschannel.ExternalOrder, error) {
+	query := `
+		SELECT id, connection_id, channel, external_order_id, order_id, order_number, customer_name,
+			customer_email, total_cents, currency, status, is_processed, raw_json, created_at, updated_at
+		FROM sales_channel_external_orders WHERE 1=1
+	`
+	args := []any{}
+	if filter.Channel != "" {
+		query += " AND channel = ?"
+		args = append(args, filter.Channel)
+	}
+	if filter.Processed != nil {
+		query += " AND is_processed = ?"
+		if *filter.Processed {
+			args = append(args, 1)
+		} else {
+			args = append(args, 0)
+		}
+	}
+	if filter.Status != "" {
+		query += " AND status = ?"
+		args = append(args, filter.Status)
+	}
+	query += " ORDER BY updated_at DESC, created_at DESC"
+	if filter.Limit > 0 {
+		query += " LIMIT ?"
+		args = append(args, filter.Limit)
+	}
+	if filter.Offset > 0 {
+		query += " OFFSET ?"
+		args = append(args, filter.Offset)
+	}
+
+	orders, err := r.listExternalOrderRows(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+
+	for i := range orders {
+		items, err := r.listExternalOrderItems(ctx, orders[i].ID)
+		if err != nil {
+			return nil, err
+		}
+		orders[i].Items = items
+	}
+	return orders, nil
+}
+
 func (r *SalesChannelRepository) externalOrderID(ctx context.Context, connectionID uuid.UUID, externalOrderID string) (uuid.UUID, error) {
 	var id uuid.UUID
 	err := scanRow(r.db.QueryRowContext(ctx, `SELECT id FROM sales_channel_external_orders WHERE connection_id = ? AND external_order_id = ?`, connectionID, externalOrderID), &id)
@@ -362,6 +411,54 @@ func (r *SalesChannelRepository) externalProductID(ctx context.Context, connecti
 	return id, err
 }
 
+// ListExternalProducts returns provider-neutral imported products/listings with optional filters.
+func (r *SalesChannelRepository) ListExternalProducts(ctx context.Context, filter saleschannel.ProductFilter) ([]saleschannel.ExternalProduct, error) {
+	query := `
+		SELECT id, connection_id, channel, external_product_id, title, description, url, status,
+			is_visible, price_cents, currency, raw_json
+		FROM sales_channel_external_products WHERE 1=1
+	`
+	args := []any{}
+	if filter.Channel != "" {
+		query += " AND channel = ?"
+		args = append(args, filter.Channel)
+	}
+	if filter.Status != "" {
+		query += " AND status = ?"
+		args = append(args, filter.Status)
+	}
+	if filter.Linked != nil {
+		if *filter.Linked {
+			query += " AND EXISTS (SELECT 1 FROM sales_channel_product_links l WHERE l.external_product_id = sales_channel_external_products.id)"
+		} else {
+			query += " AND NOT EXISTS (SELECT 1 FROM sales_channel_product_links l WHERE l.external_product_id = sales_channel_external_products.id)"
+		}
+	}
+	query += " ORDER BY title ASC"
+	if filter.Limit > 0 {
+		query += " LIMIT ?"
+		args = append(args, filter.Limit)
+	}
+	if filter.Offset > 0 {
+		query += " OFFSET ?"
+		args = append(args, filter.Offset)
+	}
+
+	products, err := r.listExternalProductRows(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+
+	for i := range products {
+		variants, err := r.listExternalProductVariants(ctx, products[i].ID)
+		if err != nil {
+			return nil, err
+		}
+		products[i].Variants = variants
+	}
+	return products, nil
+}
+
 // UpsertProductLink stores a mapping between a provider product and PicoFarm project.
 func (r *SalesChannelRepository) UpsertProductLink(ctx context.Context, link *saleschannel.ProductLink) error {
 	now := time.Now()
@@ -432,6 +529,72 @@ func (r *SalesChannelRepository) scanExternalOrder(row scannable) (*saleschannel
 		return nil, err
 	}
 	return &order, nil
+}
+
+func (r *SalesChannelRepository) listExternalOrderRows(ctx context.Context, query string, args ...any) ([]saleschannel.ExternalOrder, error) {
+	rows, err := r.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	orders := []saleschannel.ExternalOrder{}
+	for rows.Next() {
+		order, err := r.scanExternalOrder(rows)
+		if err != nil {
+			return nil, err
+		}
+		orders = append(orders, *order)
+	}
+	return orders, rows.Err()
+}
+
+func (r *SalesChannelRepository) scanExternalProduct(row scannable) (*saleschannel.ExternalProduct, error) {
+	var product saleschannel.ExternalProduct
+	err := scanRow(row, &product.ID, &product.ConnectionID, &product.Channel, &product.ExternalProductID, &product.Title, &product.Description, &product.URL, &product.Status, &product.IsVisible, &product.PriceCents, &product.Currency, &product.RawJSON)
+	if err != nil {
+		return nil, err
+	}
+	return &product, nil
+}
+
+func (r *SalesChannelRepository) listExternalProductRows(ctx context.Context, query string, args ...any) ([]saleschannel.ExternalProduct, error) {
+	rows, err := r.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	products := []saleschannel.ExternalProduct{}
+	for rows.Next() {
+		product, err := r.scanExternalProduct(rows)
+		if err != nil {
+			return nil, err
+		}
+		products = append(products, *product)
+	}
+	return products, rows.Err()
+}
+
+func (r *SalesChannelRepository) listExternalProductVariants(ctx context.Context, externalProductID uuid.UUID) ([]saleschannel.ExternalProductVariant, error) {
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT id, external_product_id, external_variant_id, sku, title, price_cents, currency, stock_quantity
+		FROM sales_channel_external_product_variants WHERE external_product_id = ? ORDER BY created_at ASC
+	`, externalProductID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	variants := []saleschannel.ExternalProductVariant{}
+	for rows.Next() {
+		var variant saleschannel.ExternalProductVariant
+		if err := scanRow(rows, &variant.ID, &variant.ExternalProductID, &variant.ExternalVariantID, &variant.SKU, &variant.Title, &variant.PriceCents, &variant.Currency, &variant.StockQuantity); err != nil {
+			return nil, err
+		}
+		variants = append(variants, variant)
+	}
+	return variants, rows.Err()
 }
 
 func (r *SalesChannelRepository) listExternalOrderItems(ctx context.Context, externalOrderID uuid.UUID) ([]saleschannel.ExternalOrderItem, error) {

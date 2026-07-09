@@ -14,25 +14,26 @@ import (
 
 // Services holds all service instances.
 type Services struct {
-	Projects        *ProjectService
-	Parts           *PartService
-	Designs         *DesignService
-	Printers        *PrinterService
-	Materials       *MaterialService
-	Spools          *SpoolService
-	PrintJobs       *PrintJobService
-	Files           *FileService
-	Expenses        *ExpenseService
-	Sales           *SaleService
-	Stats           *StatsService
-	Etsy            *EtsyService
-	Squarespace     *SquarespaceService
-	SalesChannels   *saleschannel.Registry
-	BambuCloud      *BambuCloudService
-	Settings        *SettingsService
-	ProjectSupplies *ProjectSupplyService
-	Backup          *BackupService
-	Dispatcher      *DispatcherService
+	Projects         *ProjectService
+	Parts            *PartService
+	Designs          *DesignService
+	Printers         *PrinterService
+	Materials        *MaterialService
+	Spools           *SpoolService
+	PrintJobs        *PrintJobService
+	Files            *FileService
+	Expenses         *ExpenseService
+	Sales            *SaleService
+	Stats            *StatsService
+	Etsy             *EtsyService
+	Squarespace      *SquarespaceService
+	SalesChannels    *saleschannel.Registry
+	SalesChannelData *repository.SalesChannelRepository
+	BambuCloud       *BambuCloudService
+	Settings         *SettingsService
+	ProjectSupplies  *ProjectSupplyService
+	Backup           *BackupService
+	Dispatcher       *DispatcherService
 	// New services for feature gaps
 	Orders        *OrderService
 	Alerts        *AlertService
@@ -117,6 +118,7 @@ func NewServices(repos *repository.Repositories, store storage.Storage, printerM
 	services.Tags = NewTagService(repos.Tags, repos.Parts, repos.Designs)
 	services.Shopify = NewShopifyService(repos.Shopify, services.Orders, hub)
 	services.SalesChannels = mustNewSalesChannelRegistry(services)
+	services.SalesChannelData = repos.SalesChannels
 	services.Timeline = NewTimelineService(repos.Orders, repos.Tasks, repos.Projects, repos.PrintJobs)
 	services.Tasks = NewTaskService(repos.Tasks, repos.Projects, repos.PrintJobs, repos.Parts, repos.TaskChecklist, repos.Designs, hub)
 	services.Feedback = &FeedbackService{repo: repos.Feedback}
