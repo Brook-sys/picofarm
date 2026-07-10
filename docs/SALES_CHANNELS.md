@@ -41,7 +41,7 @@ Existing provider-specific integration code lives in these areas:
 | Shopify | `internal/repository/shopify.go`, `internal/service/shopify.go`, `internal/api/shopify_handler.go`, Shopify model shapes in `internal/model/models.go` | service-level HTTP/OAuth code | Existing support is partial and should be exposed by capabilities, not assumptions. |
 | Mercado Livre | `internal/service/sales_channel_adapters.go` provider shell, `internal/saleschannel/types.go` channel ID | `internal/mercadolivre/client.go` with injected HTTP client/fakes, `ListOrders` via `/orders/search`, and `ListItems` via `/users/{id}/items/search` + `/items/{id}` | Descriptor/capability contract and fakeable client are registered; `Sync(orders)` imports Mercado Livre orders idempotently via `UpsertExternalOrder`, and `Sync(products)` imports active listings idempotently via `UpsertExternalProduct` with SKU/stock variants for generic product linking. Live OAuth/write inventory/webhooks are follow-up ML cards. |
 | Shopee | `internal/service/sales_channel_adapters.go` provider skeleton/sync adapter, `internal/saleschannel/types.go` channel ID | `internal/shopee/signing.go` HMAC helper and `internal/shopee/types.go` normalized fakeable client DTOs; full HTTP client is a follow-up. | Descriptor is registered with OAuth, `orders_read`, and `products_read` only. Fake-client backed sync maps orders and item/model products into canonical storage idempotently. Official Open Platform docs expose signed API calls, shop authorization, order/product/stock endpoints, push notifications, and sandbox testing. Brazil/regional availability and partner access must be confirmed for the user's account before live use. |
-| OLX Brasil | Planning only after OLX-01 discovery. No provider code yet. | Official OLX integration portal documents OAuth, ad import/status/listing, highlights, leads, chat/webhooks, and partner/homologation paths. | Treat OLX as an ads/leads channel, not a traditional order marketplace. Do not use scraping. API access requires registered/homologated integrator details and category/scope confirmation before enabling live capabilities. |
+| OLX Brasil | Disabled/hidden by default; provider/client code is preserved for future use. | Official OLX integration portal documents OAuth, ad import/status/listing, highlights, leads, chat/webhooks, and partner/homologation paths, but API access requires partner/integrator approval. | Treat OLX as an ads/leads channel, not a traditional order marketplace. Do not use scraping. Keep it out of the default sales-channel registry and UI until partner access is practical and explicitly re-enabled. |
 
 Current provider-specific route groups remain supported during migration:
 
@@ -342,7 +342,7 @@ OLX-01 decision: OLX should continue to OLX-02 as an official-but-gated integrat
 
 ### OLX MVP and fallback decision
 
-OLX-02 approves OLX as a partial classifieds/lead channel, not a full marketplace order channel. The initial implementation should be useful for PicoFarm sellers without pretending OLX has Etsy/Shopee-style order fulfillment semantics.
+OLX-02 originally approved OLX as a partial classifieds/lead channel, not a full marketplace order channel. Current product decision: OLX remains implemented in code for future reuse, but is disabled/hidden by default because obtaining practical API access requires OLX partner/integrator approval.
 
 | Capability | MVP decision | Rationale and implementation notes |
 | --- | --- | --- |
@@ -353,7 +353,7 @@ OLX-02 approves OLX as a partial classifieds/lead channel, not a full marketplac
 | `orders_read` | Not supported in MVP. | Discovery did not find official order lifecycle semantics. Keep OLX out of order sync/process UI until a target-account API proves orders exist. |
 | `inventory_write` | Not supported in MVP. | OLX ads are not SKU stock inventory. Any ad refresh/import workflow should be modeled separately from stock updates. |
 | `webhooks` | Planned for leads/ad notifications only. | Implement after endpoint token/header verification and idempotent event storage are covered by tests. |
-| Manual/import fallback | Approved. | If OAuth/app approval is blocked, expose OLX as manual/import-only ads/leads channel with limited capabilities and explicit status messaging. |
+| Manual/import fallback | Deferred. | If OAuth/app approval remains blocked, re-enable OLX only after deciding on a clear manual/import-only UX with limited capabilities and explicit status messaging. |
 
 Recommended OLX implementation sequence:
 

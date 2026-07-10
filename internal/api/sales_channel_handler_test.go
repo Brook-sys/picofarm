@@ -55,7 +55,7 @@ func TestSalesChannelHandler_ListReturnsDescriptorsAndStatus(t *testing.T) {
 	for _, channel := range got.Channels {
 		ids = append(ids, channel.Descriptor.ID)
 	}
-	wantIDs := []saleschannel.ChannelID{saleschannel.ChannelEtsy, saleschannel.ChannelSquarespace, saleschannel.ChannelShopify, saleschannel.ChannelMercadoLivre, saleschannel.ChannelShopee, saleschannel.ChannelOLX}
+	wantIDs := []saleschannel.ChannelID{saleschannel.ChannelEtsy, saleschannel.ChannelSquarespace, saleschannel.ChannelShopify, saleschannel.ChannelMercadoLivre, saleschannel.ChannelShopee}
 	if !reflect.DeepEqual(ids, wantIDs) {
 		t.Fatalf("expected channel order %v, got %v", wantIDs, ids)
 	}
