@@ -511,7 +511,7 @@ func assertInitialSalesChannelRegistry(t *testing.T, services *Services) {
 	for _, descriptor := range descriptors {
 		got = append(got, descriptor.ID)
 	}
-	want := []saleschannel.ChannelID{saleschannel.ChannelEtsy, saleschannel.ChannelSquarespace, saleschannel.ChannelShopify, saleschannel.ChannelMercadoLivre, saleschannel.ChannelShopee, saleschannel.ChannelOLX}
+	want := []saleschannel.ChannelID{saleschannel.ChannelEtsy, saleschannel.ChannelSquarespace, saleschannel.ChannelShopify, saleschannel.ChannelMercadoLivre, saleschannel.ChannelShopee}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("expected provider order %v, got %v", want, got)
 	}

@@ -16,6 +16,8 @@ function formatBytes(bytes: number): string {
 
 type SettingsTab = 'integrations' | 'api-keys' | 'backups' | 'other'
 
+const OLX_INTEGRATION_ENABLED = false
+
 export default function Settings() {
   const [searchParams, setSearchParams] = useSearchParams()
   const [activeTab, setActiveTab] = useState<SettingsTab>('integrations')
@@ -930,8 +932,8 @@ export default function Settings() {
                 </div>
                 )}
 
-                {/* OLX Brasil Integration Card */}
-                {activeTab === 'integrations' && (
+                {/* OLX Brasil Integration Card intentionally hidden until official partner/API access is practical. */}
+                {OLX_INTEGRATION_ENABLED && activeTab === 'integrations' && (
                 <div className="bg-surface-900/50 border border-surface-800 rounded-xl p-6">
                 <div className="flex items-center gap-3 mb-4">
                 <div className="p-2 bg-emerald-500/10 rounded-lg">
