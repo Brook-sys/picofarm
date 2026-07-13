@@ -10,13 +10,16 @@ import (
 	"fmt"
 	"html"
 	"io"
+	"mime/multipart"
 	"net/http"
+	"net/textproto"
 	"regexp"
 	"strings"
 	"time"
 
 	"github.com/Brook-sys/picofarm/internal/model"
 	"github.com/Brook-sys/picofarm/internal/repository"
+	"github.com/Brook-sys/picofarm/internal/storage"
 	"github.com/google/uuid"
 )
 
@@ -38,12 +41,14 @@ var defaultNotificationTemplates = map[string]model.NotificationTemplate{
 }
 
 type NotificationService struct {
-	repo   *repository.NotificationRepository
-	client *http.Client
+	repo     *repository.NotificationRepository
+	fileRepo *repository.FileRepository
+	storage  storage.Storage
+	client   *http.Client
 }
 
-func NewNotificationService(repo *repository.NotificationRepository) *NotificationService {
-	return &NotificationService{repo: repo, client: &http.Client{Timeout: 10 * time.Second}}
+func NewNotificationService(repo *repository.NotificationRepository, fileRepo *repository.FileRepository, store storage.Storage) *NotificationService {
+	return &NotificationService{repo: repo, fileRepo: fileRepo, storage: store, client: &http.Client{Timeout: 10 * time.Second}}
 }
 
 func (s *NotificationService) ListChannels(ctx context.Context) ([]model.NotificationChannel, error) {
@@ -190,6 +195,10 @@ func (s *NotificationService) sendTelegram(ctx context.Context, channel model.No
 	}
 	rendered := s.renderForChannel(ctx, channel, event)
 	text := fmt.Sprintf("<b>%s</b>\n\n%s", html.EscapeString(rendered.Title), html.EscapeString(rendered.Body))
+	if attachment, ok := s.notificationAttachment(ctx, event); ok {
+		fields := map[string]string{"chat_id": chatID, "caption": truncateRunes(text, 1024), "parse_mode": "HTML"}
+		return s.postMultipart(ctx, fmt.Sprintf("https://api.telegram.org/bot%s/sendPhoto", botToken), fields, "photo", attachment)
+	}
 	body, _ := json.Marshal(map[string]any{"chat_id": chatID, "text": text, "parse_mode": "HTML"})
 	return s.postJSON(ctx, fmt.Sprintf("https://api.telegram.org/bot%s/sendMessage", botToken), body, nil)
 }
@@ -200,7 +209,13 @@ func (s *NotificationService) sendDiscord(ctx context.Context, channel model.Not
 		return fmt.Errorf("discord webhook url is required")
 	}
 	rendered := s.renderForChannel(ctx, channel, event)
-	body, _ := json.Marshal(map[string]any{"embeds": []map[string]any{{"title": rendered.Title, "description": rendered.Body, "color": discordColor(event.Severity), "timestamp": event.Timestamp.Format(time.RFC3339)}}})
+	embed := map[string]any{"title": rendered.Title, "description": rendered.Body, "color": discordColor(event.Severity), "timestamp": event.Timestamp.Format(time.RFC3339)}
+	if attachment, ok := s.notificationAttachment(ctx, event); ok {
+		embed["image"] = map[string]string{"url": "attachment://" + attachment.Filename}
+		payload, _ := json.Marshal(map[string]any{"embeds": []map[string]any{embed}})
+		return s.postMultipart(ctx, webhookURL, map[string]string{"payload_json": string(payload)}, "files[0]", attachment)
+	}
+	body, _ := json.Marshal(map[string]any{"embeds": []map[string]any{embed}})
 	return s.postJSON(ctx, webhookURL, body, nil)
 }
 
@@ -223,6 +238,98 @@ func (s *NotificationService) sendWebhook(ctx context.Context, channel model.Not
 		headers["X-Daedalus-Signature"] = "sha256=" + hex.EncodeToString(mac.Sum(nil))
 	}
 	return s.postJSON(ctx, webhookURL, body, headers)
+}
+
+type notificationAttachment struct {
+	Filename    string
+	ContentType string
+	Data        []byte
+}
+
+func (s *NotificationService) notificationAttachment(ctx context.Context, event model.NotificationEvent) (notificationAttachment, bool) {
+	if s.fileRepo == nil || s.storage == nil || event.Data == nil || !strings.HasPrefix(event.Type, "print.") {
+		return notificationAttachment{}, false
+	}
+	rawID := strings.TrimSpace(fmt.Sprint(event.Data["thumbnail_file_id"]))
+	fileID, err := uuid.Parse(rawID)
+	if err != nil {
+		return notificationAttachment{}, false
+	}
+	file, err := s.fileRepo.GetByID(ctx, fileID)
+	if err != nil || file == nil {
+		return notificationAttachment{}, false
+	}
+	reader, err := s.storage.Get(file.StoragePath)
+	if err != nil {
+		return notificationAttachment{}, false
+	}
+	defer reader.Close()
+	data, err := io.ReadAll(io.LimitReader(reader, 10<<20))
+	if err != nil || len(data) == 0 {
+		return notificationAttachment{}, false
+	}
+	contentType := file.ContentType
+	if contentType == "" {
+		contentType = http.DetectContentType(data)
+	}
+	if !strings.HasPrefix(contentType, "image/") {
+		return notificationAttachment{}, false
+	}
+	filename := file.OriginalName
+	if filename == "" {
+		filename = "gcode-thumbnail.png"
+	}
+	return notificationAttachment{Filename: filename, ContentType: contentType, Data: data}, true
+}
+
+func (s *NotificationService) postMultipart(ctx context.Context, url string, fields map[string]string, fileField string, attachment notificationAttachment) error {
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	for key, value := range fields {
+		if err := writer.WriteField(key, value); err != nil {
+			return err
+		}
+	}
+	header := make(textproto.MIMEHeader)
+	header.Set("Content-Disposition", fmt.Sprintf(`form-data; name="%s"; filename="%s"`, fileField, strings.ReplaceAll(attachment.Filename, `"`, "")))
+	header.Set("Content-Type", attachment.ContentType)
+	part, err := writer.CreatePart(header)
+	if err != nil {
+		return err
+	}
+	if _, err := part.Write(attachment.Data); err != nil {
+		return err
+	}
+	if err := writer.Close(); err != nil {
+		return err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, &body)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	req.Header.Set("User-Agent", "Daedalus")
+	resp, err := s.client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 400 {
+		respBody, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("notification request failed: %d %s", resp.StatusCode, strings.TrimSpace(string(respBody)))
+	}
+	return nil
+}
+
+func truncateRunes(value string, limit int) string {
+	if limit <= 0 {
+		return ""
+	}
+	runes := []rune(value)
+	if len(runes) <= limit {
+		return value
+	}
+	return string(runes[:limit-1]) + "…"
 }
 
 func (s *NotificationService) postJSON(ctx context.Context, url string, body []byte, headers map[string]string) error {
