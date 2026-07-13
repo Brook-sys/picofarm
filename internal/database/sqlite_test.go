@@ -30,6 +30,37 @@ func TestRunMigrationsIsIdempotent(t *testing.T) {
 	}
 }
 
+func TestRunMigrationsRejectsPreexistingActiveQueueConflicts(t *testing.T) {
+	db := openRawTestDB(t)
+	if _, err := db.Exec(`
+		CREATE TABLE queue_items (
+			id TEXT PRIMARY KEY,
+			assigned_printer_id TEXT,
+			status TEXT NOT NULL
+		);
+		INSERT INTO queue_items (id, assigned_printer_id, status) VALUES
+			('first', 'printer-1', 'printing'),
+			('second', 'printer-1', 'paused');
+	`); err != nil {
+		t.Fatalf("seed legacy conflict: %v", err)
+	}
+
+	err := RunMigrations(db)
+	if err == nil {
+		t.Fatal("expected migration to reject duplicate active queue items")
+	}
+	if !strings.Contains(err.Error(), "printer printer-1 has 2 active queue items") {
+		t.Fatalf("expected actionable active queue conflict, got: %v", err)
+	}
+	var triggerCount int
+	if scanErr := db.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type = 'trigger' AND name LIKE 'trg_queue_items_single_active_%'`).Scan(&triggerCount); scanErr != nil {
+		t.Fatal(scanErr)
+	}
+	if triggerCount != 0 {
+		t.Fatalf("expected no guards to be installed over inconsistent data, got %d triggers", triggerCount)
+	}
+}
+
 func TestRunMigrationsReportsUnexpectedCompatibilityFailures(t *testing.T) {
 	db := openRawTestDB(t)
 

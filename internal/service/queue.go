@@ -256,6 +256,11 @@ func (s *QueueService) Update(ctx context.Context, id uuid.UUID, opts QueueCreat
 		return nil, fmt.Errorf("queue item not found")
 	}
 	s.applyUpdateOptions(item, opts)
+	if item.Status == model.QueueItemStatusPrinting || item.Status == model.QueueItemStatusPaused {
+		if err := s.ensurePrinterHasNoOtherActiveItem(ctx, item); err != nil {
+			return nil, err
+		}
+	}
 	if err := s.repo.Update(ctx, item); err != nil {
 		return nil, err
 	}
@@ -364,6 +369,9 @@ func (s *QueueService) Start(ctx context.Context, id uuid.UUID) error {
 	if item == nil {
 		return fmt.Errorf("queue item not found")
 	}
+	if err := s.ensurePrinterHasNoOtherActiveItem(ctx, item); err != nil {
+		return err
+	}
 	preflight, err := s.PreflightCheck(ctx, id)
 	if err != nil {
 		return err
@@ -384,29 +392,56 @@ func (s *QueueService) Start(ctx context.Context, id uuid.UUID) error {
 		LocalPath:       s.storage.GetFullPath(file.StoragePath),
 		RemoteDirectory: printerData.DefaultPrintFolder,
 	}
-	if err := s.printerMgr.StartJob(*item.AssignedPrinterID, request); err != nil {
-		item.FailedAttempts++
-		item.Status = model.QueueItemStatusFailed
-		_ = s.repo.Update(ctx, item)
+	if err := s.reserveStarted(ctx, item); err != nil {
 		return err
 	}
-	return s.markStarted(ctx, item)
+	if startErr := s.printerMgr.StartJob(*item.AssignedPrinterID, request); startErr != nil {
+		return s.rollbackFailedStart(ctx, item, startErr)
+	}
+	s.announceStarted(ctx, item)
+	return nil
 }
 
-func (s *QueueService) markStarted(ctx context.Context, item *model.QueueItem) error {
-	item.Status = model.QueueItemStatusPrinting
-	item.Progress = 0
-	if err := s.repo.Update(ctx, item); err != nil {
+func (s *QueueService) rollbackFailedStart(ctx context.Context, item *model.QueueItem, startErr error) error {
+	item.FailedAttempts++
+	item.Status = model.QueueItemStatusFailed
+	if rollbackErr := s.repo.Update(ctx, item); rollbackErr != nil {
+		return fmt.Errorf("start print: %w; rollback queue reservation: %w", startErr, rollbackErr)
+	}
+	return startErr
+}
+
+func (s *QueueService) ensurePrinterHasNoOtherActiveItem(ctx context.Context, item *model.QueueItem) error {
+	if item.AssignedPrinterID == nil {
+		return nil
+	}
+	active, err := s.repo.GetActiveByPrinter(ctx, *item.AssignedPrinterID, item.ID)
+	if err != nil {
 		return err
 	}
+	if active != nil {
+		return fmt.Errorf("printer already has an active queue item: %s", active.DisplayName)
+	}
+	return nil
+}
+
+func (s *QueueService) reserveStarted(ctx context.Context, item *model.QueueItem) error {
+	item.Status = model.QueueItemStatusPrinting
+	item.Progress = 0
+	return s.repo.Update(ctx, item)
+}
+
+func (s *QueueService) announceStarted(ctx context.Context, item *model.QueueItem) {
 	if s.hub != nil {
 		s.hub.Broadcast(realtime.Event{Type: "queue_item_started", Data: item})
 	}
 	s.dispatchQueueNotification(ctx, item, "print.started", "info", "Print started")
-	return nil
 }
 
 func (s *QueueService) recoverFalseFailedStart(ctx context.Context, item *model.QueueItem) error {
+	if err := s.ensurePrinterHasNoOtherActiveItem(ctx, item); err != nil {
+		return err
+	}
 	if item.FailedAttempts > 0 {
 		item.FailedAttempts--
 	}
@@ -414,7 +449,11 @@ func (s *QueueService) recoverFalseFailedStart(ctx context.Context, item *model.
 	if strings.Contains(item.Notes, "Cancelled on printer") {
 		item.Notes = strings.TrimSpace(strings.ReplaceAll(item.Notes, "Cancelled on printer", ""))
 	}
-	return s.markStarted(ctx, item)
+	if err := s.reserveStarted(ctx, item); err != nil {
+		return err
+	}
+	s.announceStarted(ctx, item)
+	return nil
 }
 
 func (s *QueueService) SetStatus(ctx context.Context, id uuid.UUID, status model.QueueItemStatus) error {
@@ -424,6 +463,11 @@ func (s *QueueService) SetStatus(ctx context.Context, id uuid.UUID, status model
 	}
 	if item == nil {
 		return fmt.Errorf("queue item not found")
+	}
+	if status == model.QueueItemStatusPrinting || status == model.QueueItemStatusPaused {
+		if err := s.ensurePrinterHasNoOtherActiveItem(ctx, item); err != nil {
+			return err
+		}
 	}
 	if status == model.QueueItemStatusCancelled {
 		item.WastedGrams += queueItemAttemptWaste(*item)

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { AlertTriangle, CheckCircle, Clock, FileCode, Gauge, Info, Layers, Play, Printer, RefreshCw, Search, SlidersHorizontal, Trash2, Upload, XCircle } from 'lucide-react'
+import { AlertTriangle, CheckCircle, Clock, FileCode, Gauge, History, Info, Layers, Play, Printer, RefreshCw, Search, SlidersHorizontal, Trash2, Upload, XCircle } from 'lucide-react'
 import { queueApi } from '../api/client'
 import AppToast, { type AppToastState } from '../components/AppToast'
 import { usePrinters } from '../hooks/usePrinters'
@@ -102,6 +102,12 @@ export default function PrintQueue() {
 
     active: filteredItems.filter(i => i.column === 'active').sort(sortQueue),
   }
+  const recentCompleted = useMemo(() => (
+    (queue?.items ?? [])
+      .filter(item => item.item.status === 'done')
+      .sort((a, b) => new Date(b.item.updated_at).getTime() - new Date(a.item.updated_at).getTime())
+      .slice(0, 3)
+  ), [queue])
   const pendingTotals = useMemo(() => {
     const items = queue?.items ?? []
     const printable = items.filter(item => (item.column === 'ready' || item.column === 'active') && item.item.status !== 'failed' && item.item.status !== 'cancelled')
@@ -230,37 +236,75 @@ export default function PrintQueue() {
           </label>
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-4 items-start xl:grid-cols-3">
-              {(['ready', 'active'] as const).map(column => (
-            <QueueColumn
-              key={column}
-              column={column}
-              items={byColumn[column]}
-              busyItem={busyItem}
-              onPrintNow={(item) => runItemAction(item.item.id, async () => {
-                try {
-                  await queueApi.start(item.item.id)
-                } catch (err) {
-                  const msg = err instanceof Error ? err.message : 'Preflight failed'
-                  throw new Error(msg)
-                }
-              })}
-              onReorder={reorderItems}
-              onPause={(item) => runItemAction(item.item.id, () => queueApi.setStatus(item.item.id, 'paused'))}
-              onResume={(item) => runItemAction(item.item.id, () => queueApi.setStatus(item.item.id, 'printing'))}
-              onCancel={(item) => runItemAction(item.item.id, () => queueApi.setStatus(item.item.id, 'cancelled'))}
-              onDelete={(item) => runItemAction(item.item.id, () => queueApi.delete(item.item.id))}
-              onQuickAssign={(item, data) => runItemAction(item.item.id, () => queueApi.update(item.item.id, data))}
-              onEdit={setViewingItem}
-              onRename={renameItem}
-              printers={availablePrinters}
-              spools={availableSpools}
-              viewMode={viewMode}
-            />
-          ))}
-        </div>
+        <>
+          <div className="grid grid-cols-1 gap-4 items-start xl:grid-cols-3">
+            {(['ready', 'active'] as const).map(column => (
+              <QueueColumn
+                key={column}
+                column={column}
+                items={byColumn[column]}
+                busyItem={busyItem}
+                onPrintNow={(item) => runItemAction(item.item.id, async () => {
+                  try {
+                    await queueApi.start(item.item.id)
+                  } catch (err) {
+                    const msg = err instanceof Error ? err.message : 'Preflight failed'
+                    throw new Error(msg)
+                  }
+                })}
+                onReorder={reorderItems}
+                onPause={(item) => runItemAction(item.item.id, () => queueApi.setStatus(item.item.id, 'paused'))}
+                onResume={(item) => runItemAction(item.item.id, () => queueApi.setStatus(item.item.id, 'printing'))}
+                onCancel={(item) => runItemAction(item.item.id, () => queueApi.setStatus(item.item.id, 'cancelled'))}
+                onDelete={(item) => runItemAction(item.item.id, () => queueApi.delete(item.item.id))}
+                onQuickAssign={(item, data) => runItemAction(item.item.id, () => queueApi.update(item.item.id, data))}
+                onEdit={setViewingItem}
+                onRename={renameItem}
+                printers={availablePrinters}
+                spools={availableSpools}
+                viewMode={viewMode}
+              />
+            ))}
+          </div>
+          {recentCompleted.length > 0 && <RecentCompleted items={recentCompleted} onOpen={setViewingItem} />}
+        </>
       )}
     </div>
+  )
+}
+
+function RecentCompleted({ items, onOpen }: { items: QueueItem[]; onOpen: (item: QueueItem) => void }) {
+  return (
+    <section className="mt-6 rounded-xl border border-surface-800 bg-surface-900/50 overflow-hidden">
+      <div className="flex items-center justify-between border-b border-surface-800 bg-surface-900 px-4 py-3">
+        <div className="flex items-center gap-2">
+          <History className="h-5 w-5 text-emerald-400" />
+          <div>
+            <h2 className="font-semibold text-surface-100">Recently completed</h2>
+            <p className="text-xs text-surface-500">Last 3 successful prints</p>
+          </div>
+        </div>
+        <span className="badge bg-surface-800 text-surface-400">{items.length}</span>
+      </div>
+      <div className="divide-y divide-surface-800">
+        {items.map(item => (
+          <button key={item.item.id} type="button" onClick={() => onOpen(item)} className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-surface-800/50">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-surface-800">
+              {item.item.thumbnail_file_id ? <img src={`/api/files/${item.item.thumbnail_file_id}`} alt="G-code preview" className="h-full w-full object-cover" /> : <CheckCircle className="h-5 w-5 text-emerald-400" />}
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="truncate font-medium text-surface-100">{item.item.display_name || item.item.file_name}</div>
+              <div className="mt-0.5 flex flex-wrap gap-x-2 text-xs text-surface-500">
+                <span>{item.printer?.name || 'No printer'}</span>
+                <span>{new Date(item.item.updated_at).toLocaleString()}</span>
+                {item.item.filament_grams ? <span>{Math.round(item.item.filament_grams)}g</span> : null}
+              </div>
+            </div>
+            <span className="badge border border-emerald-500/30 bg-emerald-500/15 text-emerald-300">done</span>
+          </button>
+        ))}
+      </div>
+    </section>
   )
 }
 

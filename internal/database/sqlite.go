@@ -71,6 +71,10 @@ func Open(path string) (*sql.DB, error) {
 
 // RunMigrations applies the embedded schema to the database.
 func RunMigrations(db *sql.DB) error {
+	if err := validateQueueActiveAssignments(db); err != nil {
+		return err
+	}
+
 	_, err := db.Exec(schemaSQL)
 	if err != nil {
 		return fmt.Errorf("apply schema: %w", err)
@@ -190,6 +194,8 @@ func RunMigrations(db *sql.DB) error {
 		`CREATE TABLE IF NOT EXISTS timelapses (id TEXT PRIMARY KEY, printer_id TEXT REFERENCES printers(id) ON DELETE SET NULL, camera_id TEXT REFERENCES cameras(id) ON DELETE SET NULL, print_job_id TEXT REFERENCES print_jobs(id) ON DELETE SET NULL, status TEXT NOT NULL DEFAULT 'pending', frames_path TEXT DEFAULT '', video_path TEXT DEFAULT '', frame_count INTEGER NOT NULL DEFAULT 0, started_at TEXT, completed_at TEXT, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)`,
 		`CREATE INDEX IF NOT EXISTS idx_timelapses_printer_id ON timelapses(printer_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_timelapses_status ON timelapses(status)`,
+		`CREATE TRIGGER IF NOT EXISTS trg_queue_items_single_active_insert BEFORE INSERT ON queue_items WHEN NEW.assigned_printer_id IS NOT NULL AND NEW.status IN ('printing', 'paused') AND EXISTS (SELECT 1 FROM queue_items WHERE assigned_printer_id = NEW.assigned_printer_id AND status IN ('printing', 'paused')) BEGIN SELECT RAISE(ABORT, 'printer already has an active queue item'); END`,
+		`CREATE TRIGGER IF NOT EXISTS trg_queue_items_single_active_update BEFORE UPDATE OF assigned_printer_id, status ON queue_items WHEN NEW.assigned_printer_id IS NOT NULL AND NEW.status IN ('printing', 'paused') AND EXISTS (SELECT 1 FROM queue_items WHERE assigned_printer_id = NEW.assigned_printer_id AND id != NEW.id AND status IN ('printing', 'paused')) BEGIN SELECT RAISE(ABORT, 'printer already has an active queue item'); END`,
 		`CREATE TABLE IF NOT EXISTS notification_channels (id TEXT PRIMARY KEY, name TEXT NOT NULL, type TEXT NOT NULL, enabled BOOLEAN NOT NULL DEFAULT TRUE, config_json TEXT NOT NULL DEFAULT '{}', events_json TEXT NOT NULL DEFAULT '[]', printer_ids_json TEXT NOT NULL DEFAULT '[]', min_severity TEXT NOT NULL DEFAULT 'info', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)`,
 		`CREATE INDEX IF NOT EXISTS idx_notification_channels_type ON notification_channels(type)`,
 		`CREATE INDEX IF NOT EXISTS idx_notification_channels_enabled ON notification_channels(enabled)`,
@@ -212,6 +218,60 @@ func RunMigrations(db *sql.DB) error {
 	}
 
 	return nil
+}
+
+func validateQueueActiveAssignments(db *sql.DB) error {
+	var tableExists int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'queue_items'`).Scan(&tableExists); err != nil {
+		return fmt.Errorf("inspect queue items table: %w", err)
+	}
+	if tableExists == 0 {
+		return nil
+	}
+
+	columns, err := db.Query(`PRAGMA table_info(queue_items)`)
+	if err != nil {
+		return fmt.Errorf("inspect queue items columns: %w", err)
+	}
+	defer columns.Close()
+	hasStatus := false
+	hasPrinter := false
+	for columns.Next() {
+		var cid int
+		var name, columnType string
+		var notNull, primaryKey int
+		var defaultValue any
+		if err := columns.Scan(&cid, &name, &columnType, &notNull, &defaultValue, &primaryKey); err != nil {
+			return fmt.Errorf("read queue items columns: %w", err)
+		}
+		hasStatus = hasStatus || name == "status"
+		hasPrinter = hasPrinter || name == "assigned_printer_id"
+	}
+	if err := columns.Err(); err != nil {
+		return fmt.Errorf("read queue items columns: %w", err)
+	}
+	if !hasStatus || !hasPrinter {
+		return nil
+	}
+
+	var printerID string
+	var activeCount int
+	err = db.QueryRow(`
+		SELECT assigned_printer_id, COUNT(*)
+		FROM queue_items
+		WHERE assigned_printer_id IS NOT NULL
+		  AND status IN ('printing', 'paused')
+		GROUP BY assigned_printer_id
+		HAVING COUNT(*) > 1
+		LIMIT 1
+	`).Scan(&printerID, &activeCount)
+	if err == sql.ErrNoRows {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("validate active queue items: %w", err)
+	}
+	return fmt.Errorf("printer %s has %d active queue items; resolve duplicate printing/paused items before startup", printerID, activeCount)
 }
 
 func isExpectedCompatibilityMigrationError(stmt string, err error) bool {
