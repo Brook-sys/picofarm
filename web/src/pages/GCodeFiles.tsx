@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { AlertTriangle, FileCode, Grid3X3, Info as InfoIcon, Link2Off, List, Loader2, Plus, Search, Star, Upload, Send } from 'lucide-react'
 import { fileLibraryApi, gcodeLibraryApi, printersApi, slicerApi, stlLibraryApi } from '../api/client'
 import AppToast, { type AppToastState } from '../components/AppToast'
+import { STLViewer3D } from '../components/STLViewer3D'
 import type { GCodeLibraryFile, STLLibraryFile, Tag } from '../types'
 import { cn, formatDuration } from '../lib/utils'
 import { renderSTLThumbnailWithTimeout } from '../lib/stlThumbnail'
@@ -625,7 +626,7 @@ function SlicerLoadingState({ title, description }: { title: string; description
   )
 }
 
-function STLDetailsModal({ file, tags, onCreateTag, onAddTag, onRemoveTag, onClose, onRetryThumbnail, onSlice }: { file: STLLibraryFile; tags: Tag[]; onCreateTag: (name: string, color?: string) => void; onAddTag: (fileId: string, tagId: string) => void; onRemoveTag: (fileId: string, tagId: string) => void; onClose: () => void; onRetryThumbnail: () => void; onSlice: () => void }) {
+function STLDetailsModal({ file, tags, onCreateTag, onAddTag, onRemoveTag, onClose, onSlice }: { file: STLLibraryFile; tags: Tag[]; onCreateTag: (name: string, color?: string) => void; onAddTag: (fileId: string, tagId: string) => void; onRemoveTag: (fileId: string, tagId: string) => void; onClose: () => void; onRetryThumbnail: () => void; onSlice: () => void }) {
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
       <div className="card p-6 w-full max-w-3xl max-h-[90vh] overflow-y-auto">
@@ -634,8 +635,8 @@ function STLDetailsModal({ file, tags, onCreateTag, onAddTag, onRemoveTag, onClo
           <button onClick={onClose} className="btn btn-ghost text-sm">Close</button>
         </div>
         <div className="grid gap-5 md:grid-cols-[280px_1fr]">
-          <div className="h-72 rounded-xl border border-surface-800 bg-surface-800 flex items-center justify-center overflow-hidden">
-            {file.thumbnail_file_id ? <img src={`/api/files/${file.thumbnail_file_id}`} alt="STL preview" className="h-full w-full object-contain" /> : <button onClick={onRetryThumbnail} className="flex h-full w-full flex-col items-center justify-center text-sm text-accent-300 hover:bg-surface-700"><Upload className="mb-2 h-6 w-6" />Generate thumbnail</button>}
+          <div className="h-72 rounded-xl border border-surface-800 bg-surface-800 flex flex-col overflow-hidden">
+            <STLViewer3D url={`/api/files/${file.file_id}`} />
           </div>
           <div className="space-y-4">
             <div><span className="text-xs text-surface-500">Display name</span><div className="text-surface-100 text-lg font-medium">{file.display_name}</div></div>
