@@ -872,6 +872,42 @@ func (s *PrintJobService) handlePrinterStatusChange(newState *model.PrinterState
 	wasPrinting := oldState != nil && oldState.Status == model.PrinterStatusPrinting
 	isError := newState.Status == model.PrinterStatusError
 
+	// 1. Detect phase change
+	oldPhase := ""
+	if oldState != nil {
+		oldPhase = oldState.Phase
+	}
+	newPhase := newState.Phase
+
+	if newPhase != oldPhase && newPhase != "" {
+		// Find active job for this printer
+		job, err := s.GetActiveJobForPrinter(ctx, newState.PrinterID)
+		if err != nil {
+			slog.Error("failed to find active job for phase change", "printer_id", newState.PrinterID, "error", err)
+		} else if job != nil {
+			slog.Info("printer phase change detected", "printer_id", newState.PrinterID, "job_id", job.ID, "old_phase", oldPhase, "new_phase", newPhase)
+			
+			// Record the phase change event
+			event := &model.JobEvent{
+				JobID:      job.ID,
+				EventType:  "phase_changed",
+				Status:     &job.Status,
+				Progress:   &newState.Progress,
+				PrinterID:  &newState.PrinterID,
+				ActorType:  "printer",
+				ActorID:    newState.PrinterID.String(),
+				Metadata: map[string]interface{}{
+					"old_phase": oldPhase,
+					"new_phase": newPhase,
+				},
+			}
+			if err := s.repo.AppendEvent(ctx, event); err != nil {
+				slog.Error("failed to append phase_changed event", "job_id", job.ID, "error", err)
+			}
+		}
+	}
+
+	// 2. Detect failure: printer went from printing to error
 	if wasPrinting && isError {
 		slog.Warn("printer failure detected", "printer_id", newState.PrinterID, "old_status", oldState.Status, "new_status", newState.Status)
 
