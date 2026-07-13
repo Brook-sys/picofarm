@@ -129,7 +129,7 @@ func NewServices(repos *repository.Repositories, store storage.Storage, printerM
 	services.PrintArchives = &PrintArchiveService{repo: repos.PrintArchives}
 	services.GCodeLibrary = NewGCodeLibraryService(repos, store, services.Queue)
 	services.STLLibrary = NewSTLLibraryService(repos, store)
-	services.Notifications = NewNotificationService(repos.Notifications)
+	services.Notifications = NewNotificationService(repos.Notifications, repos.Files, store)
 	services.Queue.SetNotificationService(services.Notifications)
 	services.Slicer = NewSlicerService(services.Settings, repos, store, services.GCodeLibrary)
 	services.ModelImport = NewModelImportService(services.Projects, services.Parts, services.Designs, services.STLLibrary, services.Files, repos.Tags)

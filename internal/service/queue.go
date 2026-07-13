@@ -448,6 +448,9 @@ func (s *QueueService) dispatchQueueNotification(ctx context.Context, item *mode
 	}
 	message := fmt.Sprintf("File: %s", item.FileName)
 	data := map[string]any{"queue_item_id": item.ID.String(), "file_name": item.FileName, "status": item.Status}
+	if item.ThumbnailFileID != nil {
+		data["thumbnail_file_id"] = item.ThumbnailFileID.String()
+	}
 	if item.AssignedPrinterID != nil && s.printerRepo != nil {
 		printer, err := s.printerRepo.GetByID(ctx, *item.AssignedPrinterID)
 		if err == nil && printer != nil {
