@@ -96,9 +96,7 @@ export function STLViewer3D({ url }: STLViewer3DProps) {
 
         setLoading(false)
       },
-      (_xhr) => {
-        // Progress could be updated here if needed
-      },
+      undefined,
       (err) => {
         console.error('Failed to load STL:', err)
         setError('Failed to load STL file')
