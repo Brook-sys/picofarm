@@ -355,7 +355,12 @@ func (s *ProjectService) StartProduction(ctx context.Context, projectID uuid.UUI
 		}
 
 		// Send to printer
-		if err := s.printerMgr.StartJob(selectedPrinter.ID, design.FileName, s.storage.GetFullPath(design.FileName)); err != nil {
+		request := printer.PrintRequest{
+			Filename:        design.FileName,
+			LocalPath:       s.storage.GetFullPath(design.FileName),
+			RemoteDirectory: selectedPrinter.DefaultPrintFolder,
+		}
+		if err := s.printerMgr.StartJob(selectedPrinter.ID, request); err != nil {
 			// Record failure event
 			failedStatus := model.PrintJobStatusFailed
 			failEvent := model.NewJobEvent(job.ID, model.JobEventFailed, &failedStatus).

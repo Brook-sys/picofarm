@@ -174,6 +174,8 @@ Primary response types:
 - `PrinterCapabilities`
 - `PrinterMacro`
 
+`Printer.default_print_folder` is an optional remote directory relative to the printer's G-code root. Empty means the protocol's normal root. Inputs such as `/sda1` are canonicalized to `sda1`; traversal and URL-like values are rejected. Queue, direct print-job, and project-production starts use this value for Moonraker and OctoPrint uploads.
+
 These endpoints can affect real hardware. Preserve safety checks, confirmation flows, and fake/manual-printer test coverage when changing them.
 
 ### Printer files and G-code library

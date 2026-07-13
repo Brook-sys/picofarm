@@ -85,6 +85,7 @@ func RunMigrations(db *sql.DB) error {
 		`ALTER TABLE printers ADD COLUMN maintenance_mode BOOLEAN NOT NULL DEFAULT FALSE`,
 		`ALTER TABLE printers ADD COLUMN restrict_gcode_model BOOLEAN NOT NULL DEFAULT TRUE`,
 		`ALTER TABLE printers ADD COLUMN fluidd_url TEXT DEFAULT ''`,
+		`ALTER TABLE printers ADD COLUMN default_print_folder TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE material_spools ADD COLUMN default_for_material BOOLEAN NOT NULL DEFAULT FALSE`,
 		`ALTER TABLE parts ADD COLUMN material_type TEXT DEFAULT ''`,
 		`ALTER TABLE queue_items ADD COLUMN progress REAL NOT NULL DEFAULT 0`,

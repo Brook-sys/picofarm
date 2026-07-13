@@ -452,6 +452,7 @@ type Printer struct {
 	PurchasePriceCents int            `json:"purchase_price_cents"` // Purchase price in cents for ROI tracking
 	MaintenanceMode    bool           `json:"maintenance_mode"`     // When true, printer is out of service (no dispatch, no MQTT)
 	RestrictGCodeModel bool           `json:"restrict_gcode_model"` // When true, only runs G-code for matching printer_model
+	DefaultPrintFolder string         `json:"default_print_folder"` // Remote folder relative to the printer's G-code root
 	CreatedAt          time.Time      `json:"created_at"`
 	UpdatedAt          time.Time      `json:"updated_at"`
 }

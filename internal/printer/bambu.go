@@ -14,10 +14,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Brook-sys/picofarm/internal/model"
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 	"github.com/google/uuid"
 	"github.com/jlaffaye/ftp"
-	"github.com/Brook-sys/picofarm/internal/model"
 )
 
 // BambuClient implements Client for Bambu Lab printers via LAN or Cloud MQTT.
@@ -332,9 +332,9 @@ func (c *BambuClient) GetStatus() (*model.PrinterState, error) {
 
 // StartJob sends a print job to the Bambu printer.
 // The file is uploaded via FTPS, then a print command is sent via MQTT.
-func (c *BambuClient) StartJob(filename string, filepath string) error {
+func (c *BambuClient) StartJob(request PrintRequest) error {
 	// First upload the file via FTPS
-	remotePath, err := c.uploadFile(filepath, filename)
+	remotePath, err := c.uploadFile(request.LocalPath, request.Filename)
 	if err != nil {
 		return fmt.Errorf("failed to upload file: %w", err)
 	}
@@ -348,9 +348,9 @@ func (c *BambuClient) StartJob(filename string, filepath string) error {
 			ProfileID:   "0",
 			TaskID:      "0",
 			Subtask:     "0",
-			SubtaskName: filename,
+			SubtaskName: request.Filename,
 			URL:         fmt.Sprintf("ftp://%s", remotePath),
-			Filename:    filename,
+			Filename:    request.Filename,
 			Timelapse:   false,
 			BedLeveling: true,
 			FlowCali:    false,
@@ -369,7 +369,7 @@ func (c *BambuClient) StartJob(filename string, filepath string) error {
 		return fmt.Errorf("failed to send print command: %w", err)
 	}
 
-	slog.Info("started print job on Bambu printer", "printer_id", c.printerID, "file", filename)
+	slog.Info("started print job on Bambu printer", "printer_id", c.printerID, "file", request.Filename)
 	return nil
 }
 

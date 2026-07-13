@@ -104,11 +104,11 @@ export default function PrinterDetail() {
   const [controlBusy, setControlBusy] = useState('')
   const [editingInfo, setEditingInfo] = useState(false)
   const [confirmEmergency, setConfirmEmergency] = useState(false)
-  const [infoForm, setInfoForm] = useState({ model: '', location: '', manufacturer: '', fluidd_url: '', restrict_gcode_model: true })
+  const [infoForm, setInfoForm] = useState({ model: '', location: '', manufacturer: '', fluidd_url: '', restrict_gcode_model: true, default_print_folder: '' })
 
   const startEditInfo = () => {
     if (!printer) return
-    setInfoForm({ model: printer.model || '', location: printer.location || '', manufacturer: printer.manufacturer || '', fluidd_url: printer.fluidd_url || '', restrict_gcode_model: printer.restrict_gcode_model ?? true })
+    setInfoForm({ model: printer.model || '', location: printer.location || '', manufacturer: printer.manufacturer || '', fluidd_url: printer.fluidd_url || '', restrict_gcode_model: printer.restrict_gcode_model ?? true, default_print_folder: printer.default_print_folder || '' })
     setEditingInfo(true)
   }
 
@@ -370,6 +370,13 @@ export default function PrinterDetail() {
               <label className="block"><span className="text-xs text-surface-500 mb-1 block">Manufacturer</span><input value={infoForm.manufacturer} onChange={e => setInfoForm(prev => ({ ...prev, manufacturer: e.target.value }))} className="input" placeholder="Elegoo" /></label>
               <label className="block md:col-span-2"><span className="text-xs text-surface-500 mb-1 block">Location</span><input value={infoForm.location} onChange={e => setInfoForm(prev => ({ ...prev, location: e.target.value }))} className="input" placeholder="Workshop" /></label>
               <label className="block md:col-span-2"><span className="text-xs text-surface-500 mb-1 block">Fluidd URL</span><input value={infoForm.fluidd_url} onChange={e => setInfoForm(prev => ({ ...prev, fluidd_url: e.target.value }))} className="input" placeholder="http://192.168.1.100" /></label>
+              {(printer.connection_type === 'moonraker' || printer.connection_type === 'octoprint') && (
+                <label className="block md:col-span-2">
+                  <span className="text-xs text-surface-500 mb-1 block">Pasta padrão para arquivos de impressão</span>
+                  <input value={infoForm.default_print_folder} onChange={e => setInfoForm(prev => ({ ...prev, default_print_folder: e.target.value }))} className="input" placeholder="/sda1" />
+                  <span className="mt-1 block text-xs text-surface-500">Deixe vazio para usar a pasta raiz padrão da impressora. Exemplo: /sda1.</span>
+                </label>
+              )}
               <label className="md:col-span-2 flex items-start gap-3 rounded-lg border border-surface-800 bg-surface-900/50 p-3">
                 <input type="checkbox" checked={infoForm.restrict_gcode_model} onChange={e => setInfoForm(prev => ({ ...prev, restrict_gcode_model: e.target.checked }))} className="mt-1" />
                 <span>
@@ -397,6 +404,9 @@ export default function PrinterDetail() {
               <div className="flex items-center justify-between"><span className="text-surface-400">Manufacturer</span><span className="text-surface-200">{printer.manufacturer || '—'}</span></div>
               <div className="flex items-center justify-between"><span className="text-surface-400">Model</span><span className="text-surface-200">{printer.model || '—'}</span></div>
               <div className="flex items-center justify-between"><span className="text-surface-400">G-code model restriction</span><span className={cn('badge', (printer.restrict_gcode_model ?? true) ? 'bg-emerald-500/20 text-emerald-300' : 'bg-surface-800 text-surface-400')}>{(printer.restrict_gcode_model ?? true) ? 'ON' : 'OFF'}</span></div>
+              {(printer.connection_type === 'moonraker' || printer.connection_type === 'octoprint') && (
+                <div className="flex items-center justify-between gap-4"><span className="text-surface-400">Pasta padrão de impressão</span><span className="font-mono text-xs text-surface-200">{printer.default_print_folder ? `/${printer.default_print_folder}` : '/ (raiz)'}</span></div>
+              )}
               {printer.fluidd_url && (
                 <a href={printer.fluidd_url} target="_blank" rel="noreferrer" className="inline-flex w-fit cursor-pointer items-center rounded-lg border border-blue-500/50 bg-blue-500/20 px-3 py-1.5 text-xs font-semibold text-blue-300 hover:bg-blue-500/30">
                   <ExternalLink className="h-3.5 w-3.5 mr-1" /> Fluidd

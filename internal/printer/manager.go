@@ -19,7 +19,7 @@ type Client interface {
 	// GetStatus retrieves current printer status.
 	GetStatus() (*model.PrinterState, error)
 	// StartJob sends a file to print.
-	StartJob(filename string, filepath string) error
+	StartJob(request PrintRequest) error
 	// PauseJob pauses the current print.
 	PauseJob() error
 	// ResumeJob resumes a paused print.
@@ -295,7 +295,7 @@ func (m *Manager) GetAllStates() map[uuid.UUID]*model.PrinterState {
 }
 
 // StartJob sends a print job to a printer.
-func (m *Manager) StartJob(printerID uuid.UUID, filename string, filepath string) error {
+func (m *Manager) StartJob(printerID uuid.UUID, request PrintRequest) error {
 	m.mu.RLock()
 	client, ok := m.clients[printerID]
 	m.mu.RUnlock()
@@ -304,7 +304,7 @@ func (m *Manager) StartJob(printerID uuid.UUID, filename string, filepath string
 		return fmt.Errorf("printer not connected")
 	}
 
-	return client.StartJob(filename, filepath)
+	return client.StartJob(request)
 }
 
 // PauseJob pauses the current print on a printer.

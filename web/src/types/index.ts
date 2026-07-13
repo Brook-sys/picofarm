@@ -245,6 +245,7 @@ export interface Printer {
   purchase_price_cents: number // Purchase price in cents for ROI tracking
   maintenance_mode?: boolean // When true, printer is out of service
   restrict_gcode_model?: boolean
+  default_print_folder?: string
   created_at: string
   updated_at: string
 }

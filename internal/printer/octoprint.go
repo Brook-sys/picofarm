@@ -9,6 +9,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"time"
@@ -278,14 +279,14 @@ func (c *OctoPrintClient) StartPrint(ctx context.Context, filePath string) error
 	_, err := c.doRequest("POST", "/api/files/local/"+escapeMoonrakerPath(filePath), body)
 	return err
 }
-func (c *OctoPrintClient) StartJob(filename string, filepath string) error {
+func (c *OctoPrintClient) StartJob(request PrintRequest) error {
 	// Upload file
-	fileReader, err := os.Open(filepath)
+	fileReader, err := os.Open(request.LocalPath)
 	if err != nil {
 		return fmt.Errorf("failed to open file: %w", err)
 	}
 	defer fileReader.Close()
-	if err := c.UploadFile(context.Background(), "", filename, fileReader); err != nil {
+	if err := c.UploadFile(context.Background(), request.RemoteDirectory, request.Filename, fileReader); err != nil {
 		return fmt.Errorf("failed to upload file: %w", err)
 	}
 
@@ -296,7 +297,8 @@ func (c *OctoPrintClient) StartJob(filename string, filepath string) error {
 	}
 	body, _ := json.Marshal(selectReq)
 
-	_, err = c.doRequest("POST", "/api/files/local/"+filename, body)
+	remotePath := path.Join(request.RemoteDirectory, path.Base(request.Filename))
+	_, err = c.doRequest("POST", "/api/files/local/"+escapeMoonrakerPath(remotePath), body)
 	if err != nil {
 		return fmt.Errorf("failed to start print: %w", err)
 	}

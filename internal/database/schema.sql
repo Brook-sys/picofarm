@@ -54,6 +54,7 @@ CREATE TABLE IF NOT EXISTS printers (
     purchase_price_cents INTEGER DEFAULT 0,
     maintenance_mode BOOLEAN DEFAULT FALSE,
     restrict_gcode_model BOOLEAN NOT NULL DEFAULT TRUE,
+    default_print_folder TEXT NOT NULL DEFAULT '',
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
