@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"html"
 	"io"
+	"mime"
 	"mime/multipart"
 	"net/http"
 	"net/textproto"
@@ -291,7 +292,10 @@ func (s *NotificationService) postMultipart(ctx context.Context, url string, fie
 		}
 	}
 	header := make(textproto.MIMEHeader)
-	header.Set("Content-Disposition", fmt.Sprintf(`form-data; name="%s"; filename="%s"`, fileField, strings.ReplaceAll(attachment.Filename, `"`, "")))
+	header.Set("Content-Disposition", mime.FormatMediaType("form-data", map[string]string{
+		"name":     fileField,
+		"filename": attachment.Filename,
+	}))
 	header.Set("Content-Type", attachment.ContentType)
 	part, err := writer.CreatePart(header)
 	if err != nil {
