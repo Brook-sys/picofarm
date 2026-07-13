@@ -377,6 +377,7 @@ func (c *MoonrakerClient) parseState(resp []byte) *model.PrinterState {
 				} `json:"heater_bed"`
 				DisplayStatus struct {
 					Progress float64 `json:"progress"`
+					Message  string  `json:"message"`
 				} `json:"display_status"`
 			} `json:"status"`
 		} `json:"result"`
@@ -386,6 +387,7 @@ func (c *MoonrakerClient) parseState(resp []byte) *model.PrinterState {
 		state.NozzleTemp = data.Result.Status.Extruder.Temperature
 		state.BedTemp = data.Result.Status.HeaterBed.Temperature
 		state.Progress = data.Result.Status.DisplayStatus.Progress * 100
+		state.Phase = data.Result.Status.DisplayStatus.Message
 		state.CurrentFile = data.Result.Status.PrintStats.Filename
 
 		switch data.Result.Status.PrintStats.State {

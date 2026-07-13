@@ -572,6 +572,7 @@ type PrinterCapabilities struct {
 type PrinterState struct {
 	PrinterID   uuid.UUID     `json:"printer_id"`
 	Status      PrinterStatus `json:"status"`
+	Phase       string        `json:"phase,omitempty"`
 	Progress    float64       `json:"progress"`
 	CurrentFile string        `json:"current_file,omitempty"`
 	TimeLeft    int           `json:"time_left,omitempty"`
