@@ -15,6 +15,7 @@ import (
 	"github.com/Brook-sys/picofarm/internal/printer"
 	"github.com/Brook-sys/picofarm/internal/realtime"
 	"github.com/Brook-sys/picofarm/internal/repository"
+	"github.com/Brook-sys/picofarm/internal/validation"
 	"github.com/google/uuid"
 )
 
@@ -39,6 +40,9 @@ type PrinterService struct {
 func (s *PrinterService) Create(ctx context.Context, p *model.Printer) error {
 	if p.Name == "" {
 		return fmt.Errorf("printer name is required")
+	}
+	if err := normalizePrinterPrintFolder(p); err != nil {
+		return err
 	}
 	s.ensureFluiddURL(p)
 	if err := s.repo.Create(ctx, p); err != nil {
@@ -140,8 +144,23 @@ func (s *PrinterService) ensureFluiddURL(p *model.Printer) {
 	}
 }
 
+func normalizePrinterPrintFolder(p *model.Printer) error {
+	folder, err := printer.NormalizeRemotePrintFolder(p.DefaultPrintFolder)
+	if err != nil {
+		return &validation.ValidationError{Errors: []validation.FieldError{{
+			Field:   "default_print_folder",
+			Message: err.Error(),
+		}}}
+	}
+	p.DefaultPrintFolder = folder
+	return nil
+}
+
 // Update updates a printer.
 func (s *PrinterService) Update(ctx context.Context, p *model.Printer) error {
+	if err := normalizePrinterPrintFolder(p); err != nil {
+		return err
+	}
 	s.ensureFluiddURL(p)
 	previous, err := s.repo.GetByID(ctx, p.ID)
 	if err != nil {

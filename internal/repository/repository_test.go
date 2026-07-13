@@ -296,13 +296,14 @@ func TestPrinterRepository_CreateAndGetByID(t *testing.T) {
 	ctx := context.Background()
 
 	printer := &model.Printer{
-		Name:             "Test Printer",
-		Model:            "P1S",
-		Manufacturer:     "Bambu Lab",
-		ConnectionType:   model.ConnectionTypeBambuLAN,
-		ConnectionURI:    "192.168.1.100",
-		NozzleDiameter:   0.4,
-		CostPerHourCents: 150,
+		Name:               "Test Printer",
+		Model:              "P1S",
+		Manufacturer:       "Bambu Lab",
+		ConnectionType:     model.ConnectionTypeBambuLAN,
+		ConnectionURI:      "192.168.1.100",
+		NozzleDiameter:     0.4,
+		CostPerHourCents:   150,
+		DefaultPrintFolder: "sda1",
 	}
 
 	if err := repo.Create(ctx, printer); err != nil {
@@ -329,6 +330,9 @@ func TestPrinterRepository_CreateAndGetByID(t *testing.T) {
 	}
 	if got.NozzleDiameter != 0.4 {
 		t.Errorf("NozzleDiameter = %f, want 0.4", got.NozzleDiameter)
+	}
+	if got.DefaultPrintFolder != "sda1" {
+		t.Errorf("DefaultPrintFolder = %q, want %q", got.DefaultPrintFolder, "sda1")
 	}
 }
 
@@ -367,6 +371,7 @@ func TestPrinterRepository_Update(t *testing.T) {
 	printer.Name = "Updated"
 	printer.CostPerHourCents = 200
 	printer.Location = "Shelf 1"
+	printer.DefaultPrintFolder = "jobs/night"
 
 	if err := repo.Update(ctx, printer); err != nil {
 		t.Fatalf("Update failed: %v", err)
@@ -381,6 +386,9 @@ func TestPrinterRepository_Update(t *testing.T) {
 	}
 	if got.Location != "Shelf 1" {
 		t.Errorf("Location = %q, want %q", got.Location, "Shelf 1")
+	}
+	if got.DefaultPrintFolder != "jobs/night" {
+		t.Errorf("DefaultPrintFolder = %q, want %q", got.DefaultPrintFolder, "jobs/night")
 	}
 }
 

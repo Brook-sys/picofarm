@@ -108,6 +108,10 @@ func (h *PrinterHandler) Update(w http.ResponseWriter, r *http.Request) {
 	printer.ID = id
 
 	if err := h.service.Update(r.Context(), printer); err != nil {
+		if _, ok := err.(*validation.ValidationError); ok {
+			respondValidationError(w, err)
+			return
+		}
 		respondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}

@@ -30,6 +30,7 @@ export default function Printers() {
   const deletePrinter = useDeletePrinter()
 
   const [showAdd, setShowAdd] = useState(false)
+  const [addConnectionType, setAddConnectionType] = useState<ConnectionType>('manual')
   const [showDiscover, setShowDiscover] = useState(false)
   const [discovering, setDiscovering] = useState(false)
   const [discovered, setDiscovered] = useState<DiscoveredPrinter[]>([])
@@ -209,6 +210,7 @@ export default function Printers() {
         location: formData.get('location') as string,
         cost_per_hour_cents: Math.round(parseFloat(formData.get('cost_per_hour') as string || '0') * 100),
         restrict_gcode_model: formData.get('restrict_gcode_model') === 'on',
+        default_print_folder: formData.get('default_print_folder') as string,
       })
       setShowAdd(false)
     } catch (err) {
@@ -1031,7 +1033,7 @@ export default function Printers() {
                    <label className="block text-sm font-medium text-surface-300 mb-1">
                      Connection Type
                   </label>
-                  <select name="connection_type" className="input">
+                  <select name="connection_type" value={addConnectionType} onChange={e => setAddConnectionType(e.target.value as ConnectionType)} className="input">
                     <option value="manual">Manual (No Integration)</option>
                     <option value="octoprint">OctoPrint</option>
                     <option value="bambu_lan">Bambu Lab (LAN)</option>
@@ -1066,6 +1068,22 @@ export default function Printers() {
                     Optional. Moonraker defaults to the same host on port 80.
                   </p>
                 </div>
+                {(addConnectionType === 'moonraker' || addConnectionType === 'octoprint') && (
+                  <div>
+                    <label className="block text-sm font-medium text-surface-300 mb-1">
+                      Pasta padrão para arquivos de impressão
+                    </label>
+                    <input
+                      type="text"
+                      name="default_print_folder"
+                      className="input"
+                      placeholder="/sda1"
+                    />
+                    <p className="text-xs text-surface-500 mt-1">
+                      Deixe vazio para usar a pasta raiz da impressora.
+                    </p>
+                  </div>
+                )}
           {createError && <div className="text-sm text-red-400">{createError}</div>}
         </div>
               <div className="flex justify-end gap-3 mt-6">

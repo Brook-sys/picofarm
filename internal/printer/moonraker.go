@@ -90,13 +90,13 @@ func (c *MoonrakerClient) GetStatus() (*model.PrinterState, error) {
 }
 
 // StartJob uploads and starts printing a file.
-func (c *MoonrakerClient) StartJob(filename string, filePath string) error {
-	remoteName, err := c.uploadFile(filePath)
+func (c *MoonrakerClient) StartJob(request PrintRequest) error {
+	remoteName, err := c.uploadFile(request)
 	if err != nil {
 		return fmt.Errorf("failed to upload file: %w", err)
 	}
 	if remoteName == "" {
-		remoteName = filename
+		remoteName = path.Join(request.RemoteDirectory, path.Base(request.Filename))
 	}
 
 	_, err = c.doRequest("POST", "/printer/print/start?filename="+escapeMoonrakerPath(remoteName), nil)
@@ -194,8 +194,8 @@ func (c *MoonrakerClient) doRequest(method string, path string, body []byte) ([]
 }
 
 // uploadFile uploads a file to Moonraker. Returns remote filename on success.
-func (c *MoonrakerClient) uploadFile(filePath string) (string, error) {
-	file, err := os.Open(filePath)
+func (c *MoonrakerClient) uploadFile(request PrintRequest) (string, error) {
+	file, err := os.Open(request.LocalPath)
 	if err != nil {
 		return "", err
 	}
@@ -204,7 +204,8 @@ func (c *MoonrakerClient) uploadFile(filePath string) (string, error) {
 	body := &bytes.Buffer{}
 	writer := multipart.NewWriter(body)
 
-	part, err := writer.CreateFormFile("file", filepath.Base(filePath))
+	remoteName := path.Join(request.RemoteDirectory, path.Base(request.Filename))
+	part, err := createRemoteFilePart(writer, "file", remoteName)
 	if err != nil {
 		return "", err
 	}
@@ -213,7 +214,9 @@ func (c *MoonrakerClient) uploadFile(filePath string) (string, error) {
 		return "", err
 	}
 
-	writer.Close()
+	if err := writer.Close(); err != nil {
+		return "", err
+	}
 
 	req, err := http.NewRequest("POST", c.baseURL+"/server/files/upload", body)
 	if err != nil {
@@ -246,7 +249,7 @@ func (c *MoonrakerClient) uploadFile(filePath string) (string, error) {
 			return uploadResp.Result.Item.Path, nil
 		}
 	}
-	return filepath.Base(filePath), nil
+	return remoteName, nil
 }
 
 // pollStatus periodically polls for status updates.

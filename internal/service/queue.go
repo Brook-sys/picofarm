@@ -375,7 +375,16 @@ func (s *QueueService) Start(ctx context.Context, id uuid.UUID) error {
 	if err != nil || file == nil {
 		return fmt.Errorf("file not found")
 	}
-	if err := s.printerMgr.StartJob(*item.AssignedPrinterID, item.FileName, s.storage.GetFullPath(file.StoragePath)); err != nil {
+	printerData, err := s.printerRepo.GetByID(ctx, *item.AssignedPrinterID)
+	if err != nil || printerData == nil {
+		return fmt.Errorf("printer not found")
+	}
+	request := printer.PrintRequest{
+		Filename:        item.FileName,
+		LocalPath:       s.storage.GetFullPath(file.StoragePath),
+		RemoteDirectory: printerData.DefaultPrintFolder,
+	}
+	if err := s.printerMgr.StartJob(*item.AssignedPrinterID, request); err != nil {
 		item.FailedAttempts++
 		item.Status = model.QueueItemStatusFailed
 		_ = s.repo.Update(ctx, item)
