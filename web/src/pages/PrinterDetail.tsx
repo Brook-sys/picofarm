@@ -193,6 +193,11 @@ export default function PrinterDetail() {
               <span className={cn('badge', getStatusBadge(status))}>
                 {status}
               </span>
+              {state?.phase && (
+                <span className="badge bg-purple-500/20 text-purple-400">
+                  {state.phase}
+                </span>
+              )}
               <span className="badge bg-surface-800 text-surface-400">
                 {printer.connection_type.replace('_', ' ')}
               </span>

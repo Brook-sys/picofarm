@@ -372,6 +372,7 @@ export interface PrinterCapabilities {
 export interface PrinterState {
   printer_id: string
   status: PrinterStatus
+  phase?: string
   progress: number
   current_file?: string
   time_left?: number
