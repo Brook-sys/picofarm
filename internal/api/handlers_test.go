@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/Brook-sys/picofarm/internal/model"
+	"github.com/google/uuid"
 )
 
 // --- Part creation (JSON path) ---
@@ -564,6 +564,62 @@ func TestPrinterUpdate(t *testing.T) {
 	}
 }
 
+func TestPrinterUpdateNormalizesDefaultPrintFolder(t *testing.T) {
+	env := newTestEnv(t)
+	created := createPrinterForUpdateTest(t, env, "moonraker")
+
+	patchBody, _ := json.Marshal(map[string]interface{}{"default_print_folder": "/sda1/"})
+	req := httptest.NewRequest(http.MethodPatch, fmt.Sprintf("/api/printers/%s", created.ID), bytes.NewReader(patchBody))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	env.handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("update: expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+
+	var updated model.Printer
+	if err := json.NewDecoder(rr.Body).Decode(&updated); err != nil {
+		t.Fatal(err)
+	}
+	if updated.DefaultPrintFolder != "sda1" {
+		t.Fatalf("default_print_folder = %q, want sda1", updated.DefaultPrintFolder)
+	}
+}
+
+func TestPrinterUpdateRejectsEncodedPrintFolderTraversal(t *testing.T) {
+	env := newTestEnv(t)
+	created := createPrinterForUpdateTest(t, env, "moonraker")
+
+	patchBody, _ := json.Marshal(map[string]interface{}{"default_print_folder": "%2e%2e/config"})
+	req := httptest.NewRequest(http.MethodPatch, fmt.Sprintf("/api/printers/%s", created.ID), bytes.NewReader(patchBody))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	env.handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("update: expected 400, got %d: %s", rr.Code, rr.Body.String())
+	}
+}
+
+func createPrinterForUpdateTest(t *testing.T, env *testEnv, connectionType string) model.Printer {
+	t.Helper()
+	body, _ := json.Marshal(map[string]interface{}{
+		"name":            "Print Folder Test",
+		"connection_type": connectionType,
+	})
+	req := httptest.NewRequest(http.MethodPost, "/api/printers", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	env.handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("create: expected 201, got %d: %s", rr.Code, rr.Body.String())
+	}
+	var created model.Printer
+	if err := json.NewDecoder(rr.Body).Decode(&created); err != nil {
+		t.Fatal(err)
+	}
+	return created
+}
+
 // TestPrinterDelete verifies deletion and confirms the printer is gone.
 func TestPrinterDelete(t *testing.T) {
 	env := newTestEnv(t)
@@ -1004,4 +1060,3 @@ func TestExpenseRetry_InvalidID(t *testing.T) {
 		t.Errorf("expected 400, got %d", rr.Code)
 	}
 }
-

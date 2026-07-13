@@ -296,6 +296,12 @@ func (m *Manager) GetAllStates() map[uuid.UUID]*model.PrinterState {
 
 // StartJob sends a print job to a printer.
 func (m *Manager) StartJob(printerID uuid.UUID, request PrintRequest) error {
+	remoteDirectory, err := NormalizeRemotePrintFolder(request.RemoteDirectory)
+	if err != nil {
+		return fmt.Errorf("invalid remote print folder: %w", err)
+	}
+	request.RemoteDirectory = remoteDirectory
+
 	m.mu.RLock()
 	client, ok := m.clients[printerID]
 	m.mu.RUnlock()
