@@ -36,6 +36,7 @@ import { FailureModal } from '../components/FailureModal'
 import { ExpandableJobEvents } from '../components/JobEventTimeline'
 import { Tooltip } from '../components/Tooltip'
 import GCodeFilePicker from '../components/GCodeFilePicker'
+import { STLViewer3D } from '../components/STLViewer3D'
 import type { Design, Part, Material, PrintJob, ProjectSummary, ProjectSupply, GCodeLibraryFile, STLLibraryFile } from '../types'
 
 type RootProjectFile = { type: 'stl'; file: STLLibraryFile } | { type: 'gcode'; file: GCodeLibraryFile }
@@ -874,13 +875,27 @@ function PartCard({
         )}
       </div>
       {viewingSTL && (
-        <Modal title="STL info" onClose={() => setViewingSTL(null)}>
-          <div className="space-y-3 text-sm">
-            {viewingSTL.thumbnail_file_id && <img src={`/api/files/${viewingSTL.thumbnail_file_id}`} className="h-48 w-full rounded-lg bg-surface-900 object-contain" />}
-            <InfoRow label="Title" value={viewingSTL.display_name || viewingSTL.file_name} />
-            <InfoRow label="File" value={viewingSTL.file_name} />
-            <InfoRow label="Size" value={formatBytes(viewingSTL.size_bytes)} />
-            <InfoRow label="Linked G-codes" value={`${viewingSTL.gcodes?.length || 0}`} />
+        <Modal title="STL Viewer" onClose={() => setViewingSTL(null)}>
+          <div className="space-y-4">
+            <STLViewer3D url={`/api/files/${viewingSTL.file_id}`} />
+            <div className="grid grid-cols-2 gap-4 text-sm bg-surface-900/50 p-3 rounded-lg">
+              <div>
+                <div className="text-surface-500 mb-1">Title</div>
+                <div className="font-medium text-surface-200">{viewingSTL.display_name || viewingSTL.file_name}</div>
+              </div>
+              <div>
+                <div className="text-surface-500 mb-1">File</div>
+                <div className="font-medium text-surface-200 truncate" title={viewingSTL.file_name}>{viewingSTL.file_name}</div>
+              </div>
+              <div>
+                <div className="text-surface-500 mb-1">Size</div>
+                <div className="font-medium text-surface-200">{formatBytes(viewingSTL.size_bytes)}</div>
+              </div>
+              <div>
+                <div className="text-surface-500 mb-1">Linked G-codes</div>
+                <div className="font-medium text-surface-200">{viewingSTL.gcodes?.length || 0}</div>
+              </div>
+            </div>
           </div>
         </Modal>
       )}
