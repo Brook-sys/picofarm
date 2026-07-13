@@ -388,6 +388,33 @@ CREATE INDEX IF NOT EXISTS idx_queue_items_printer ON queue_items(assigned_print
 CREATE INDEX IF NOT EXISTS idx_queue_items_spool ON queue_items(assigned_spool_id);
 CREATE INDEX IF NOT EXISTS idx_queue_items_source ON queue_items(source_type, source_id);
 
+CREATE TRIGGER IF NOT EXISTS trg_queue_items_single_active_insert
+BEFORE INSERT ON queue_items
+WHEN NEW.assigned_printer_id IS NOT NULL
+ AND NEW.status IN ('printing', 'paused')
+ AND EXISTS (
+    SELECT 1 FROM queue_items
+    WHERE assigned_printer_id = NEW.assigned_printer_id
+      AND status IN ('printing', 'paused')
+ )
+BEGIN
+    SELECT RAISE(ABORT, 'printer already has an active queue item');
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_queue_items_single_active_update
+BEFORE UPDATE OF assigned_printer_id, status ON queue_items
+WHEN NEW.assigned_printer_id IS NOT NULL
+ AND NEW.status IN ('printing', 'paused')
+ AND EXISTS (
+    SELECT 1 FROM queue_items
+    WHERE assigned_printer_id = NEW.assigned_printer_id
+      AND id != NEW.id
+      AND status IN ('printing', 'paused')
+ )
+BEGIN
+    SELECT RAISE(ABORT, 'printer already has an active queue item');
+END;
+
 CREATE TABLE IF NOT EXISTS gcode_files (
     id TEXT PRIMARY KEY,
     file_id TEXT NOT NULL REFERENCES files(id),

@@ -73,6 +73,22 @@ func (r *QueueItemRepository) List(ctx context.Context) ([]model.QueueItem, erro
 	return items, rows.Err()
 }
 
+func (r *QueueItemRepository) GetActiveByPrinter(ctx context.Context, printerID, excludeID uuid.UUID) (*model.QueueItem, error) {
+	var item model.QueueItem
+	var metadata sql.NullString
+	err := scanRow(r.db.QueryRowContext(ctx, queueItemSelect()+`
+		WHERE assigned_printer_id = ? AND id != ? AND status IN ('printing', 'paused')
+		ORDER BY updated_at DESC LIMIT 1`, printerID, excludeID), scanQueueItem(&item, &metadata)...)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	item.Metadata = unmarshalQueueMetadata(metadata)
+	return &item, nil
+}
+
 func (r *QueueItemRepository) ListTerminalByPrinter(ctx context.Context, printerID uuid.UUID) ([]model.QueueItem, error) {
 	rows, err := r.db.QueryContext(ctx, queueItemSelect()+` WHERE assigned_printer_id = ? AND source_type != 'print_job' AND status IN ('done', 'failed', 'cancelled') ORDER BY updated_at DESC`, printerID)
 	if err != nil {
