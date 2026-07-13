@@ -84,7 +84,7 @@ func NewServices(repos *repository.Repositories, store storage.Storage, printerM
 		Files:           &FileService{repo: repos.Files, storage: store},
 		Expenses:        &ExpenseService{repo: repos.Expenses, materialRepo: repos.Materials, spoolRepo: repos.Spools, fileRepo: repos.Files, settingsRepo: repos.Settings, repos: repos, storage: store},
 		Sales:           &SaleService{repo: repos.Sales, taskRepo: repos.Tasks},
-		Stats:           &StatsService{expenseRepo: repos.Expenses, saleRepo: repos.Sales, printJobRepo: repos.PrintJobs, queueRepo: repos.QueueItems, spoolRepo: repos.Spools},
+		Stats:           &StatsService{expenseRepo: repos.Expenses, saleRepo: repos.Sales, printJobRepo: repos.PrintJobs, queueRepo: repos.QueueItems, spoolRepo: repos.Spools, materialRepo: repos.Materials},
 		Etsy:            nil, // Initialize separately with config
 		Squarespace:     nil, // Initialize separately with config
 		BambuCloud:      NewBambuCloudService(repos.BambuCloud, repos.Printers, printerMgr, bambuCloudClient),

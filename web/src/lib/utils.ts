@@ -15,6 +15,12 @@ export function formatBytes(bytes: number): string {
   return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`
 }
 
+export function formatGrams(grams: number | null | undefined): string {
+  if (grams == null) return '0g'
+  if (grams < 1000) return `${grams.toFixed(2)}g`
+  return `${(grams / 1000).toFixed(2)}kg`
+}
+
 // Format duration in seconds to human readable string.
 export function formatDuration(seconds: number): string {
   if (seconds < 60) return `${seconds}s`
