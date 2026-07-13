@@ -28,6 +28,7 @@ import {
 } from 'chart.js'
 import { Line, Bar, Doughnut } from 'react-chartjs-2'
 import { useProjects } from '../hooks/useProjects'
+import { formatGrams } from '../lib/utils'
 import { usePrinters, usePrinterStates } from '../hooks/usePrinters'
 import { queueApi, statsApi } from '../api/client'
 import { cn, getStatusBadge } from '../lib/utils'
@@ -399,7 +400,7 @@ export default function Dashboard() {
                 Material Used
               </div>
               <div className="text-2xl font-bold text-blue-400">
-                {(financials.total_material_used_grams / 1000).toFixed(2)} kg
+                {formatGrams(financials.total_material_used_grams)}
               </div>
               <div className="text-xs text-surface-500 mt-1">
                 {formatCents(Math.round(financials.total_material_cost * 100))} material cost

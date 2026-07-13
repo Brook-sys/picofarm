@@ -150,6 +150,7 @@ type StatsService struct {
 	printJobRepo   *repository.PrintJobRepository
 	queueRepo      *repository.QueueItemRepository
 	spoolRepo      *repository.SpoolRepository
+	materialRepo   *repository.MaterialRepository
 	projectService *ProjectService
 }
 
@@ -374,7 +375,19 @@ func (s *StatsService) GetFinancialSummary(ctx context.Context, since *time.Time
 		}
 		for _, item := range items {
 			if item.Status == model.QueueItemStatusDone {
-				summary.TotalMaterialUsedGrams += queueItemConsumedGrams(item)
+				grams := queueItemConsumedGrams(item)
+				summary.TotalMaterialUsedGrams += grams
+
+				// Estimate historical cost for queue items that never became jobs
+				if item.AssignedSpoolID != nil && s.spoolRepo != nil && s.materialRepo != nil {
+					spool, err := s.spoolRepo.GetByID(ctx, *item.AssignedSpoolID)
+					if err == nil && spool != nil {
+						material, err := s.materialRepo.GetByID(ctx, spool.MaterialID)
+						if err == nil && material != nil {
+							summary.TotalMaterialCost += (grams / 1000.0) * material.CostPerKg
+						}
+					}
+				}
 			}
 		}
 	}
