@@ -1,6 +1,9 @@
 package printer
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestNormalizeRemotePrintFolder(t *testing.T) {
 	t.Parallel()
@@ -22,6 +25,15 @@ func TestNormalizeRemotePrintFolder(t *testing.T) {
 		{name: "windows path", input: `C:\\prints`, wantErr: true},
 		{name: "url", input: "http://host/path", wantErr: true},
 		{name: "nested traversal", input: "gcodes/../../config", wantErr: true},
+		{name: "encoded parent segment", input: "%2e%2e/config", wantErr: true},
+		{name: "encoded slash", input: "sda1%2fconfig", wantErr: true},
+		{name: "encoded backslash", input: "sda1%5cconfig", wantErr: true},
+		{name: "null byte", input: "sda1\x00config", wantErr: true},
+		{name: "line feed", input: "sda1\nconfig", wantErr: true},
+		{name: "carriage return", input: "sda1\rconfig", wantErr: true},
+		{name: "delete control", input: "sda1\x7fconfig", wantErr: true},
+		{name: "too long", input: strings.Repeat("a", maxRemotePrintFolderLength+1), wantErr: true},
+		{name: "maximum length", input: strings.Repeat("a", maxRemotePrintFolderLength), want: strings.Repeat("a", maxRemotePrintFolderLength)},
 	}
 
 	for _, tt := range tests {

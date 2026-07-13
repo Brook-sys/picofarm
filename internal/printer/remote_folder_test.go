@@ -92,6 +92,84 @@ func TestMoonrakerStartJobUploadsAndStartsConfiguredFolder(t *testing.T) {
 	}
 }
 
+func TestMoonrakerStartJobUsesRootWhenFolderIsEmpty(t *testing.T) {
+	localPath := writePrinterTestFile(t)
+	var uploadName, startedName string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/server/files/upload":
+			uploadName, _ = uploadedFilename(t, r)
+			_, _ = io.WriteString(w, `{"result":{"item":{"path":"model.gcode"}}}`)
+		case "/printer/print/start":
+			startedName = r.URL.Query().Get("filename")
+			_, _ = io.WriteString(w, `{}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	client := NewMoonrakerClient([16]byte{}, server.URL)
+	if err := client.StartJob(PrintRequest{Filename: "model.gcode", LocalPath: localPath}); err != nil {
+		t.Fatalf("StartJob: %v", err)
+	}
+	if uploadName != "model.gcode" || startedName != "model.gcode" {
+		t.Fatalf("upload/start = %q/%q", uploadName, startedName)
+	}
+}
+
+func TestMoonrakerStartJobFallsBackToRequestedPath(t *testing.T) {
+	localPath := writePrinterTestFile(t)
+	var startedName string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/server/files/upload":
+			_, _ = uploadedFilename(t, r)
+			_, _ = io.WriteString(w, `{"result":{}}`)
+		case "/printer/print/start":
+			startedName = r.URL.Query().Get("filename")
+			_, _ = io.WriteString(w, `{}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	client := NewMoonrakerClient([16]byte{}, server.URL)
+	if err := client.StartJob(PrintRequest{Filename: "model.gcode", LocalPath: localPath, RemoteDirectory: "sda1"}); err != nil {
+		t.Fatalf("StartJob: %v", err)
+	}
+	if startedName != "sda1/model.gcode" {
+		t.Fatalf("started filename = %q", startedName)
+	}
+}
+
+func TestMoonrakerStartJobUsesReturnedPath(t *testing.T) {
+	localPath := writePrinterTestFile(t)
+	var startedName string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/server/files/upload":
+			_, _ = uploadedFilename(t, r)
+			_, _ = io.WriteString(w, `{"result":{"item":{"path":"server/renamed.gcode"}}}`)
+		case "/printer/print/start":
+			startedName = r.URL.Query().Get("filename")
+			_, _ = io.WriteString(w, `{}`)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	client := NewMoonrakerClient([16]byte{}, server.URL)
+	if err := client.StartJob(PrintRequest{Filename: "model.gcode", LocalPath: localPath, RemoteDirectory: "sda1"}); err != nil {
+		t.Fatalf("StartJob: %v", err)
+	}
+	if startedName != "server/renamed.gcode" {
+		t.Fatalf("started filename = %q", startedName)
+	}
+}
+
 func TestOctoPrintStartJobUploadsAndStartsConfiguredFolder(t *testing.T) {
 	localPath := writePrinterTestFile(t)
 	var uploadPath, uploadName, startedPath string
