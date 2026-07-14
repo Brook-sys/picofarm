@@ -364,6 +364,7 @@ CREATE TABLE IF NOT EXISTS queue_items (
     progress REAL NOT NULL DEFAULT 0,
     wasted_grams REAL NOT NULL DEFAULT 0,
     failed_attempts INTEGER NOT NULL DEFAULT 0,
+    start_failed BOOLEAN NOT NULL DEFAULT FALSE,
     assigned_printer_id TEXT REFERENCES printers(id),
     assigned_spool_id TEXT REFERENCES material_spools(id),
     material_type TEXT,

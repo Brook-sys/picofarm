@@ -95,6 +95,7 @@ func RunMigrations(db *sql.DB) error {
 		`ALTER TABLE queue_items ADD COLUMN progress REAL NOT NULL DEFAULT 0`,
 		`ALTER TABLE queue_items ADD COLUMN wasted_grams REAL NOT NULL DEFAULT 0`,
 		`ALTER TABLE queue_items ADD COLUMN failed_attempts INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE queue_items ADD COLUMN start_failed BOOLEAN NOT NULL DEFAULT FALSE`,
 		`ALTER TABLE queue_items ADD COLUMN filament_name TEXT`,
 		`ALTER TABLE queue_items ADD COLUMN project_id TEXT REFERENCES projects(id) ON DELETE SET NULL`,
 		`CREATE TABLE IF NOT EXISTS stl_files (id TEXT PRIMARY KEY, file_id TEXT NOT NULL REFERENCES files(id), display_name TEXT, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)`,

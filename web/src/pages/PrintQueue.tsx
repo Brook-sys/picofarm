@@ -423,8 +423,9 @@ function QueueCard({ item, queuePosition, busy, dragging, dragOver, onDragStart,
   const compact = viewMode === 'compact'
   const thumb = viewMode === 'thumb'
   const sourceBadge = getQueueSourceBadge(queueItem.source_type)
-  const needsRetry = status === 'failed' || status === 'cancelled'
-  const printActionLabel = needsRetry ? 'Retry' : 'Print now'
+  const canStartAgain = status === 'failed' && (queueItem.progress || 0) === 0 && queueItem.start_failed === true
+  const canStart = !['printing', 'paused', 'done', 'failed', 'cancelled'].includes(status) || canStartAgain
+  const printActionLabel = canStartAgain ? 'Start again' : 'Print now'
 
   if (compact) {
     return (
@@ -437,7 +438,7 @@ function QueueCard({ item, queuePosition, busy, dragging, dragOver, onDragStart,
             <div className="flex items-center gap-1.5 mb-1">
               {queuePosition && <span className="inline-flex h-6 min-w-6 items-center justify-center rounded-full border border-emerald-500/50 bg-emerald-500/15 px-2 text-xs font-bold text-emerald-200">#{queuePosition}</span>}
               <span className={cn('badge', getStatusBadge(status))}>{status}</span>
-              {needsRetry && <span className="badge border border-amber-500/40 bg-amber-500/15 text-amber-300">retry ready</span>}
+              {canStartAgain && <span className="badge border border-amber-500/40 bg-amber-500/15 text-amber-300">manual start</span>}
               <span className={cn('badge border', sourceBadge.className)}>{sourceBadge.label}</span>
             </div>
             {editingName ? (
@@ -479,7 +480,7 @@ function QueueCard({ item, queuePosition, busy, dragging, dragOver, onDragStart,
           </select>
           <button disabled={busy} onClick={onEdit} title="Details" className="inline-flex h-7 w-8 shrink-0 items-center justify-center rounded-lg border border-surface-700 bg-surface-800 text-surface-200 transition-colors hover:border-accent-500/60 hover:bg-accent-500/15 hover:text-accent-200 disabled:cursor-not-allowed disabled:opacity-50"><Info className="h-4 w-4" /></button>
           <button disabled={busy} onClick={onDelete} title="Delete" className="inline-flex h-7 w-8 shrink-0 items-center justify-center rounded-lg border border-red-500/35 bg-red-500/10 text-red-300 transition-colors hover:border-red-400 hover:bg-red-500/20 hover:text-red-200 disabled:cursor-not-allowed disabled:opacity-50"><Trash2 className="h-4 w-4" /></button>
-              {item.column === 'ready' && <button disabled={busy} onClick={onPrintNow} className="btn btn-primary col-span-4 text-xs py-1 px-2"><Play className="h-3.5 w-3.5 mr-1" />{needsRetry ? 'Retry' : 'Print'}</button>}
+              {item.column === 'ready' && canStart && <button disabled={busy} onClick={onPrintNow} className="btn btn-primary col-span-4 text-xs py-1 px-2"><Play className="h-3.5 w-3.5 mr-1" />{canStartAgain ? 'Start again' : 'Print'}</button>}
         </div>
         {busy && <div className="text-xs text-surface-500 mt-2">Working...</div>}
       </div>
@@ -499,7 +500,7 @@ function QueueCard({ item, queuePosition, busy, dragging, dragOver, onDragStart,
           <div className="flex flex-wrap items-center gap-2 drop-shadow">
             {queuePosition && <span className="inline-flex h-7 min-w-7 items-center justify-center rounded-full border border-emerald-400/60 bg-emerald-500/20 px-2 text-xs font-bold text-emerald-100">#{queuePosition}</span>}
             <span className={cn('badge', getStatusBadge(status))}>{status}</span>
-            {needsRetry && <span className="badge border border-amber-500/40 bg-amber-500/15 text-amber-300">retry ready</span>}
+            {canStartAgain && <span className="badge border border-amber-500/40 bg-amber-500/15 text-amber-300">manual start</span>}
             <span className={cn('badge border', sourceBadge.className)}>{sourceBadge.label}</span>
           </div>
           <div className="space-y-3 rounded-xl border border-white/10 bg-surface-950/55 p-3 shadow-2xl backdrop-blur-sm">
@@ -543,7 +544,7 @@ function QueueCard({ item, queuePosition, busy, dragging, dragOver, onDragStart,
               </select>
               <button disabled={busy} onClick={onEdit} title="Details" className="inline-flex h-8 w-9 shrink-0 items-center justify-center rounded-lg border border-white/15 bg-white/10 text-white transition-colors hover:border-accent-400 hover:bg-accent-500/20"><Info className="h-4 w-4" /></button>
               <button disabled={busy} onClick={onDelete} title="Delete" className="inline-flex h-8 w-9 shrink-0 items-center justify-center rounded-lg border border-red-400/30 bg-red-500/15 text-red-200 transition-colors hover:border-red-300 hover:bg-red-500/25"><Trash2 className="h-4 w-4" /></button>
-          {item.column === 'ready' && <button disabled={busy} onClick={onPrintNow} className="btn btn-primary col-span-4 text-xs py-1 px-2"><Play className="h-3.5 w-3.5 mr-1" />{needsRetry ? 'Retry' : 'Print'}</button>}
+          {item.column === 'ready' && canStart && <button disabled={busy} onClick={onPrintNow} className="btn btn-primary col-span-4 text-xs py-1 px-2"><Play className="h-3.5 w-3.5 mr-1" />{canStartAgain ? 'Start again' : 'Print'}</button>}
             </div>
           </div>
         </div>
@@ -561,7 +562,7 @@ function QueueCard({ item, queuePosition, busy, dragging, dragOver, onDragStart,
           <div className={cn('flex items-center gap-2', compact ? 'mb-0.5' : 'mb-1')}>
             {queuePosition && <span className="inline-flex h-6 min-w-6 items-center justify-center rounded-full border border-emerald-500/50 bg-emerald-500/15 px-2 text-xs font-bold text-emerald-200">#{queuePosition}</span>}
             <span className={cn('badge', getStatusBadge(status))}>{status}</span>
-            {needsRetry && <span className="badge border border-amber-500/40 bg-amber-500/15 text-amber-300">retry ready</span>}
+            {canStartAgain && <span className="badge border border-amber-500/40 bg-amber-500/15 text-amber-300">manual start</span>}
 
             {!compact && <span className={cn('badge border', sourceBadge.className)}>{sourceBadge.label}</span>}
           </div>
@@ -626,7 +627,7 @@ function QueueCard({ item, queuePosition, busy, dragging, dragOver, onDragStart,
       {item.preflight?.warnings && item.preflight.warnings.length > 0 && <div className="mb-3 text-xs text-amber-400">{item.preflight.warnings[0]}</div>}
 
       <div className={cn('flex flex-wrap', compact ? 'gap-1.5' : 'gap-2')}>
-        {item.column === 'ready' && <button disabled={busy} onClick={onPrintNow} className={cn('btn btn-primary text-xs', compact ? 'py-1 px-2' : 'py-1.5 px-3')}><Play className="h-3.5 w-3.5 mr-1" />{printActionLabel}</button>}
+        {item.column === 'ready' && canStart && <button disabled={busy} onClick={onPrintNow} className={cn('btn btn-primary text-xs', compact ? 'py-1 px-2' : 'py-1.5 px-3')}><Play className="h-3.5 w-3.5 mr-1" />{printActionLabel}</button>}
 
         {status === 'paused' && <button disabled={busy} onClick={onResume} className={cn('btn btn-secondary text-xs', compact ? 'py-1 px-2' : 'py-1.5 px-3')}>Resume</button>}
         {status === 'printing' && <button disabled={busy} onClick={onPause} className={cn('btn btn-secondary text-xs', compact ? 'py-1 px-2' : 'py-1.5 px-3')}>Pause</button>}

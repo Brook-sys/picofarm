@@ -369,6 +369,14 @@ func (s *QueueService) Start(ctx context.Context, id uuid.UUID) error {
 	if item == nil {
 		return fmt.Errorf("queue item not found")
 	}
+	switch item.Status {
+	case model.QueueItemStatusFailed:
+		if item.Progress != 0 || !item.StartFailed {
+			return fmt.Errorf("queue item failed during printing and cannot be started again")
+		}
+	case model.QueueItemStatusDone, model.QueueItemStatusCancelled, model.QueueItemStatusPrinting, model.QueueItemStatusPaused:
+		return fmt.Errorf("queue item in status %s cannot be started", item.Status)
+	}
 	if err := s.ensurePrinterHasNoOtherActiveItem(ctx, item); err != nil {
 		return err
 	}
@@ -405,9 +413,12 @@ func (s *QueueService) Start(ctx context.Context, id uuid.UUID) error {
 func (s *QueueService) rollbackFailedStart(ctx context.Context, item *model.QueueItem, startErr error) error {
 	item.FailedAttempts++
 	item.Status = model.QueueItemStatusFailed
+	item.StartFailed = true
+	item.Notes = appendQueueStartFailureNote(item.Notes, startErr)
 	if rollbackErr := s.repo.Update(ctx, item); rollbackErr != nil {
 		return fmt.Errorf("start print: %w; rollback queue reservation: %w", startErr, rollbackErr)
 	}
+	s.dispatchQueueNotification(ctx, item, "print.failed", "error", "Print failed to start")
 	return startErr
 }
 
@@ -428,7 +439,30 @@ func (s *QueueService) ensurePrinterHasNoOtherActiveItem(ctx context.Context, it
 func (s *QueueService) reserveStarted(ctx context.Context, item *model.QueueItem) error {
 	item.Status = model.QueueItemStatusPrinting
 	item.Progress = 0
+	item.StartFailed = false
+	item.Notes = removeQueueStartFailureNote(item.Notes)
 	return s.repo.Update(ctx, item)
+}
+
+func removeQueueStartFailureNote(notes string) string {
+	lines := strings.Split(notes, "\n")
+	kept := lines[:0]
+	for _, line := range lines {
+		if strings.HasPrefix(strings.TrimSpace(line), "Start failed:") {
+			continue
+		}
+		kept = append(kept, line)
+	}
+	return strings.TrimSpace(strings.Join(kept, "\n"))
+}
+
+func appendQueueStartFailureNote(notes string, startErr error) string {
+	notes = removeQueueStartFailureNote(notes)
+	failure := fmt.Sprintf("Start failed: %s", startErr)
+	if notes == "" {
+		return failure
+	}
+	return notes + "\n" + failure
 }
 
 func (s *QueueService) announceStarted(ctx context.Context, item *model.QueueItem) {
@@ -438,22 +472,13 @@ func (s *QueueService) announceStarted(ctx context.Context, item *model.QueueIte
 	s.dispatchQueueNotification(ctx, item, "print.started", "info", "Print started")
 }
 
-func (s *QueueService) recoverFalseFailedStart(ctx context.Context, item *model.QueueItem) error {
-	if err := s.ensurePrinterHasNoOtherActiveItem(ctx, item); err != nil {
-		return err
+func isQueueTerminalStatus(status model.QueueItemStatus) bool {
+	switch status {
+	case model.QueueItemStatusDone, model.QueueItemStatusFailed, model.QueueItemStatusCancelled:
+		return true
+	default:
+		return false
 	}
-	if item.FailedAttempts > 0 {
-		item.FailedAttempts--
-	}
-	item.WastedGrams = 0
-	if strings.Contains(item.Notes, "Cancelled on printer") {
-		item.Notes = strings.TrimSpace(strings.ReplaceAll(item.Notes, "Cancelled on printer", ""))
-	}
-	if err := s.reserveStarted(ctx, item); err != nil {
-		return err
-	}
-	s.announceStarted(ctx, item)
-	return nil
 }
 
 func (s *QueueService) SetStatus(ctx context.Context, id uuid.UUID, status model.QueueItemStatus) error {
@@ -463,6 +488,9 @@ func (s *QueueService) SetStatus(ctx context.Context, id uuid.UUID, status model
 	}
 	if item == nil {
 		return fmt.Errorf("queue item not found")
+	}
+	if isQueueTerminalStatus(item.Status) && status != item.Status {
+		return fmt.Errorf("queue item in terminal status %s cannot transition to %s", item.Status, status)
 	}
 	if status == model.QueueItemStatusPrinting || status == model.QueueItemStatusPaused {
 		if err := s.ensurePrinterHasNoOtherActiveItem(ctx, item); err != nil {
@@ -566,14 +594,6 @@ func (s *QueueService) dispatchPrinterStatusNotification(ctx context.Context, ne
 	s.notifications.Dispatch(ctx, model.NotificationEvent{Type: eventType, Severity: severity, Title: title, Message: fmt.Sprintf("Printer status changed to %s", newState.Status), Timestamp: time.Now().UTC(), PrinterID: &printerID, Data: data})
 }
 
-func currentFileMatchesQueueItem(state *model.PrinterState, item model.QueueItem) bool {
-	currentFile := filepath.Base(strings.TrimSpace(state.CurrentFile))
-	if currentFile == "" {
-		return false
-	}
-	return currentFile == filepath.Base(strings.TrimSpace(item.FileName))
-}
-
 func queueItemAttemptWaste(item model.QueueItem) float64 {
 	if item.FilamentGrams == nil {
 		return 0
@@ -633,11 +653,6 @@ func (s *QueueService) handlePrinterStatus(newState *model.PrinterState, oldStat
 	for _, item := range items {
 		if item.AssignedPrinterID == nil || *item.AssignedPrinterID != newState.PrinterID {
 			continue
-		}
-		if item.Status == model.QueueItemStatusFailed && isActive && currentFileMatchesQueueItem(newState, item) && time.Since(item.UpdatedAt) <= queueStartStatusGrace {
-			if err := s.recoverFalseFailedStart(ctx, &item); err == nil {
-				continue
-			}
 		}
 		if item.Status != model.QueueItemStatusPrinting && item.Status != model.QueueItemStatusPaused {
 			continue

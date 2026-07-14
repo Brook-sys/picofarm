@@ -677,6 +677,7 @@ export interface GCodeQueueItem {
   status: QueueItemStatus
   priority: number
   progress: number
+  start_failed?: boolean
   assigned_printer_id?: string | null
   assigned_spool_id?: string | null
   material_type?: string

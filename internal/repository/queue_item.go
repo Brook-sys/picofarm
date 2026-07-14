@@ -27,12 +27,12 @@ func (r *QueueItemRepository) Create(ctx context.Context, item *model.QueueItem)
 	metadata := marshalQueueMetadata(item.Metadata)
 	_, err := r.db.ExecContext(ctx, `
 		INSERT INTO queue_items (
-			id, source_type, source_id, project_id, file_id, file_name, display_name, status, priority, progress, wasted_grams, failed_attempts,
+			id, source_type, source_id, project_id, file_id, file_name, display_name, status, priority, progress, wasted_grams, failed_attempts, start_failed,
 			assigned_printer_id, assigned_spool_id, material_type, material_color, filament_name, filament_grams,
 			estimated_seconds, layer_height, nozzle_diameter, bed_temp, nozzle_temp,
 			thumbnail_file_id, metadata_json, notes, created_at, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, item.ID, item.SourceType, item.SourceID, item.ProjectID, item.FileID, item.FileName, item.DisplayName, item.Status, item.Priority, item.Progress, item.WastedGrams, item.FailedAttempts,
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, item.ID, item.SourceType, item.SourceID, item.ProjectID, item.FileID, item.FileName, item.DisplayName, item.Status, item.Priority, item.Progress, item.WastedGrams, item.FailedAttempts, item.StartFailed,
 		item.AssignedPrinterID, item.AssignedSpoolID, item.MaterialType, item.MaterialColor, item.FilamentName, item.FilamentGrams,
 		item.EstimatedSeconds, item.LayerHeight, item.NozzleDiameter, item.BedTemp, item.NozzleTemp,
 		item.ThumbnailFileID, metadata, item.Notes, item.CreatedAt, item.UpdatedAt)
@@ -126,12 +126,12 @@ func (r *QueueItemRepository) Update(ctx context.Context, item *model.QueueItem)
 	metadata := marshalQueueMetadata(item.Metadata)
 	_, err := r.db.ExecContext(ctx, `
 		UPDATE queue_items SET
-			source_type = ?, source_id = ?, project_id = ?, file_id = ?, file_name = ?, display_name = ?, status = ?, priority = ?, progress = ?, wasted_grams = ?, failed_attempts = ?,
+			source_type = ?, source_id = ?, project_id = ?, file_id = ?, file_name = ?, display_name = ?, status = ?, priority = ?, progress = ?, wasted_grams = ?, failed_attempts = ?, start_failed = ?,
 			assigned_printer_id = ?, assigned_spool_id = ?, material_type = ?, material_color = ?, filament_name = ?, filament_grams = ?,
 			estimated_seconds = ?, layer_height = ?, nozzle_diameter = ?, bed_temp = ?, nozzle_temp = ?,
 			thumbnail_file_id = ?, metadata_json = ?, notes = ?, updated_at = ?
 		WHERE id = ?
-	`, item.SourceType, item.SourceID, item.ProjectID, item.FileID, item.FileName, item.DisplayName, item.Status, item.Priority, item.Progress, item.WastedGrams, item.FailedAttempts,
+	`, item.SourceType, item.SourceID, item.ProjectID, item.FileID, item.FileName, item.DisplayName, item.Status, item.Priority, item.Progress, item.WastedGrams, item.FailedAttempts, item.StartFailed,
 		item.AssignedPrinterID, item.AssignedSpoolID, item.MaterialType, item.MaterialColor, item.FilamentName, item.FilamentGrams,
 		item.EstimatedSeconds, item.LayerHeight, item.NozzleDiameter, item.BedTemp, item.NozzleTemp,
 		item.ThumbnailFileID, metadata, item.Notes, item.UpdatedAt, item.ID)
@@ -163,7 +163,7 @@ func (r *QueueItemRepository) UpdatePriority(ctx context.Context, id uuid.UUID, 
 }
 
 func queueItemSelect() string {
-	return `SELECT id, source_type, source_id, project_id, file_id, file_name, display_name, status, priority, progress, COALESCE(wasted_grams, 0), COALESCE(failed_attempts, 0),
+	return `SELECT id, source_type, source_id, project_id, file_id, file_name, display_name, status, priority, progress, COALESCE(wasted_grams, 0), COALESCE(failed_attempts, 0), COALESCE(start_failed, FALSE),
 		assigned_printer_id, assigned_spool_id, material_type, material_color, COALESCE(filament_name, ''), filament_grams,
 		estimated_seconds, layer_height, nozzle_diameter, bed_temp, nozzle_temp,
 		thumbnail_file_id, metadata_json, notes, created_at, updated_at FROM queue_items`
@@ -171,7 +171,7 @@ func queueItemSelect() string {
 
 func scanQueueItem(item *model.QueueItem, metadata *sql.NullString) []any {
 	return []any{
-		&item.ID, &item.SourceType, &item.SourceID, &item.ProjectID, &item.FileID, &item.FileName, &item.DisplayName, &item.Status, &item.Priority, &item.Progress, &item.WastedGrams, &item.FailedAttempts,
+		&item.ID, &item.SourceType, &item.SourceID, &item.ProjectID, &item.FileID, &item.FileName, &item.DisplayName, &item.Status, &item.Priority, &item.Progress, &item.WastedGrams, &item.FailedAttempts, &item.StartFailed,
 		&item.AssignedPrinterID, &item.AssignedSpoolID, &item.MaterialType, &item.MaterialColor, &item.FilamentName, &item.FilamentGrams,
 		&item.EstimatedSeconds, &item.LayerHeight, &item.NozzleDiameter, &item.BedTemp, &item.NozzleTemp,
 		&item.ThumbnailFileID, metadata, &item.Notes, &item.CreatedAt, &item.UpdatedAt,
