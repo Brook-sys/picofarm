@@ -854,6 +854,7 @@ type QueueItem struct {
 	Progress          float64         `json:"progress"`
 	WastedGrams       float64         `json:"wasted_grams,omitempty"`
 	FailedAttempts    int             `json:"failed_attempts,omitempty"`
+	StartFailed       bool            `json:"start_failed,omitempty"`
 	AssignedPrinterID *uuid.UUID      `json:"assigned_printer_id,omitempty"`
 	AssignedSpoolID   *uuid.UUID      `json:"assigned_spool_id,omitempty"`
 	MaterialType      string          `json:"material_type,omitempty"`

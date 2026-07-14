@@ -30,6 +30,30 @@ func TestRunMigrationsIsIdempotent(t *testing.T) {
 	}
 }
 
+func TestRunMigrationsAddsStartFailedToExistingQueueItems(t *testing.T) {
+	db := openTestDB(t)
+	if _, err := db.Exec(`INSERT INTO files (id, hash, original_name, content_type, size_bytes, storage_path) VALUES ('file-1', 'hash-1', 'legacy.gcode', 'text/x-gcode', 1, 'legacy.gcode')`); err != nil {
+		t.Fatalf("seed legacy file: %v", err)
+	}
+	if _, err := db.Exec(`INSERT INTO queue_items (id, file_id, file_name, status) VALUES ('queue-1', 'file-1', 'legacy.gcode', 'failed')`); err != nil {
+		t.Fatalf("seed legacy queue item: %v", err)
+	}
+	if _, err := db.Exec(`ALTER TABLE queue_items DROP COLUMN start_failed`); err != nil {
+		t.Fatalf("simulate legacy queue schema: %v", err)
+	}
+
+	if err := RunMigrations(db); err != nil {
+		t.Fatalf("migrate legacy queue schema: %v", err)
+	}
+	var startFailed bool
+	if err := db.QueryRow(`SELECT start_failed FROM queue_items WHERE id = 'queue-1'`).Scan(&startFailed); err != nil {
+		t.Fatalf("read migrated start_failed: %v", err)
+	}
+	if startFailed {
+		t.Fatal("expected historical queue item to default to start_failed=false")
+	}
+}
+
 func TestRunMigrationsRejectsPreexistingActiveQueueConflicts(t *testing.T) {
 	db := openRawTestDB(t)
 	if _, err := db.Exec(`
