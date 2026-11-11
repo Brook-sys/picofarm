@@ -47,7 +47,14 @@ func NewRouterWithOptions(services *service.Services, hub *realtime.Hub, opts Ro
 	r.Use(RequestLogger) // Custom structured logging with request IDs and timing
 	r.Use(SecurityHeaders)
 	r.Use(middleware.Recoverer)
-	r.Use(middleware.RealIP)
+	// middleware.RealIP is deliberately absent. Nothing in the API makes a decision
+	// from the client IP (CORS matches the Origin header, not the address), so the
+	// middleware only rewrote what r.RemoteAddr reports — from the TCP peer to a
+	// forgeable X-Forwarded-For header. chi GHSA-3fxj-6jh8-hvhx and
+	// GHSA-j6qf-3m9c-vwj3 are IP-spoofing issues in exactly that path; dropping it
+	// removes the whole class rather than one vulnerable version. If a trusted
+	// reverse proxy is ever put in front, reintroduce it explicitly, with the proxy
+	// range configured.
 	allowedOrigins := corsAllowedOrigins(opts.AllowedOrigins)
 	r.Use(cors.Handler(cors.Options{
 		AllowedOrigins: allowedOrigins,
