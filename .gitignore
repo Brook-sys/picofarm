@@ -17,6 +17,7 @@ uploads/
 # Local agent/session artifacts
 .ai/
 .hermes/
+graphify-out/
 
 # Local-only operations notes (hostnames, tailnet IPs, webhook GUIDs, deploy runbook)
 LOCAL.md
