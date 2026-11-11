@@ -5,9 +5,10 @@ import { ArrowLeft, Wifi, Thermometer, Fan, Gauge, Info, AlertTriangle, Lightbul
 import { usePrinter, usePrinterState, usePrinterJobs, usePrinterStats, useUpdatePrinter, usePrinterAnalytics } from '../hooks/usePrinters'
 import { camerasApi, printJobsApi, printersApi, queueApi } from '../api/client'
 import { cn, getStatusBadge, formatDuration, formatRelativeTime } from '../lib/utils'
+import { useCurrency } from '../hooks/useCurrency'
 import { ExpandableJobEvents } from '../components/JobEventTimeline'
 import AutoDispatchSettings from '../components/AutoDispatchSettings'
-import type { PrintJob, PrinterUtilization, PrinterROI, PrinterHealth, PrinterMacro, QueueItem } from '../types'
+import type { PrintJob, PrinterUtilization, PrinterROI, PrinterHealth, PrinterPreparationAnalytics, PrinterMacro, QueueItem } from '../types'
 
 const SPEED_LABELS: Record<number, string> = {
   1: 'Silent',
@@ -628,6 +629,9 @@ export default function PrinterDetail() {
             <PrinterROICard roi={analytics.roi} printerId={id!} purchasePriceCents={printer.purchase_price_cents} />
             <PrinterHealthCard health={analytics.health} />
           </div>
+          <div className="mt-4">
+            <PrinterPreparationCard preparation={analytics.preparation} />
+          </div>
         </div>
       )}
 
@@ -638,6 +642,7 @@ export default function PrinterDetail() {
 }
 
 function PrinterCostSetting({ printerId, costPerHourCents, printerModel }: { printerId: string; costPerHourCents: number; printerModel: string }) {
+  const { formatAmount, formatCents, symbol } = useCurrency()
   const [editing, setEditing] = useState(false)
   const [value, setValue] = useState((costPerHourCents / 100).toFixed(2))
   const [showBreakdown, setShowBreakdown] = useState(false)
@@ -686,7 +691,7 @@ function PrinterCostSetting({ printerId, costPerHourCents, printerModel }: { pri
           </div>
           {editing ? (
             <div className="flex items-center gap-2">
-              <span className="text-surface-400">$</span>
+              <span className="text-surface-400">{symbol}</span>
               <input
                 type="number"
                 step="0.01"
@@ -717,7 +722,7 @@ function PrinterCostSetting({ printerId, costPerHourCents, printerModel }: { pri
             </div>
           ) : (
             <div className="text-2xl font-semibold text-surface-100">
-              ${(costPerHourCents / 100).toFixed(2)}
+              {formatCents(costPerHourCents)}
               <span className="text-sm font-normal text-surface-500 ml-1">/ hr</span>
             </div>
           )}
@@ -735,19 +740,19 @@ function PrinterCostSetting({ printerId, costPerHourCents, printerModel }: { pri
                 onClick={() => handleApplyDefault(50)}
                 className={cn('btn btn-ghost text-xs py-1 px-3', suggestedLabel === 'A1' && 'ring-1 ring-accent-500')}
               >
-                A1 tier — $0.50/hr
+                A1 tier — {formatAmount(0.50)}/hr
               </button>
               <button
                 onClick={() => handleApplyDefault(75)}
                 className={cn('btn btn-ghost text-xs py-1 px-3', suggestedLabel === 'P1S' && 'ring-1 ring-accent-500')}
               >
-                P1S tier — $0.75/hr
+                P1S tier — {formatAmount(0.75)}/hr
               </button>
               <button
                 onClick={() => handleApplyDefault(100)}
                 className={cn('btn btn-ghost text-xs py-1 px-3', suggestedLabel === 'X1' && 'ring-1 ring-accent-500')}
               >
-                X1 tier — $1.00/hr
+                X1 tier — {formatAmount(1)}/hr
               </button>
             </div>
             {printerModel && (
@@ -775,35 +780,35 @@ function PrinterCostSetting({ printerId, costPerHourCents, printerModel }: { pri
                 <thead>
                   <tr className="text-left text-surface-500">
                     <th className="pb-1 font-medium">Component</th>
-                    <th className="pb-1 font-medium text-right">A1 (~$400)</th>
-                    <th className="pb-1 font-medium text-right">P1S (~$700)</th>
+                    <th className="pb-1 font-medium text-right">A1 (~{formatAmount(400)})</th>
+                    <th className="pb-1 font-medium text-right">P1S (~{formatAmount(700)})</th>
                   </tr>
                 </thead>
                 <tbody className="text-surface-300">
                   <tr>
                     <td className="py-0.5">Electricity</td>
-                    <td className="py-0.5 text-right">$0.02</td>
-                    <td className="py-0.5 text-right">$0.04</td>
+                    <td className="py-0.5 text-right">{formatAmount(0.02)}</td>
+                    <td className="py-0.5 text-right">{formatAmount(0.04)}</td>
                   </tr>
                   <tr>
                     <td className="py-0.5">Depreciation</td>
-                    <td className="py-0.5 text-right">$0.03</td>
-                    <td className="py-0.5 text-right">$0.05</td>
+                    <td className="py-0.5 text-right">{formatAmount(0.03)}</td>
+                    <td className="py-0.5 text-right">{formatAmount(0.05)}</td>
                   </tr>
                   <tr>
                     <td className="py-0.5">Maintenance</td>
-                    <td className="py-0.5 text-right">$0.15</td>
-                    <td className="py-0.5 text-right">$0.20</td>
+                    <td className="py-0.5 text-right">{formatAmount(0.15)}</td>
+                    <td className="py-0.5 text-right">{formatAmount(0.20)}</td>
                   </tr>
                   <tr>
                     <td className="py-0.5">Utilization buffer</td>
-                    <td className="py-0.5 text-right">$0.25</td>
-                    <td className="py-0.5 text-right">$0.35</td>
+                    <td className="py-0.5 text-right">{formatAmount(0.25)}</td>
+                    <td className="py-0.5 text-right">{formatAmount(0.35)}</td>
                   </tr>
                   <tr className="border-t border-surface-700 font-medium text-surface-200">
                     <td className="pt-1">Total</td>
-                    <td className="pt-1 text-right">$0.50/hr</td>
-                    <td className="pt-1 text-right">$0.75/hr</td>
+                    <td className="pt-1 text-right">{formatAmount(0.50)}/hr</td>
+                    <td className="pt-1 text-right">{formatAmount(0.75)}/hr</td>
                   </tr>
                 </tbody>
               </table>
@@ -819,6 +824,7 @@ function PrinterCostSetting({ printerId, costPerHourCents, printerModel }: { pri
 }
 
 function PrinterUtilizationCard({ utilization }: { utilization: PrinterUtilization[] }) {
+  const { formatCents } = useCurrency()
   const [selectedPeriod, setSelectedPeriod] = useState<string>('7d')
   const data = utilization.find(u => u.period === selectedPeriod) || utilization[0]
 
@@ -926,7 +932,7 @@ function PrinterUtilizationCard({ utilization }: { utilization: PrinterUtilizati
         <div className="border-t border-surface-700 pt-2 mt-2">
           <div className="flex justify-between">
             <span className="text-surface-400">Configured Rate</span>
-            <span className="text-surface-200">${(data.configured_cost_per_hour_cents / 100).toFixed(2)}/hr</span>
+            <span className="text-surface-200">{formatCents(data.configured_cost_per_hour_cents)}/hr</span>
           </div>
           <div className="flex justify-between">
             <span className="text-surface-400">Actual Revenue/hr</span>
@@ -935,7 +941,7 @@ function PrinterUtilizationCard({ utilization }: { utilization: PrinterUtilizati
                 ? 'text-emerald-400'
                 : 'text-surface-300'
             )}>
-              ${(data.actual_revenue_per_hour_cents / 100).toFixed(2)}/hr
+              {formatCents(data.actual_revenue_per_hour_cents)}/hr
             </span>
           </div>
         </div>
@@ -944,7 +950,113 @@ function PrinterUtilizationCard({ utilization }: { utilization: PrinterUtilizati
   )
 }
 
+function PrinterPreparationCard({ preparation }: { preparation: PrinterPreparationAnalytics }) {
+  const formatSeconds = (seconds: number) => formatDuration(Math.max(0, Math.round(seconds)))
+  const coverageLow = preparation.data_coverage_percent < 60
+
+  return (
+    <div className="card p-5">
+      <div className="flex flex-wrap items-start justify-between gap-3 mb-5">
+        <div>
+          <h3 className="text-sm font-semibold text-surface-400 uppercase tracking-wider flex items-center gap-2">
+            <Clock className="h-4 w-4" /> Preparação antes da impressão
+          </h3>
+          <p className="text-xs text-surface-500 mt-1">Tempo entre a primeira etapa do PRINT_START e a fase Printing.</p>
+        </div>
+        <span className={cn('badge', coverageLow ? 'bg-amber-500/15 text-amber-300' : 'bg-emerald-500/15 text-emerald-300')}>
+          Cobertura {preparation.data_coverage_percent.toFixed(0)}% ({preparation.measured_jobs}/{preparation.total_jobs})
+        </span>
+      </div>
+
+      {preparation.measured_jobs === 0 ? (
+        <div className="rounded-lg border border-surface-700 bg-surface-900/50 p-4 text-sm text-surface-400">
+          Ainda não há impressões concluídas contendo a sequência completa de fases até <strong className="text-surface-200">Printing</strong>. As próximas impressões com M117 serão incluídas automaticamente.
+        </div>
+      ) : (
+        <div className="space-y-5">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <PreparationMetric label="Média por impressão" value={formatSeconds(preparation.avg_preparation_seconds)} emphasis />
+            <PreparationMetric label="Tempo total preparando" value={formatSeconds(preparation.total_preparation_seconds)} />
+            <PreparationMetric label="Percentual do tempo ativo" value={`${preparation.preparation_percent.toFixed(1)}%`} emphasis />
+            <PreparationMetric label="Tempo efetivamente imprimindo" value={formatSeconds(preparation.total_printing_seconds)} />
+          </div>
+
+          <div>
+            <div className="flex justify-between text-xs mb-1.5">
+              <span className="text-amber-300">Preparação {preparation.preparation_percent.toFixed(1)}%</span>
+              <span className="text-emerald-300">Impressão {(100 - preparation.preparation_percent).toFixed(1)}%</span>
+            </div>
+            <div className="h-3 flex rounded-full overflow-hidden bg-surface-800">
+              <div className="bg-amber-500" style={{ width: `${Math.min(preparation.preparation_percent, 100)}%` }} />
+              <div className="bg-emerald-500 flex-1" />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+            <div>
+              <h4 className="text-sm font-medium text-surface-200 mb-3">Tempo por etapa</h4>
+              <div className="space-y-3">
+                {preparation.phases.map(phase => (
+                  <div key={phase.phase}>
+                    <div className="flex justify-between gap-3 text-sm mb-1">
+                      <span className="text-surface-300 truncate" title={phase.phase}>{phase.phase}</span>
+                      <span className="text-surface-400 whitespace-nowrap">média {formatSeconds(phase.average_seconds)}</span>
+                    </div>
+                    <div className="h-2 rounded-full overflow-hidden bg-surface-800">
+                      <div className="h-full bg-accent-500" style={{ width: `${Math.max(phase.percent, 2)}%` }} />
+                    </div>
+                    <div className="flex justify-between mt-1 text-[11px] text-surface-500">
+                      <span>{phase.occurrences} ocorrências</span>
+                      <span>{phase.percent.toFixed(1)}% da preparação</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <h4 className="text-sm font-medium text-surface-200 mb-3">Impressões recentes mensuradas</h4>
+              <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+                {preparation.recent_jobs.map(job => (
+                  <div key={job.job_id} className="rounded-lg border border-surface-800 bg-surface-900/50 px-3 py-2.5">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="text-sm text-surface-200 truncate">{job.job_name || job.job_id.slice(0, 8)}</div>
+                        <div className="text-xs text-surface-500">{new Date(job.started_at).toLocaleString()}</div>
+                      </div>
+                      <div className="text-right whitespace-nowrap">
+                        <div className="text-sm font-medium text-amber-300">{formatSeconds(job.preparation_seconds)}</div>
+                        <div className="text-xs text-surface-500">{job.preparation_percent.toFixed(1)}% do tempo</div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {coverageLow && (
+            <div className="rounded-lg border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
+              A cobertura ainda é parcial porque trabalhos anteriores não possuem marcadores de fase completos. As médias ficam mais representativas conforme novas impressões são concluídas.
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function PreparationMetric({ label, value, emphasis = false }: { label: string; value: string; emphasis?: boolean }) {
+  return (
+    <div className="rounded-lg border border-surface-800 bg-surface-900/50 p-3">
+      <div className="text-xs text-surface-500 mb-1">{label}</div>
+      <div className={cn('text-lg font-semibold', emphasis ? 'text-amber-300' : 'text-surface-100')}>{value}</div>
+    </div>
+  )
+}
+
 function PrinterROICard({ roi, printerId, purchasePriceCents }: { roi: PrinterROI; printerId: string; purchasePriceCents: number }) {
+  const { formatCents, symbol } = useCurrency()
   const [editing, setEditing] = useState(false)
   const [value, setValue] = useState((purchasePriceCents / 100).toFixed(2))
   const updatePrinter = useUpdatePrinter()
@@ -979,7 +1091,7 @@ function PrinterROICard({ roi, printerId, purchasePriceCents }: { roi: PrinterRO
             Enter the purchase price to track ROI and break-even.
           </p>
           <div className="flex items-center gap-2">
-            <span className="text-surface-400">$</span>
+            <span className="text-surface-400">{symbol}</span>
             <input
               type="number"
               step="0.01"
@@ -1038,7 +1150,7 @@ function PrinterROICard({ roi, printerId, purchasePriceCents }: { roi: PrinterRO
               <div className="flex items-center gap-2">
                 {editing ? (
                   <>
-                    <span className="text-surface-400">$</span>
+                    <span className="text-surface-400">{symbol}</span>
                     <input
                       type="number"
                       step="0.01"
@@ -1061,7 +1173,7 @@ function PrinterROICard({ roi, printerId, purchasePriceCents }: { roi: PrinterRO
                   </>
                 ) : (
                   <>
-                    <span className="text-surface-200">${(purchasePriceCents / 100).toFixed(2)}</span>
+                    <span className="text-surface-200">{formatCents(purchasePriceCents)}</span>
                     <button
                       onClick={() => setEditing(true)}
                       className="text-xs text-accent-400 hover:text-accent-300"
@@ -1078,19 +1190,19 @@ function PrinterROICard({ roi, printerId, purchasePriceCents }: { roi: PrinterRO
                 'font-medium',
                 roi.lifetime_profit_cents >= 0 ? 'text-emerald-400' : 'text-red-400'
               )}>
-                {roi.lifetime_profit_cents >= 0 ? '' : '-'}${Math.abs(roi.lifetime_profit_cents / 100).toFixed(2)}
+                {formatCents(roi.lifetime_profit_cents)}
               </span>
             </div>
             <div className="flex justify-between">
               <span className="text-surface-400">Revenue/Hour</span>
-              <span className="text-surface-200">${(roi.revenue_per_hour_cents / 100).toFixed(2)}</span>
+              <span className="text-surface-200">{formatCents(roi.revenue_per_hour_cents)}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-surface-400">Net/Hour</span>
               <span className={cn(
                 roi.net_per_hour_cents >= 0 ? 'text-emerald-400' : 'text-red-400'
               )}>
-                ${(roi.net_per_hour_cents / 100).toFixed(2)}
+                {formatCents(roi.net_per_hour_cents)}
               </span>
             </div>
             <div className="border-t border-surface-700 pt-2 mt-2">
@@ -1111,6 +1223,7 @@ function PrinterROICard({ roi, printerId, purchasePriceCents }: { roi: PrinterRO
 }
 
 function PrinterHealthCard({ health }: { health: PrinterHealth }) {
+  const { formatCents } = useCurrency()
   const failureCategories = Object.entries(health.failure_breakdown || {})
     .sort((a, b) => b[1] - a[1])
     .slice(0, 5)
@@ -1155,13 +1268,13 @@ function PrinterHealthCard({ health }: { health: PrinterHealth }) {
         <div className="p-2 rounded bg-surface-800/50">
           <div className="text-xs text-surface-500">Avg Cost/Job</div>
           <div className="text-lg font-semibold text-surface-200">
-            ${(health.avg_cost_cents / 100).toFixed(2)}
+            {formatCents(health.avg_cost_cents)}
           </div>
         </div>
         <div className="p-2 rounded bg-surface-800/50">
           <div className="text-xs text-surface-500">Revenue</div>
           <div className="text-lg font-semibold text-emerald-400">
-            ${(health.total_revenue_cents / 100).toFixed(2)}
+            {formatCents(health.total_revenue_cents)}
           </div>
         </div>
       </div>
@@ -1206,6 +1319,7 @@ function PrinterHealthCard({ health }: { health: PrinterHealth }) {
 type PrinterHistoryItem = { type: 'job'; createdAt: string; item: PrintJob } | { type: 'queue'; createdAt: string; item: QueueItem }
 
 function PrinterHistory({ printerId }: { printerId: string }) {
+  const { formatCents } = useCurrency()
   const queryClient = useQueryClient()
   const { data: stats } = usePrinterStats(printerId)
   const { data: jobs = [], isLoading } = usePrinterJobs(printerId)
@@ -1341,7 +1455,7 @@ function PrinterHistory({ printerId }: { printerId: string }) {
           <div className="card p-4">
             <div className="text-sm text-surface-500 mb-1">Total Cost</div>
             <div className="text-2xl font-semibold text-emerald-400">
-              ${(totalCost / 100).toFixed(2)}
+              {formatCents(totalCost)}
             </div>
           </div>
         </div>
@@ -1417,6 +1531,7 @@ function PrinterJobRow({
   onDelete: (jobId: string) => void
   confirmDelete: boolean
 }) {
+  const { formatCents } = useCurrency()
   return (
     <div className="card p-4">
       <div className="flex items-center justify-between">
@@ -1474,7 +1589,7 @@ function PrinterJobRow({
           )}
           {job.cost_cents != null && job.cost_cents > 0 && (
             <span className="text-sm text-emerald-400">
-              ${(job.cost_cents / 100).toFixed(2)}
+              {formatCents(job.cost_cents)}
             </span>
           )}
           <span

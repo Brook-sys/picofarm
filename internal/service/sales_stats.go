@@ -13,10 +13,18 @@ import (
 type SaleService struct {
 	repo     *repository.SaleRepository
 	taskRepo *repository.TaskRepository
+	settings *SettingsService
 }
 
 // Create creates a new sale.
 func (s *SaleService) Create(ctx context.Context, sale *model.Sale) error {
+	if sale.Currency == "" && s.settings != nil {
+		currency, err := s.settings.GetCurrencyCode(ctx)
+		if err != nil {
+			return fmt.Errorf("get configured currency: %w", err)
+		}
+		sale.Currency = currency
+	}
 	// Calculate net if not provided
 	if sale.NetCents == 0 {
 		sale.NetCents = sale.GrossCents - sale.FeesCents - sale.ShippingCostCents
@@ -34,8 +42,22 @@ func (s *SaleService) List(ctx context.Context, projectID *uuid.UUID) ([]model.S
 	return s.repo.List(ctx, projectID)
 }
 
-// Update updates a sale.
+// Update updates a sale while preserving its recorded currency when omitted.
 func (s *SaleService) Update(ctx context.Context, sale *model.Sale) error {
+	if sale.Currency == "" {
+		existing, err := s.repo.GetByID(ctx, sale.ID)
+		if err != nil {
+			return err
+		}
+		sale.Currency = existing.Currency
+		if sale.Currency == "" {
+			currency, err := s.currencyCode(ctx)
+			if err != nil {
+				return err
+			}
+			sale.Currency = currency
+		}
+	}
 	// Recalculate net
 	sale.NetCents = sale.GrossCents - sale.FeesCents - sale.ShippingCostCents
 	return s.repo.Update(ctx, sale)
@@ -48,7 +70,18 @@ func (s *SaleService) Delete(ctx context.Context, id uuid.UUID) error {
 
 // GetProfitSummary calculates profit for a date range.
 func (s *SaleService) GetProfitSummary(ctx context.Context, start, end time.Time) (grossCents, netCents, feesCents int, count int, err error) {
-	return s.repo.GetTotalsByDateRange(ctx, start, end)
+	currency, err := s.currencyCode(ctx)
+	if err != nil {
+		return 0, 0, 0, 0, err
+	}
+	return s.repo.GetTotalsByDateRange(ctx, start, end, currency)
+}
+
+func (s *SaleService) currencyCode(ctx context.Context) (string, error) {
+	if s.settings == nil {
+		return "USD", nil
+	}
+	return s.settings.GetCurrencyCode(ctx)
 }
 
 // WeekSummary holds aggregated sales totals for a single week.
@@ -72,6 +105,10 @@ type WeeklyInsights struct {
 
 // GetWeeklyInsights returns this week's sales metrics with last week comparison.
 func (s *SaleService) GetWeeklyInsights(ctx context.Context) (*WeeklyInsights, error) {
+	currency, err := s.currencyCode(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("get configured currency: %w", err)
+	}
 	now := time.Now().UTC()
 
 	// Monday of this week
@@ -85,19 +122,19 @@ func (s *SaleService) GetWeeklyInsights(ctx context.Context) (*WeeklyInsights, e
 	lastMonday := thisMonday.AddDate(0, 0, -7)
 
 	// This week totals
-	twGross, twNet, twFees, twCount, err := s.repo.GetTotalsByDateRange(ctx, thisMonday, thisSunday)
+	twGross, twNet, twFees, twCount, err := s.repo.GetTotalsByDateRange(ctx, thisMonday, thisSunday, currency)
 	if err != nil {
 		return nil, fmt.Errorf("this week totals: %w", err)
 	}
 
 	// Last week totals
-	lwGross, lwNet, lwFees, lwCount, err := s.repo.GetTotalsByDateRange(ctx, lastMonday, thisMonday)
+	lwGross, lwNet, lwFees, lwCount, err := s.repo.GetTotalsByDateRange(ctx, lastMonday, thisMonday, currency)
 	if err != nil {
 		return nil, fmt.Errorf("last week totals: %w", err)
 	}
 
 	// Channel breakdown for this week
-	channelRows, err := s.repo.GetSalesByChannel(ctx, thisMonday)
+	channelRows, err := s.repo.GetSalesByChannel(ctx, thisMonday, currency)
 	if err != nil {
 		return nil, fmt.Errorf("channel breakdown: %w", err)
 	}
@@ -106,10 +143,12 @@ func (s *SaleService) GetWeeklyInsights(ctx context.Context) (*WeeklyInsights, e
 		channels[i] = ChannelBreakdown{Channel: r.Channel, Total: r.Total, Count: r.Count}
 	}
 
-	// Pending sales: tasks in pending/in_progress linked to priced projects
+	// Pending sales: tasks in pending/in_progress linked to priced projects.
+	// Scoped to the configured currency for the average-sales fallback, so the
+	// pending number sits in the same currency as the confirmed totals above.
 	var pendingCount, pendingRevenue int
 	if s.taskRepo != nil {
-		pendingCount, pendingRevenue, err = s.taskRepo.GetPendingSalesStats(ctx)
+		pendingCount, pendingRevenue, err = s.taskRepo.GetPendingSalesStats(ctx, currency)
 		if err != nil {
 			return nil, fmt.Errorf("pending sales: %w", err)
 		}
@@ -141,6 +180,21 @@ type FinancialSummary struct {
 	SalesCount             int     `json:"sales_count"`
 	CompletedPrintCount    int     `json:"completed_print_count"`
 	SuccessfulPrintCount   int     `json:"successful_print_count"`
+
+	// Currency is the configured currency the revenue and expense aggregates above are
+	// scoped to.
+	Currency string `json:"currency"`
+	// CostBasisCurrency is the currency the internal cost figures (TotalCOGSCents,
+	// TotalMaterialCost) were entered in. Cost sources carry no currency column of
+	// their own — materials.cost_per_kg, printers.cost_per_hour_cents and
+	// purchase_price_cents, project supplies — so this is inferred from the
+	// predominant currency among confirmed expenses, which is the only evidence in the
+	// database.
+	CostBasisCurrency string `json:"cost_basis_currency"`
+	// ProfitMixedCurrency reports that Currency and CostBasisCurrency differ. When it
+	// is true, NetProfitCents is deliberately zero: subtracting costs entered in one
+	// currency from revenue in another produces a number with no unit, not a profit.
+	ProfitMixedCurrency bool `json:"profit_mixed_currency"`
 }
 
 // StatsService handles financial statistics and aggregations.
@@ -152,6 +206,14 @@ type StatsService struct {
 	spoolRepo      *repository.SpoolRepository
 	materialRepo   *repository.MaterialRepository
 	projectService *ProjectService
+	settings       *SettingsService
+}
+
+func (s *StatsService) currencyCode(ctx context.Context) (string, error) {
+	if s.settings == nil {
+		return "USD", nil
+	}
+	return s.settings.GetCurrencyCode(ctx)
 }
 
 type UsageStats struct {
@@ -300,11 +362,14 @@ func queueItemElapsedProgress(item model.QueueItem) float64 {
 // If since is non-nil, only data from that time onward is included.
 func (s *StatsService) GetFinancialSummary(ctx context.Context, since *time.Time) (*FinancialSummary, error) {
 	summary := &FinancialSummary{}
+	currency, err := s.currencyCode(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("get configured currency: %w", err)
+	}
 
 	// Get expense totals
 	confirmedStatus := model.ExpenseStatusConfirmed
 	var expenses []model.Expense
-	var err error
 	if since != nil {
 		expenses, err = s.expenseRepo.ListSince(ctx, &confirmedStatus, *since)
 	} else {
@@ -314,6 +379,9 @@ func (s *StatsService) GetFinancialSummary(ctx context.Context, since *time.Time
 		return nil, fmt.Errorf("failed to get expenses: %w", err)
 	}
 	for _, exp := range expenses {
+		if exp.Currency != currency {
+			continue
+		}
 		summary.TotalExpensesCents += exp.TotalCents
 		summary.ConfirmedExpenseCount++
 	}
@@ -329,7 +397,14 @@ func (s *StatsService) GetFinancialSummary(ctx context.Context, since *time.Time
 	if err != nil {
 		return nil, fmt.Errorf("failed to get pending expenses: %w", err)
 	}
-	summary.PendingExpenseCount = len(pendingExpenses)
+	for _, exp := range pendingExpenses {
+		// Same currency scope as the confirmed expenses above; an unscoped count here
+		// would report two different populations in one payload.
+		if exp.Currency != currency {
+			continue
+		}
+		summary.PendingExpenseCount++
+	}
 
 	// Get sales totals
 	var sales []model.Sale
@@ -342,6 +417,9 @@ func (s *StatsService) GetFinancialSummary(ctx context.Context, since *time.Time
 		return nil, fmt.Errorf("failed to get sales: %w", err)
 	}
 	for _, sale := range sales {
+		if sale.Currency != currency {
+			continue
+		}
 		summary.TotalSalesGrossCents += sale.GrossCents
 		summary.TotalSalesNetCents += sale.NetCents
 		summary.TotalFeesCents += sale.FeesCents
@@ -396,7 +474,7 @@ func (s *StatsService) GetFinancialSummary(ctx context.Context, since *time.Time
 	if s.projectService != nil {
 		projectIDs := make(map[uuid.UUID]bool)
 		for _, sale := range sales {
-			if sale.ProjectID != nil {
+			if sale.Currency == currency && sale.ProjectID != nil {
 				projectIDs[*sale.ProjectID] = true
 			}
 		}
@@ -415,10 +493,53 @@ func (s *StatsService) GetFinancialSummary(ctx context.Context, since *time.Time
 		}
 	}
 
-	// Net profit: sales net revenue - total COGS
-	summary.NetProfitCents = summary.TotalSalesNetCents - summary.TotalCOGSCents
+	// Net profit: sales net revenue - total COGS.
+	//
+	// COGS is only subtractable when the cost basis is in the same currency as the
+	// revenue. The cost sources have no currency column, so once the operator changes
+	// currency_code the two sides stop being comparable and the subtraction is
+	// meaningless. Report zero plus the flag instead of a number that looks like
+	// profit but has no unit.
+	summary.Currency = currency
+	summary.CostBasisCurrency = predominantExpenseCurrency(expenses, currency)
+	summary.ProfitMixedCurrency = summary.CostBasisCurrency != currency
+	if summary.ProfitMixedCurrency {
+		summary.NetProfitCents = 0
+	} else {
+		summary.NetProfitCents = summary.TotalSalesNetCents - summary.TotalCOGSCents
+	}
 
 	return summary, nil
+}
+
+// predominantExpenseCurrency infers the currency internal costs were entered in.
+//
+// Cost sources (materials.cost_per_kg, printers.cost_per_hour_cents,
+// printers.purchase_price_cents, project supplies) carry no currency column, so
+// expense predominance is the only evidence available in the database. Expenses
+// are the closest proxy: material was bought and paid for as confirmed expenses.
+//
+// When no confirmed expense carries a currency the configured currency is
+// assumed, so a fresh install or an all-USD dataset never reports a false
+// mixing. Ties break on the lexicographically smaller code to stay deterministic.
+func predominantExpenseCurrency(expenses []model.Expense, fallback string) string {
+	counts := make(map[string]int)
+	for _, exp := range expenses {
+		if exp.Currency == "" {
+			continue
+		}
+		counts[exp.Currency]++
+	}
+	if len(counts) == 0 {
+		return fallback
+	}
+	best, bestCount := "", 0
+	for code, n := range counts {
+		if n > bestCount || (n == bestCount && code < best) {
+			best, bestCount = code, n
+		}
+	}
+	return best
 }
 
 // TimeSeriesPoint represents a single data point in a time series.
@@ -465,13 +586,17 @@ func parsePeriod(period string) (time.Time, string) {
 // GetTimeSeriesData returns aligned revenue, expenses, and profit time series data.
 func (s *StatsService) GetTimeSeriesData(ctx context.Context, period string) (*TimeSeriesData, error) {
 	since, strftimeFmt := parsePeriod(period)
+	currency, err := s.currencyCode(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("get configured currency: %w", err)
+	}
 
-	revenueSeries, err := s.saleRepo.GetSalesOverTime(ctx, since, strftimeFmt)
+	revenueSeries, err := s.saleRepo.GetSalesOverTime(ctx, since, strftimeFmt, currency)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get revenue series: %w", err)
 	}
 
-	expenseSeries, err := s.expenseRepo.GetExpensesOverTime(ctx, since, strftimeFmt)
+	expenseSeries, err := s.expenseRepo.GetExpensesOverTime(ctx, since, strftimeFmt, currency)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get expense series: %w", err)
 	}
@@ -518,7 +643,11 @@ func (s *StatsService) GetTimeSeriesData(ctx context.Context, period string) (*T
 // GetExpensesByCategory returns expense totals grouped by category.
 func (s *StatsService) GetExpensesByCategory(ctx context.Context, period string) ([]CategoryBreakdown, error) {
 	since, _ := parsePeriod(period)
-	rows, err := s.expenseRepo.GetExpensesByCategory(ctx, since)
+	currency, err := s.currencyCode(ctx)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := s.expenseRepo.GetExpensesByCategory(ctx, since, currency)
 	if err != nil {
 		return nil, err
 	}
@@ -537,7 +666,11 @@ func (s *StatsService) GetExpensesByCategory(ctx context.Context, period string)
 // GetSalesByChannel returns sales totals grouped by channel.
 func (s *StatsService) GetSalesByChannel(ctx context.Context, period string) ([]ChannelBreakdown, error) {
 	since, _ := parsePeriod(period)
-	rows, err := s.saleRepo.GetSalesByChannel(ctx, since)
+	currency, err := s.currencyCode(ctx)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := s.saleRepo.GetSalesByChannel(ctx, since, currency)
 	if err != nil {
 		return nil, err
 	}
@@ -572,7 +705,11 @@ type ProjectSales struct {
 
 // GetSalesByProject returns sales aggregated by project.
 func (s *StatsService) GetSalesByProject(ctx context.Context) ([]ProjectSales, error) {
-	rows, err := s.saleRepo.GetSalesByProject(ctx)
+	currency, err := s.currencyCode(ctx)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := s.saleRepo.GetSalesByProject(ctx, currency)
 	if err != nil {
 		return nil, err
 	}

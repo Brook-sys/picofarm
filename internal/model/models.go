@@ -1385,11 +1385,45 @@ type PrinterHealth struct {
 	FailureBreakdown   map[string]int `json:"failure_breakdown"`
 }
 
-// PrinterAnalytics combines utilization, ROI, and health metrics.
+// PrinterPreparationPhase aggregates time spent in one PRINT_START phase.
+type PrinterPreparationPhase struct {
+	Phase          string  `json:"phase"`
+	TotalSeconds   int     `json:"total_seconds"`
+	AverageSeconds int     `json:"average_seconds"`
+	Occurrences    int     `json:"occurrences"`
+	Percent        float64 `json:"percent"`
+}
+
+// PrinterPreparationJob describes preparation overhead for one measured job.
+type PrinterPreparationJob struct {
+	JobID              uuid.UUID `json:"job_id"`
+	JobName            string    `json:"job_name,omitempty"`
+	StartedAt          time.Time `json:"started_at"`
+	PreparationSeconds int       `json:"preparation_seconds"`
+	ActiveSeconds      int       `json:"active_seconds"`
+	PreparationPercent float64   `json:"preparation_percent"`
+}
+
+// PrinterPreparationAnalytics summarizes PRINT_START overhead from phase events.
+type PrinterPreparationAnalytics struct {
+	TotalJobs               int                       `json:"total_jobs"`
+	MeasuredJobs            int                       `json:"measured_jobs"`
+	DataCoveragePercent     float64                   `json:"data_coverage_percent"`
+	TotalPreparationSeconds int                       `json:"total_preparation_seconds"`
+	AvgPreparationSeconds   int                       `json:"avg_preparation_seconds"`
+	TotalActiveSeconds      int                       `json:"total_active_seconds"`
+	TotalPrintingSeconds    int                       `json:"total_printing_seconds"`
+	PreparationPercent      float64                   `json:"preparation_percent"`
+	Phases                  []PrinterPreparationPhase `json:"phases"`
+	RecentJobs              []PrinterPreparationJob   `json:"recent_jobs"`
+}
+
+// PrinterAnalytics combines utilization, ROI, health, and preparation metrics.
 type PrinterAnalytics struct {
-	Utilization []PrinterUtilization `json:"utilization"`
-	ROI         *PrinterROI          `json:"roi"`
-	Health      *PrinterHealth       `json:"health"`
+	Utilization []PrinterUtilization         `json:"utilization"`
+	ROI         *PrinterROI                  `json:"roi"`
+	Health      *PrinterHealth               `json:"health"`
+	Preparation *PrinterPreparationAnalytics `json:"preparation"`
 }
 
 // DispatchRequestStatus represents the status of a dispatch request.

@@ -173,11 +173,11 @@ func TestProjectRepository_ListByTemplateID(t *testing.T) {
 	// but we'll mock a template project and use its ID to test the legacy field.
 	// Actually, the schema still has `template_id TEXT REFERENCES templates(id)`, so we MUST create a row in `templates`
 	// However, `TemplateRepository` was removed. The migration 041 doesn't drop `templates` table yet.
-	// For this test, we can just test that we can link projects using `TemplateID` by inserting directly or bypassing the constraint if we could, 
+	// For this test, we can just test that we can link projects using `TemplateID` by inserting directly or bypassing the constraint if we could,
 	// but since it's SQLite with PRAGMA foreign_keys=ON, we must create a template first.
 	// Let's create a raw template record just to satisfy the FK constraint for the test.
 	templateID := uuid.New()
-	_, err := db.Exec(`INSERT INTO templates (id, name, description, sku, material_type, estimated_material_grams, quantity_per_order, labor_minutes, sale_price_cents, version, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, 
+	_, err := db.Exec(`INSERT INTO templates (id, name, description, sku, material_type, estimated_material_grams, quantity_per_order, labor_minutes, sale_price_cents, version, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		templateID, "Test Template", "", "", "", 0, 0, 0, 0, 1, time.Now(), time.Now())
 	if err != nil {
 		t.Fatalf("Create legacy template failed: %v", err)
@@ -801,9 +801,9 @@ func TestTemplateRepository_CreateAndGetByID(t *testing.T) {
 	ctx := context.Background()
 
 	template := &model.Project{
-		Name:                   "Test Template",
-		Description:            "A test template",
-		SKU:                    "TEST-001",
+		Name:        "Test Template",
+		Description: "A test template",
+		SKU:         "TEST-001",
 	}
 
 	if err := repo.Create(ctx, template); err != nil {

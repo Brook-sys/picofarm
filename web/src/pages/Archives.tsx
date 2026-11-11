@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react'
 import { archivesApi } from '../api/client'
 import type { PrintArchive } from '../types'
+import { useCurrency } from '../hooks/useCurrency'
 
 export default function Archives() {
+  const { formatCents } = useCurrency()
   const [items, setItems] = useState<PrintArchive[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -29,7 +31,7 @@ export default function Archives() {
                 <td className="p-3">{item.status}</td>
                 <td className="p-3">{item.duration_seconds}s</td>
                 <td className="p-3">{item.filament_used_grams.toFixed(1)}g</td>
-                <td className="p-3">${(item.cost_cents / 100).toFixed(2)}</td>
+                <td className="p-3">{formatCents(item.cost_cents)}</td>
               </tr>
             ))}
             {items.length === 0 && <tr><td className="p-3 text-surface-400" colSpan={4}>No archives yet.</td></tr>}

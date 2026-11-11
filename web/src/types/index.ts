@@ -241,7 +241,7 @@ export interface Printer {
   location: string
   notes: string
   min_material_percent: number
-  cost_per_hour_cents: number // Hourly cost in cents (e.g. 150 = $1.50/hr)
+  cost_per_hour_cents: number // Hourly cost in minor units (e.g. 150 = 1.50/hr in the configured currency)
   purchase_price_cents: number // Purchase price in cents for ROI tracking
   maintenance_mode?: boolean // When true, printer is out of service
   restrict_gcode_model?: boolean
@@ -1439,10 +1439,41 @@ export interface PrinterHealth {
   failure_breakdown: Record<string, number>
 }
 
+export interface PrinterPreparationPhase {
+  phase: string
+  total_seconds: number
+  average_seconds: number
+  occurrences: number
+  percent: number
+}
+
+export interface PrinterPreparationJob {
+  job_id: string
+  job_name?: string
+  started_at: string
+  preparation_seconds: number
+  active_seconds: number
+  preparation_percent: number
+}
+
+export interface PrinterPreparationAnalytics {
+  total_jobs: number
+  measured_jobs: number
+  data_coverage_percent: number
+  total_preparation_seconds: number
+  avg_preparation_seconds: number
+  total_active_seconds: number
+  total_printing_seconds: number
+  preparation_percent: number
+  phases: PrinterPreparationPhase[]
+  recent_jobs: PrinterPreparationJob[]
+}
+
 export interface PrinterAnalytics {
   utilization: PrinterUtilization[]
   roi: PrinterROI
   health: PrinterHealth
+  preparation: PrinterPreparationAnalytics
 }
 
 // Backup types
@@ -1553,6 +1584,7 @@ export interface SquarespaceProductVariant {
   sku: string
   price_cents: number
   sale_price_cents: number
+  currency: string
   on_sale: boolean
   stock_quantity: number
   stock_unlimited: boolean

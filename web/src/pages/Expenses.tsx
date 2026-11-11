@@ -18,9 +18,11 @@ import {
 import { expensesApi } from '../api/client'
 import { useMaterials } from '../hooks/useMaterials'
 import { cn, formatRelativeTime } from '../lib/utils'
+import { useCurrency } from '../hooks/useCurrency'
 import type { Expense, ExpenseCategory } from '../types'
 
 export default function Expenses() {
+  const { currencyCode, formatCents } = useCurrency()
   const queryClient = useQueryClient()
   const [showUpload, setShowUpload] = useState(false)
   const [reviewExpense, setReviewExpense] = useState<Expense | null>(null)
@@ -46,16 +48,16 @@ export default function Expenses() {
     },
   })
 
-  // Calculate totals
+  // Calculate totals without combining unrelated currencies.
   const totalExpenses = expenses
-    .filter((e) => e.status === 'confirmed')
+    .filter((e) => e.status === 'confirmed' && (e.currency || currencyCode) === currencyCode)
     .reduce((sum, e) => sum + e.total_cents, 0)
 
-  const pendingCount = expenses.filter((e) => e.status === 'pending').length
+  const excludedCurrencyCount = expenses.filter(
+    (expense) => expense.status === 'confirmed' && (expense.currency || currencyCode) !== currencyCode,
+  ).length
 
-  const formatCents = (cents: number) => {
-    return `$${(cents / 100).toFixed(2)}`
-  }
+  const pendingCount = expenses.filter((e) => e.status === 'pending').length
 
   const getCategoryIcon = (category: ExpenseCategory) => {
     switch (category) {
@@ -109,6 +111,12 @@ export default function Expenses() {
           </div>
         </div>
       </div>
+
+      {excludedCurrencyCount > 0 && (
+        <div className="mb-6 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-300">
+          {excludedCurrencyCount} confirmed expense{excludedCurrencyCount === 1 ? '' : 's'} in other currencies are shown below but excluded from {currencyCode} totals.
+        </div>
+      )}
 
       {/* Expenses List */}
       {isLoading ? (
@@ -200,7 +208,7 @@ export default function Expenses() {
               <div className="flex items-center gap-4">
                 <div className="text-right">
                   <div className="font-semibold text-surface-100">
-                    {formatCents(expense.total_cents)}
+                    {formatCents(expense.total_cents, expense.currency)}
                   </div>
                   <div className="text-xs text-surface-500">
                     {expense.status}
@@ -409,6 +417,7 @@ function ExpenseReviewModal({
   onClose: () => void
   onSuccess: () => void
 }) {
+  const { formatCents } = useCurrency()
   const { data: expense, isLoading } = useQuery({
     queryKey: ['expenses', expenseId],
     queryFn: () => expensesApi.get(expenseId),
@@ -445,8 +454,6 @@ function ExpenseReviewModal({
       setSubmitting(false)
     }
   }
-
-  const formatCents = (cents: number) => `$${(cents / 100).toFixed(2)}`
 
   const toggleCreateSpool = (itemId: string) => {
     setItemDecisions((prev) => ({
@@ -510,25 +517,25 @@ function ExpenseReviewModal({
           <div>
             <div className="text-sm text-surface-500">Subtotal</div>
             <div className="font-medium text-surface-100">
-              {formatCents(expense.subtotal_cents)}
+              {formatCents(expense.subtotal_cents, expense.currency)}
             </div>
           </div>
           <div>
             <div className="text-sm text-surface-500">Tax</div>
             <div className="font-medium text-surface-100">
-              {formatCents(expense.tax_cents)}
+              {formatCents(expense.tax_cents, expense.currency)}
             </div>
           </div>
           <div>
             <div className="text-sm text-surface-500">Shipping</div>
             <div className="font-medium text-surface-100">
-              {formatCents(expense.shipping_cents)}
+              {formatCents(expense.shipping_cents, expense.currency)}
             </div>
           </div>
           <div>
             <div className="text-sm text-surface-500">Total</div>
             <div className="font-semibold text-emerald-400 text-lg">
-              {formatCents(expense.total_cents)}
+              {formatCents(expense.total_cents, expense.currency)}
             </div>
           </div>
         </div>
@@ -552,12 +559,12 @@ function ExpenseReviewModal({
                         {item.description}
                       </div>
                       <div className="text-sm text-surface-500">
-                        Qty: {item.quantity} @ {formatCents(item.unit_price_cents)} each
+                        Qty: {item.quantity} @ {formatCents(item.unit_price_cents, expense.currency)} each
                       </div>
                     </div>
                     <div className="text-right">
                       <div className="font-medium text-surface-100">
-                        {formatCents(item.total_price_cents)}
+                        {formatCents(item.total_price_cents, expense.currency)}
                       </div>
                       <div className="text-xs text-surface-500">
                         {item.confidence}% confidence

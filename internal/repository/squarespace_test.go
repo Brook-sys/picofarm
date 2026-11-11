@@ -97,6 +97,7 @@ func setupTestDB(t *testing.T) *sql.DB {
 			sku TEXT,
 			price_cents INTEGER,
 			sale_price_cents INTEGER,
+			currency TEXT NOT NULL DEFAULT '',
 			on_sale INTEGER DEFAULT 0,
 			stock_quantity INTEGER,
 			stock_unlimited INTEGER DEFAULT 0,
@@ -447,6 +448,7 @@ func TestSquarespaceRepository_ProductVariants(t *testing.T) {
 			SquarespaceVariantID: "sq-var-1",
 			SKU:                  "VAR-001",
 			PriceCents:           1999,
+			Currency:             "EUR",
 			StockQuantity:        10,
 		}
 
@@ -471,6 +473,9 @@ func TestSquarespaceRepository_ProductVariants(t *testing.T) {
 		}
 		if variants[0].SKU != "VAR-001" {
 			t.Errorf("expected SKU 'VAR-001', got '%s'", variants[0].SKU)
+		}
+		if variants[0].Currency != "EUR" {
+			t.Errorf("expected currency EUR, got %q", variants[0].Currency)
 		}
 	})
 }

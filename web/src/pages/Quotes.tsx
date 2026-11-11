@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { FileText, Plus, ChevronRight, Send, CheckCircle, XCircle, Clock, Edit3, Trash2 } from 'lucide-react'
 import { quotesApi, customersApi } from '../api/client'
 import type { Quote, QuoteStatus, Customer } from '../types'
+import { useCurrency } from '../hooks/useCurrency'
 
 const statusConfig: Record<QuoteStatus, { label: string; color: string; icon: typeof Clock }> = {
   draft: { label: 'Draft', color: 'bg-surface-700 text-surface-300', icon: Edit3 },
@@ -12,11 +13,8 @@ const statusConfig: Record<QuoteStatus, { label: string; color: string; icon: ty
   expired: { label: 'Expired', color: 'bg-surface-700 text-surface-400', icon: Clock },
 }
 
-function formatCents(cents: number): string {
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(cents / 100)
-}
-
 export default function Quotes() {
+  const { formatCents } = useCurrency()
   const [quotes, setQuotes] = useState<Quote[]>([])
   const [customers, setCustomers] = useState<Customer[]>([])
   const [loading, setLoading] = useState(true)

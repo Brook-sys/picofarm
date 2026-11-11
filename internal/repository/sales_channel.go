@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/Brook-sys/picofarm/internal/saleschannel"
@@ -19,6 +20,22 @@ type SalesChannelRepository struct {
 // NewSalesChannelRepository creates a repository for canonical sales-channel storage.
 func NewSalesChannelRepository(db *sql.DB) *SalesChannelRepository {
 	return &SalesChannelRepository{db: db}
+}
+
+func (r *SalesChannelRepository) configuredCurrency(ctx context.Context) (string, error) {
+	var currency string
+	err := r.db.QueryRowContext(ctx, `SELECT value FROM settings WHERE key = 'currency_code'`).Scan(&currency)
+	if err == sql.ErrNoRows {
+		return "USD", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	currency = strings.ToUpper(strings.TrimSpace(currency))
+	if currency == "" {
+		return "USD", nil
+	}
+	return currency, nil
 }
 
 // UpsertConnection creates or updates a channel account connection.
@@ -215,7 +232,11 @@ func (r *SalesChannelRepository) UpsertExternalOrder(ctx context.Context, order 
 		order.RawJSON = "{}"
 	}
 	if order.Currency == "" {
-		order.Currency = "USD"
+		currency, err := r.configuredCurrency(ctx)
+		if err != nil {
+			return fmt.Errorf("get configured currency: %w", err)
+		}
+		order.Currency = currency
 	}
 
 	tx, err := r.db.BeginTx(ctx, nil)
@@ -398,7 +419,11 @@ func (r *SalesChannelRepository) UpsertExternalProduct(ctx context.Context, prod
 		product.RawJSON = "{}"
 	}
 	if product.Currency == "" {
-		product.Currency = "USD"
+		currency, err := r.configuredCurrency(ctx)
+		if err != nil {
+			return fmt.Errorf("get configured currency: %w", err)
+		}
+		product.Currency = currency
 	}
 
 	tx, err := r.db.BeginTx(ctx, nil)

@@ -873,6 +873,7 @@ CREATE TABLE IF NOT EXISTS squarespace_product_variants (
     sku TEXT,
     price_cents INTEGER,
     sale_price_cents INTEGER,
+    currency TEXT NOT NULL DEFAULT '',
     on_sale INTEGER DEFAULT 0,
     stock_quantity INTEGER,
     stock_unlimited INTEGER DEFAULT 0,

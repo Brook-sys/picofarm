@@ -89,6 +89,12 @@ func NewRouterWithOptions(services *service.Services, hub *realtime.Hub, opts Ro
 						result[key] = setting.Value
 					}
 				}
+				currency, err := services.Settings.GetCurrencyCode(ctx)
+				if err != nil {
+					respondError(w, http.StatusInternalServerError, err.Error())
+					return
+				}
+				result[service.CurrencySettingKey] = currency
 				respondJSON(w, http.StatusOK, result)
 			})
 		}

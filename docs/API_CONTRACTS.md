@@ -34,7 +34,7 @@ When an endpoint or JSON shape changes, update the backend model/handler, fronte
 - Go `uuid.UUID` values are serialized as strings; TypeScript represents them as `string`.
 - Go `time.Time` and `*time.Time` values are serialized as timestamp strings; TypeScript represents them as `string` and optional `string` respectively.
 - Go `omitempty` fields may be absent from responses. Frontend types should mark those as optional or nullable to match actual JSON.
-- Monetary integer fields ending in `_cents` are cents, not decimal dollars.
+- Monetary integer fields ending in `_cents` are minor units with two decimal places, not decimal dollars. The configured display currency changes formatting only; it does not convert stored values.
 - Durations are seconds unless the field name says otherwise, for example `timeout_minutes`.
 - Most list endpoints return bare arrays. Aggregated endpoints may return objects with `items`, `summary`, `counts`, or similarly named fields.
 - Error responses should be JSON objects with at least `error: string`. The frontend fetch wrapper throws `new Error(error.error || HTTP_STATUS)` for non-2xx responses.
@@ -74,6 +74,25 @@ Keep these literal sets synchronized between Go and TypeScript.
 | Sales-channel sync run status | `saleschannel.SyncRunStatus` | pending feature-local type | `pending`, `running`, `succeeded`, `failed` |
 
 Do not add frontend-only enum values unless the backend explicitly returns them or the type is clearly marked as UI-local.
+
+## Currency configuration
+
+- `GET /api/settings/currency_code` returns the persisted setting when present. A missing setting is interpreted by the application as `USD`.
+- `PUT /api/settings/currency_code` accepts `{ "value": "<ISO code>" }`, normalizes case/whitespace, and rejects unsupported codes with `400`.
+- Supported codes are `USD`, `BRL`, `EUR`, `GBP`, `CAD`, `AUD`, `JPY`, `CNY`, `INR`, `MXN`, `ARS`, `CLP`, and `COP`.
+- `GET /api/public/business-info` always includes `currency_code`; it returns `USD` when no setting exists. Public quotes use this field.
+- Changing `currency_code` changes symbols and number formatting only. PicoFarm performs no exchange-rate lookup or automatic currency conversion.
+- Internal costs, revenue, profit, expenses, sales, quotes, and analytics are scoped to the configured currency. New internal records inherit `currency_code` when their payload omits `currency`.
+- **Cost sources carry no currency of their own.** `materials.cost_per_kg`, `printers.cost_per_hour_cents`,
+  `printers.purchase_price_cents` and `project_supplies` have no `currency` column. `GET /api/stats/financial`
+  therefore reports the currency its cost figures were entered in via `cost_basis_currency`, and sets
+  `profit_mixed_currency: true` when that differs from the configured `currency`. In that case `net_profit_cents`
+  is returned as `0` — subtracting costs entered in one currency from revenue in another yields no unit, so the
+  API refuses to report it as profit. Buffering costs to a different currency requires re-entering them, not a
+  conversion.
+- External sales-channel orders/products with an explicit `currency` continue to use that source currency; the configured currency is only their fallback when the provider omits it.
+- Existing sales and expenses retain their recorded currency. Lists format each record using that currency; totals and analytics include only records matching the current `currency_code`, because PicoFarm does not convert or combine unrelated currencies.
+- Frontend monetary formatting is centralized in `web/src/lib/currency.ts` and `CurrencyProvider`. Fields ending in `_cents` use `formatCents`; decimal-unit fields such as `cost_per_kg` and `material_cost` use `formatAmount`.
 
 ## High-value domain contracts
 
@@ -166,6 +185,8 @@ Representative routes:
 - `POST /api/printers/{id}/emergency-stop`
 - `POST /api/printers/{id}/speed|fan|led|skip-object|jog|temperature|plate-cleared`
 - `POST /api/printers/{id}/ams/load|unload|refresh|backup`
+- `GET /api/printers/{id}/analytics`
+- `GET /api/printers/{id}/job-stats`
 
 Primary response types:
 
@@ -173,6 +194,20 @@ Primary response types:
 - `PrinterState`
 - `PrinterCapabilities`
 - `PrinterMacro`
+- `PrinterAnalytics`
+
+`GET /api/printers/{id}/analytics` returns `utilization` (7d/30d/90d), `roi`, `health`, and
+`preparation`. `preparation` measures the setup overhead between a job's first
+`phase_changed` event and its first phase named `Printing`, aggregated per phase, and is
+scoped to jobs completed in the last 90 days. It reports `total_jobs` and
+`data_coverage_percent` so a low-coverage result is distinguishable from real data:
+`recent_jobs[].job_name` is the design's file name, and `measured_jobs` counts only jobs
+that had both a start event and a `Printing` marker.
+
+A failure in any of the underlying repository queries returns `500`, not a zeroed metric.
+The previous behaviour degraded `revenue_cents` to `0` and `failure_breakdown` to an empty
+map on error, which made an unavailable database indistinguishable from a printer with no
+history.
 
 `Printer.default_print_folder` is an optional remote directory relative to the printer's G-code root. Empty means the protocol's normal root. Inputs such as `/sda1` are canonicalized to `sda1`; traversal and URL-like values are rejected. Queue, direct print-job, and project-production starts use this value for Moonraker and OctoPrint uploads.
 
@@ -255,6 +290,39 @@ Primary response types:
 - `Customer`
 - `Quote`, `QuoteOption`, `QuoteLineItem`, `QuoteEvent`
 - public quote response for share-token access
+
+### Financial stats
+
+Representative routes:
+
+- `GET /api/stats/financial`
+- `GET /api/stats/time-series`
+- `GET /api/stats/expenses-by-category`
+- `GET /api/stats/sales-by-channel`
+- `GET /api/stats/sales-by-project`
+- `GET /api/sales/profit-summary`
+- `GET /api/sales/weekly-insights`
+- `GET /api/stats/usage`
+
+Primary response types:
+
+- `FinancialSummary`
+- `TimeSeriesData`
+- `CategoryBreakdown`, `ChannelBreakdown`
+- `ProjectSales`
+- `WeeklyInsights`
+
+`FinancialSummary` carries `currency` (the configured currency the revenue and expense
+aggregates are scoped to), `cost_basis_currency`, and `profit_mixed_currency`. Cost
+figures have no currency column of their own — see the currency configuration section
+above for what the API does about it. `confirmed_expense_count` and
+`pending_expense_count` are both scoped to the same currency, so they always describe
+the same population.
+
+`WeeklyInsights.PendingRevenueCents` is an estimate: it uses `projects.price_cents`
+when set and falls back to the average gross of past sales for that project, scoped to
+the configured currency. `projects.price_cents` has no currency, so this figure stays
+in whatever currency the project price was entered in.
 
 ### Integrations
 

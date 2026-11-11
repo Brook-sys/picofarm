@@ -106,6 +106,7 @@ type SquarespaceProductVariant struct {
 	SKU                  string          `json:"sku"`
 	PriceCents           int             `json:"price_cents"`
 	SalePriceCents       int             `json:"sale_price_cents"`
+	Currency             string          `json:"currency"`
 	OnSale               bool            `json:"on_sale"`
 	StockQuantity        int             `json:"stock_quantity"`
 	StockUnlimited       bool            `json:"stock_unlimited"`

@@ -22,9 +22,7 @@ func (r *ExpenseRepository) Create(ctx context.Context, e *model.Expense) error 
 	if e.Status == "" {
 		e.Status = model.ExpenseStatusPending
 	}
-	if e.Currency == "" {
-		e.Currency = "USD"
-	}
+
 	if e.Category == "" {
 		e.Category = model.ExpenseCategoryOther
 	}

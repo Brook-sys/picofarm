@@ -445,11 +445,12 @@ func (s *PrinterService) GetPrinterAnalytics(ctx context.Context, printerID uuid
 		return nil, fmt.Errorf("printer not found")
 	}
 
-	// Compute revenue attribution (lifetime)
+	// Compute revenue attribution (lifetime). A failure here must not be degraded to
+	// zero: revenueCents drives the whole ROI block below, and a 0 makes lifetime
+	// profit read as "has not paid for itself yet" when the truth is "unknown".
 	revenueCents, err := s.repo.GetPrinterRevenueAttribution(ctx, printerID)
 	if err != nil {
-		slog.Warn("failed to get revenue attribution", "printer_id", printerID, "error", err)
-		revenueCents = 0
+		return nil, fmt.Errorf("get revenue attribution: %w", err)
 	}
 
 	// Compute utilization for 7d, 30d, 90d periods
@@ -515,8 +516,7 @@ func (s *PrinterService) GetPrinterAnalytics(ctx context.Context, printerID uuid
 
 	failureBreakdown, err := s.repo.GetPrinterFailureBreakdown(ctx, printerID)
 	if err != nil {
-		slog.Warn("failed to get failure breakdown", "printer_id", printerID, "error", err)
-		failureBreakdown = make(map[string]int)
+		return nil, fmt.Errorf("get failure breakdown: %w", err)
 	}
 
 	var failureRate float64
@@ -543,6 +543,14 @@ func (s *PrinterService) GetPrinterAnalytics(ctx context.Context, printerID uuid
 		TotalRevenueCents:  revenueCents,
 		FailureBreakdown:   failureBreakdown,
 	}
+
+	// A failure here is an infrastructure failure, not "no data". Returning 200 with an
+	// empty struct made a broken query indistinguishable from a printer with no history.
+	preparationRecords, preparationJobCount, err := s.repo.GetPrinterPreparationRecords(ctx, printerID)
+	if err != nil {
+		return nil, fmt.Errorf("get printer preparation records: %w", err)
+	}
+	preparation := computePreparationAnalytics(preparationRecords, preparationJobCount)
 
 	// Compute ROI metrics
 	totalPrintingHours := float64(healthData.TotalSeconds) / 3600.0
@@ -587,6 +595,7 @@ func (s *PrinterService) GetPrinterAnalytics(ctx context.Context, printerID uuid
 		Utilization: utilizations,
 		ROI:         roi,
 		Health:      health,
+		Preparation: preparation,
 	}, nil
 }
 

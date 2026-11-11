@@ -474,18 +474,19 @@ func (r *SquarespaceRepository) SaveProductVariant(ctx context.Context, variant 
 
 	_, err := r.db.ExecContext(ctx, `
 		INSERT INTO squarespace_product_variants (
-			id, product_id, squarespace_variant_id, sku, price_cents, sale_price_cents,
+			id, product_id, squarespace_variant_id, sku, price_cents, sale_price_cents, currency,
 			on_sale, stock_quantity, stock_unlimited, attributes_json, created_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT (squarespace_variant_id) DO UPDATE SET
 			sku = EXCLUDED.sku,
 			price_cents = EXCLUDED.price_cents,
 			sale_price_cents = EXCLUDED.sale_price_cents,
+			currency = EXCLUDED.currency,
 			on_sale = EXCLUDED.on_sale,
 			stock_quantity = EXCLUDED.stock_quantity,
 			stock_unlimited = EXCLUDED.stock_unlimited,
 			attributes_json = EXCLUDED.attributes_json
-	`, variant.ID, variant.ProductID, variant.SquarespaceVariantID, variant.SKU, variant.PriceCents, variant.SalePriceCents,
+	`, variant.ID, variant.ProductID, variant.SquarespaceVariantID, variant.SKU, variant.PriceCents, variant.SalePriceCents, variant.Currency,
 		variant.OnSale, variant.StockQuantity, variant.StockUnlimited, variant.Attributes, variant.CreatedAt)
 	return err
 }
@@ -493,7 +494,7 @@ func (r *SquarespaceRepository) SaveProductVariant(ctx context.Context, variant 
 // GetProductVariants retrieves all variants for a product.
 func (r *SquarespaceRepository) GetProductVariants(ctx context.Context, productID uuid.UUID) ([]model.SquarespaceProductVariant, error) {
 	rows, err := r.db.QueryContext(ctx, `
-		SELECT id, product_id, squarespace_variant_id, sku, price_cents, sale_price_cents,
+		SELECT id, product_id, squarespace_variant_id, sku, price_cents, sale_price_cents, currency,
 			on_sale, stock_quantity, stock_unlimited, attributes_json, created_at
 		FROM squarespace_product_variants
 		WHERE product_id = ?
@@ -508,7 +509,7 @@ func (r *SquarespaceRepository) GetProductVariants(ctx context.Context, productI
 	for rows.Next() {
 		var variant model.SquarespaceProductVariant
 		err := scanRow(rows,
-			&variant.ID, &variant.ProductID, &variant.SquarespaceVariantID, &variant.SKU, &variant.PriceCents, &variant.SalePriceCents,
+			&variant.ID, &variant.ProductID, &variant.SquarespaceVariantID, &variant.SKU, &variant.PriceCents, &variant.SalePriceCents, &variant.Currency,
 			&variant.OnSale, &variant.StockQuantity, &variant.StockUnlimited, &variant.Attributes, &variant.CreatedAt)
 		if err != nil {
 			return nil, err
@@ -536,7 +537,7 @@ func (r *SquarespaceRepository) SaveProductTemplate(ctx context.Context, link *m
 		ON CONFLICT (squarespace_product_id, template_id) DO UPDATE SET
 			sku = EXCLUDED.sku
 	`, link.ID, link.SquarespaceProductID, link.ProjectID, link.SKU, link.CreatedAt)
-	
+
 	return err
 }
 

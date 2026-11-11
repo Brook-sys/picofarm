@@ -22,6 +22,10 @@ graphify-out/
 # Local-only operations notes (hostnames, tailnet IPs, webhook GUIDs, deploy runbook)
 LOCAL.md
 
+# Local-only backlog: pendências, blockers, débitos e decisões em aberto.
+# Nunca versionar — contém avaliação honesta do estado do código.
+PENDENCIAS-LOCAL.md
+
 printfarm
 printfarm.cp
 *.db

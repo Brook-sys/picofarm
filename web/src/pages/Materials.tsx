@@ -4,9 +4,11 @@ import { Plus, Package, Droplet, ShoppingCart, Trash2, Edit2, Check, X } from 'l
 import { materialsApi, spoolsApi } from '../api/client'
 import AppToast, { type AppToastState } from '../components/AppToast'
 import { cn, getStatusBadge } from '../lib/utils'
+import { useCurrency } from '../hooks/useCurrency'
 import type { Material, MaterialSpool, MaterialType } from '../types'
 
 export default function Materials() {
+  const { formatAmount, symbol } = useCurrency()
   const queryClient = useQueryClient()
 
   const { data: materials = [], isLoading: materialsLoading } = useQuery({
@@ -560,7 +562,7 @@ export default function Materials() {
                     </div>
                     <div className="flex justify-between">
                       <span className="text-surface-500">Cost</span>
-                      <span className="text-surface-300">${material.cost_per_kg.toFixed(2)}/kg</span>
+                      <span className="text-surface-300">{formatAmount(material.cost_per_kg)}/kg</span>
                     </div>
                   </div>
                 )}
@@ -601,7 +603,7 @@ export default function Materials() {
                     <td className="px-4 py-3 text-surface-200">{material.name}</td>
                     <td className="px-4 py-3 text-surface-400">{material.manufacturer || '—'}</td>
                     <td className="px-4 py-3 text-right text-surface-300">
-                      ${material.cost_per_kg.toFixed(2)}
+                      {formatAmount(material.cost_per_kg)}
                     </td>
                     <td className="px-4 py-3">
                       {confirmDeleteId === material.id ? (
@@ -703,7 +705,7 @@ export default function Materials() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-surface-300 mb-1">
-                    Cost per kg ($)
+                    Cost per kg ({symbol})
                   </label>
                   <input
                     type="number"

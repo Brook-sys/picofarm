@@ -133,6 +133,7 @@ func RunMigrations(db *sql.DB) error {
 		`ALTER TABLE print_jobs ADD COLUMN printer_time_cost_cents INTEGER`,
 		`ALTER TABLE print_jobs ADD COLUMN material_cost_cents INTEGER`,
 		`ALTER TABLE project_supplies ADD COLUMN material_id TEXT REFERENCES materials(id)`,
+		`ALTER TABLE squarespace_product_variants ADD COLUMN currency TEXT NOT NULL DEFAULT ''`,
 		// Auto-dispatch feature columns
 		`ALTER TABLE print_jobs ADD COLUMN priority INTEGER NOT NULL DEFAULT 0`,
 		`ALTER TABLE print_jobs ADD COLUMN auto_dispatch_enabled INTEGER NOT NULL DEFAULT 1`,

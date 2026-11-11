@@ -480,6 +480,7 @@ func (s *SquarespaceService) convertProductVariant(productID uuid.UUID, apiVaria
 		SKU:                  apiVariant.SKU,
 		PriceCents:           squarespace.MoneyToCents(apiVariant.Pricing.BasePrice),
 		SalePriceCents:       squarespace.MoneyToCents(apiVariant.Pricing.SalePrice),
+		Currency:             apiVariant.Pricing.BasePrice.Currency,
 		OnSale:               apiVariant.Pricing.OnSale,
 		StockQuantity:        apiVariant.Stock.Quantity,
 		StockUnlimited:       apiVariant.Stock.Unlimited,

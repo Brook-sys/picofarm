@@ -19,9 +19,11 @@ import {
 import { usePrinters, useCreatePrinter, useDeletePrinter, usePrinterStates, useDefaultPrinter, useSetDefaultPrinter } from '../hooks/usePrinters'
 import { printersApi, bambuCloudApi, type DiscoveredPrinter } from '../api/client'
 import { cn, getStatusBadge } from '../lib/utils'
+import { useCurrency } from '../hooks/useCurrency'
 import type { ConnectionType, CloudDevice } from '../types'
 
 export default function Printers() {
+  const { formatAmount, symbol } = useCurrency()
   const { data: printers = [], isLoading, refetch } = usePrinters()
   const { data: printerStates = {} } = usePrinterStates()
   const { data: defaultPrinter } = useDefaultPrinter()
@@ -1007,7 +1009,7 @@ export default function Printers() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-surface-300 mb-1">
-                    Cost per Hour ($)
+                    Cost per Hour ({symbol})
                   </label>
                   <input
                     type="number"
@@ -1018,7 +1020,7 @@ export default function Printers() {
                     defaultValue="0.50"
                   />
                   <p className="text-xs text-surface-500 mt-1">
-                    Suggested: A1 $0.50 / P1S $0.75 / X1 $1.00 — covers electricity, depreciation, maintenance, and utilization.
+                    Suggested: A1 {formatAmount(0.50)} / P1S {formatAmount(0.75)} / X1 {formatAmount(1)} — covers electricity, depreciation, maintenance, and utilization.
                     You can adjust this later from the printer detail page.
                   </p>
                 </div>

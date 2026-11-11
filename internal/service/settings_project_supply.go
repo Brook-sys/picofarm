@@ -2,8 +2,10 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 
 	"github.com/Brook-sys/picofarm/internal/crypto"
 	"github.com/Brook-sys/picofarm/internal/model"
@@ -13,6 +15,15 @@ import (
 
 type SettingsService struct {
 	repo *repository.SettingsRepository
+}
+
+const CurrencySettingKey = "currency_code"
+
+var ErrUnsupportedCurrency = errors.New("unsupported currency")
+
+var supportedCurrencies = map[string]struct{}{
+	"USD": {}, "BRL": {}, "EUR": {}, "GBP": {}, "CAD": {}, "AUD": {},
+	"JPY": {}, "CNY": {}, "INR": {}, "MXN": {}, "ARS": {}, "CLP": {}, "COP": {},
 }
 
 // sensitiveKeys lists settings that should be encrypted at rest.
@@ -55,6 +66,13 @@ func (s *SettingsService) Get(ctx context.Context, key string) (*repository.Sett
 
 // Set creates or updates a setting, encrypting sensitive values.
 func (s *SettingsService) Set(ctx context.Context, key, value string) error {
+	if key == CurrencySettingKey {
+		value = strings.ToUpper(strings.TrimSpace(value))
+		if _, ok := supportedCurrencies[value]; !ok {
+			return fmt.Errorf("%w: %s", ErrUnsupportedCurrency, value)
+		}
+	}
+
 	// Encrypt sensitive values
 	if isSensitive(key) && value != "" {
 		encrypted, err := crypto.Encrypt(value)
@@ -67,6 +85,21 @@ func (s *SettingsService) Set(ctx context.Context, key, value string) error {
 	}
 
 	return s.repo.Set(ctx, key, value)
+}
+
+func (s *SettingsService) GetCurrencyCode(ctx context.Context) (string, error) {
+	setting, err := s.Get(ctx, CurrencySettingKey)
+	if err != nil {
+		return "", err
+	}
+	if setting == nil {
+		return "USD", nil
+	}
+	currency := strings.ToUpper(strings.TrimSpace(setting.Value))
+	if _, ok := supportedCurrencies[currency]; !ok {
+		return "USD", nil
+	}
+	return currency, nil
 }
 
 // List retrieves all settings, decrypting sensitive values.

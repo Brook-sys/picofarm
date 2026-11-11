@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strings"
 
@@ -90,6 +91,10 @@ func (h *SettingsHandler) Set(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.service.Set(r.Context(), key, req.Value); err != nil {
+		if errors.Is(err, service.ErrUnsupportedCurrency) {
+			respondError(w, http.StatusBadRequest, err.Error())
+			return
+		}
 		respondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}

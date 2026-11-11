@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Store, ShoppingBag, ExternalLink, RefreshCw, Unplug, AlertCircle, CheckCircle2, Key, Eye, EyeOff, Save, Database, Download, Trash2, RotateCcw, Plus, Settings as SettingsIcon, Building, Globe } from 'lucide-react'
 import { etsyApi, squarespaceApi, settingsApi, backupsApi } from '../api/client'
 import { cn } from '../lib/utils'
+import { CURRENCY_OPTIONS, formatMoney, normalizeCurrencyCode } from '../lib/currency'
 import type { EtsyIntegration, SquarespaceIntegration, BackupInfo, BackupConfig } from '../types'
 
 function formatBytes(bytes: number): string {
@@ -1001,8 +1002,13 @@ export default function Settings() {
                 </div>
                 )}
 
-                {/* Business Information */}
-                {activeTab === 'other' && <BusinessInfoSettings />}
+                {/* General display and business information */}
+                {activeTab === 'other' && (
+                  <>
+                    <CurrencySettings />
+                    <BusinessInfoSettings />
+                  </>
+                )}
 
          <CreditsFooter />
       </div>
@@ -1024,6 +1030,76 @@ function CreditsFooter() {
       <p className="text-xs text-surface-600 mt-2">
         We keep this credit here to acknowledge the foundation inherited from Daedalus while PicoFarm moves toward a server/container-first print farm platform.
       </p>
+    </div>
+  )
+}
+
+function CurrencySettings() {
+  const queryClient = useQueryClient()
+  const { data, isLoading } = useQuery({
+    queryKey: ['settings', 'currency_code'],
+    queryFn: () => settingsApi.get('currency_code'),
+    retry: false,
+  })
+  const [currencyDraft, setCurrencyDraft] = useState<string | null>(null)
+  const [saved, setSaved] = useState(false)
+  const currency = currencyDraft ?? normalizeCurrencyCode(data?.value)
+
+  const saveCurrency = useMutation({
+    mutationFn: (value: string) => settingsApi.set('currency_code', value),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['settings', 'currency_code'] })
+      setCurrencyDraft(null)
+      setSaved(true)
+      window.setTimeout(() => setSaved(false), 2500)
+    },
+  })
+
+  return (
+    <div className="bg-surface-900/50 border border-surface-800 rounded-xl p-6 mb-6">
+      <div className="flex items-start gap-3 mb-5">
+        <div className="p-2 bg-emerald-500/10 rounded-lg">
+          <Globe className="h-6 w-6 text-emerald-400" />
+        </div>
+        <div>
+          <h2 className="text-lg font-semibold text-surface-100">Currency</h2>
+          <p className="text-sm text-surface-400">
+            Choose how PicoFarm displays costs, revenue, profit, quotes, and other monetary values. Existing amounts are not converted.
+          </p>
+        </div>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
+        <label className="block">
+          <span className="block text-sm font-medium text-surface-300 mb-2">Display currency</span>
+          <select
+            value={currency}
+            onChange={event => setCurrencyDraft(event.target.value)}
+            disabled={isLoading || saveCurrency.isPending}
+            className="input w-full"
+          >
+            {CURRENCY_OPTIONS.map(option => (
+              <option key={option.code} value={option.code}>{option.code} — {option.label}</option>
+            ))}
+          </select>
+          <span className="mt-2 block text-xs text-surface-500">
+            Preview: {formatMoney(1234.56, currency)}
+          </span>
+        </label>
+        <button
+          type="button"
+          onClick={() => saveCurrency.mutate(currency)}
+          disabled={isLoading || saveCurrency.isPending}
+          className="btn btn-primary min-w-28"
+        >
+          {saveCurrency.isPending ? 'Saving...' : saved ? 'Saved' : 'Save'}
+        </button>
+      </div>
+      {saveCurrency.isError && (
+        <p className="mt-3 text-sm text-red-400">
+          {saveCurrency.error instanceof Error ? saveCurrency.error.message : 'Failed to save currency'}
+        </p>
+      )}
     </div>
   )
 }

@@ -5,6 +5,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { tasksApi, salesApi } from '../api/client'
 import type { Task, TaskStatus, PrintJob, TaskChecklistItem, SalesChannel } from '../types'
 import { cn } from '../lib/utils'
+import { useCurrency } from '../hooks/useCurrency'
 
 const SALES_CHANNELS: { value: SalesChannel; label: string }[] = [
   { value: 'direct', label: 'Direct' },
@@ -23,6 +24,7 @@ function CompleteTaskModal({
   onClose: () => void
   onCompleted: () => void
 }) {
+  const { symbol } = useCurrency()
   const queryClient = useQueryClient()
   const [recordSale, setRecordSale] = useState(!!task.project?.price_cents)
   const [submitting, setSubmitting] = useState(false)
@@ -116,7 +118,7 @@ function CompleteTaskModal({
                   />
                 </div>
                 <div>
-                  <label className="block text-xs text-surface-500 mb-1">Gross ($)</label>
+                  <label className="block text-xs text-surface-500 mb-1">Gross ({symbol})</label>
                   <input
                     type="number"
                     step="0.01"
@@ -141,7 +143,7 @@ function CompleteTaskModal({
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs text-surface-500 mb-1">Fees ($)</label>
+                  <label className="block text-xs text-surface-500 mb-1">Fees ({symbol})</label>
                   <input
                     type="number"
                     step="0.01"

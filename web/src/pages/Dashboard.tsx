@@ -10,6 +10,7 @@ import {
   Clock,
   TrendingUp,
   TrendingDown,
+  AlertTriangle,
   DollarSign,
   Receipt,
   Package
@@ -32,6 +33,7 @@ import { formatGrams } from '../lib/utils'
 import { usePrinters, usePrinterStates } from '../hooks/usePrinters'
 import { queueApi, statsApi } from '../api/client'
 import { cn, getStatusBadge } from '../lib/utils'
+import { useCurrency } from '../hooks/useCurrency'
 
 ChartJS.register(
   CategoryScale,
@@ -62,7 +64,7 @@ const periodOptions = [
   { label: '12 Months', value: '12m' },
 ]
 
-const chartDefaults = {
+const createChartDefaults = (formatCents: (cents: number) => string) => ({
   responsive: true,
   maintainAspectRatio: false,
   plugins: {
@@ -75,7 +77,7 @@ const chartDefaults = {
       callbacks: {
         label: (ctx: { dataset: { label?: string }; parsed: { y?: number | null } }) => {
           const val = ctx.parsed.y ?? 0
-          return `${ctx.dataset.label}: $${(val / 100).toFixed(0)}`
+          return `${ctx.dataset.label}: ${formatCents(val)}`
         },
       },
     },
@@ -91,14 +93,16 @@ const chartDefaults = {
     y: {
       ticks: {
         color: '#64748b',
-        callback: (value: string | number) => `$${(Number(value) / 100).toFixed(0)}`,
+        callback: (value: string | number) => formatCents(Number(value)),
       },
       grid: { color: '#1e293b' },
     },
   },
-} as const
+} as const)
 
 export default function Dashboard() {
+  const { formatCents } = useCurrency()
+  const chartDefaults = useMemo(() => createChartDefaults(formatCents), [formatCents])
   const { data: projects = [], isLoading: projectsLoading } = useProjects()
   const { data: printers = [], isLoading: printersLoading } = usePrinters()
   const { data: printerStates = {} } = usePrinterStates()
@@ -172,7 +176,6 @@ export default function Dashboard() {
     }
   }
 
-  const formatCents = (cents: number) => `$${(cents / 100).toFixed(2)}`
   const formatPrintHours = (hours: number) => {
     const totalMinutes = Math.round(hours * 60)
     if (totalMinutes < 60) return `${totalMinutes} min`
@@ -246,7 +249,7 @@ export default function Dashboard() {
         callbacks: {
           label: (ctx: { label?: string; parsed?: number }) => {
             const val = ctx.parsed ?? 0
-            return `${ctx.label}: $${(val / 100).toFixed(0)}`
+            return `${ctx.label}: ${formatCents(val)}`
           },
         },
       },
@@ -409,7 +412,9 @@ export default function Dashboard() {
 
             <div>
               <div className="flex items-center gap-2 text-sm text-surface-500 mb-1">
-                {financials.net_profit_cents >= 0 ? (
+                {financials.profit_mixed_currency ? (
+                  <AlertTriangle className="h-4 w-4 text-amber-400" />
+                ) : financials.net_profit_cents >= 0 ? (
                   <TrendingUp className="h-4 w-4 text-emerald-400" />
                 ) : (
                   <TrendingDown className="h-4 w-4 text-red-400" />
@@ -419,15 +424,24 @@ export default function Dashboard() {
               <div
                 className={cn(
                   'text-2xl font-bold',
-                  financials.net_profit_cents >= 0
-                    ? 'text-emerald-400'
-                    : 'text-red-400'
+                  financials.profit_mixed_currency
+                    ? 'text-amber-400'
+                    : financials.net_profit_cents >= 0
+                      ? 'text-emerald-400'
+                      : 'text-red-400'
                 )}
               >
-                {formatCents(financials.net_profit_cents)}
+                {financials.profit_mixed_currency ? '—' : formatCents(financials.net_profit_cents)}
               </div>
               <div className="text-xs text-surface-500 mt-1">
-                {formatCents(financials.total_cogs_cents)} COGS
+                {financials.profit_mixed_currency ? (
+                  <span className="text-amber-400/90">
+                    costs are in {financials.cost_basis_currency || 'another currency'}, revenue in{' '}
+                    {financials.currency || 'the configured currency'} — profit has no unit
+                  </span>
+                ) : (
+                  <>{formatCents(financials.total_cogs_cents)} COGS</>
+                )}
               </div>
             </div>
           </div>

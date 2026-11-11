@@ -30,6 +30,27 @@ type ExpenseService struct {
 	parser       *receipt.Parser
 }
 
+func (s *ExpenseService) applyCurrencyFallback(ctx context.Context, expense *model.Expense) error {
+	if expense.Currency != "" {
+		return nil
+	}
+	currency := "USD"
+	if s.settingsRepo != nil {
+		setting, err := s.settingsRepo.Get(ctx, CurrencySettingKey)
+		if err != nil {
+			return fmt.Errorf("get configured currency: %w", err)
+		}
+		if setting != nil {
+			normalized := strings.ToUpper(strings.TrimSpace(setting.Value))
+			if _, ok := supportedCurrencies[normalized]; ok {
+				currency = normalized
+			}
+		}
+	}
+	expense.Currency = currency
+	return nil
+}
+
 // initParser initializes the receipt parser, reading the API key from
 // the settings DB first, then falling back to the ANTHROPIC_API_KEY env var.
 func (s *ExpenseService) initParser(ctx context.Context) {
@@ -62,6 +83,9 @@ func (s *ExpenseService) UploadReceipt(ctx context.Context, filename string, dat
 		Status:          model.ExpenseStatusPending,
 		ReceiptFilePath: storagePath,
 		Category:        model.ExpenseCategoryOther,
+	}
+	if err := s.applyCurrencyFallback(ctx, expense); err != nil {
+		return nil, err
 	}
 
 	if err := s.repo.Create(ctx, expense); err != nil {
@@ -119,7 +143,9 @@ func (s *ExpenseService) parseReceiptAsync(ctx context.Context, expenseID uuid.U
 	expense.TaxCents = parsed.TaxCents
 	expense.ShippingCents = parsed.ShippingCents
 	expense.TotalCents = parsed.TotalCents
-	expense.Currency = parsed.Currency
+	if parsed.Currency != "" {
+		expense.Currency = parsed.Currency
+	}
 	expense.Confidence = parsed.Confidence
 	expense.RawOCRText = parsed.RawText
 

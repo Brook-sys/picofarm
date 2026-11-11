@@ -1128,6 +1128,17 @@ export interface FinancialSummary {
   sales_count: number
   completed_print_count: number
   successful_print_count: number
+  /** Currency the revenue/expense aggregates above are scoped to. */
+  currency: string
+  /**
+   * Currency the internal cost figures (total_cogs_cents, total_material_cost) were
+   * entered in. Cost sources carry no currency column, so this is inferred. When it
+   * differs from `currency`, `net_profit_cents` is reported as 0 because the
+   * subtraction has no unit.
+   */
+  cost_basis_currency: string
+  /** True when currency and cost_basis_currency differ, making net_profit meaningless. */
+  profit_mixed_currency: boolean
 }
 
 // Stats API

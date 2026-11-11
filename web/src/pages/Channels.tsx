@@ -4,6 +4,8 @@ import { RefreshCw, Package, CheckCircle, Clock, ExternalLink, ShoppingBag, Stor
 import { etsyApi, squarespaceApi, templatesApi, salesChannelsApi } from '../api/client'
 import type { EtsyReceipt, EtsyListing, SquarespaceOrder, SquarespaceProduct, SyncResult, Template, SalesChannelID, SalesChannelSummary, SalesChannelSyncKind, SalesChannelExternalOrder, SalesChannelExternalProduct } from '../types'
 import { cn } from '../lib/utils'
+import { formatMoneyCents } from '../lib/currency'
+import { useCurrency } from '../hooks/useCurrency'
 
 type Tab = 'orders' | 'products'
 type Channel = 'all' | SalesChannelID
@@ -42,11 +44,13 @@ interface UnifiedProduct {
   isVisible: boolean
   skus: string[]
   priceCents?: number
+  currency?: string
   linkedTemplateId?: string
   raw: SalesChannelExternalProduct | EtsyListing | SquarespaceProduct
 }
 
 export default function Channels() {
+  const { currencyCode } = useCurrency()
   const [tab, setTab] = useState<Tab>('orders')
   const [channel, setChannel] = useState<Channel>('all')
   const [orderFilter, setOrderFilter] = useState<OrderFilter>('all')
@@ -154,6 +158,7 @@ export default function Channels() {
         isVisible: product.is_visible,
         skus: (product.variants || []).map(v => v.sku).filter(Boolean) as string[],
         priceCents: product.price_cents || product.variants?.[0]?.price_cents,
+        currency: product.currency || product.variants?.[0]?.currency,
         raw: product,
       }))
 
@@ -278,11 +283,8 @@ export default function Channels() {
     }
   }
 
-  function formatCents(cents: number, currency: string = 'USD') {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency,
-    }).format(cents / 100)
+  function formatCents(cents: number, currency: string = currencyCode) {
+    return formatMoneyCents(cents, currency)
   }
 
   function formatDate(dateStr: string) {
@@ -645,7 +647,7 @@ export default function Channels() {
                     <div className="mt-2 flex items-center gap-4 text-sm text-surface-400">
                       {product.priceCents !== undefined && (
                         <span className="font-medium text-surface-200">
-                          {formatCents(product.priceCents)}
+                          {formatCents(product.priceCents, product.currency)}
                         </span>
                       )}
                       {product.skus.length > 0 && (

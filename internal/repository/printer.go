@@ -117,6 +117,73 @@ type PrinterUtilizationData struct {
 	TotalJobs        int
 }
 
+// PrinterPreparationRecord is one persisted PRINT_START phase marker.
+type PrinterPreparationRecord struct {
+	JobID      uuid.UUID
+	JobName    string
+	Phase      string
+	OccurredAt time.Time
+	JobEndedAt time.Time
+}
+
+// GetPrinterPreparationRecords returns phase markers for terminal print jobs.
+// preparationWindowDays bounds how far back job events are considered when computing
+// preparation analytics. Without it the query loads every phase_changed event of every
+// terminal job for the lifetime of the printer, which grows without limit.
+const preparationWindowDays = 90
+
+// GetPrinterPreparationRecords returns phase markers for terminal print jobs.
+// Only jobs completed within the last preparationWindowDays are considered.
+func (r *PrinterRepository) GetPrinterPreparationRecords(ctx context.Context, printerID uuid.UUID) ([]PrinterPreparationRecord, int, error) {
+	since := time.Now().AddDate(0, 0, -preparationWindowDays)
+
+	// totalJobs uses the same completed_at filter as the event query below, otherwise the
+	// coverage denominator counts jobs the numerator can never measure (terminal jobs that
+	// never set completed_at).
+	var totalJobs int
+	if err := r.db.QueryRowContext(ctx, `
+		SELECT COUNT(*) FROM print_jobs
+		WHERE printer_id = ? AND status IN ('completed', 'failed', 'cancelled')
+		  AND completed_at IS NOT NULL AND completed_at >= ?
+	`, printerID, since).Scan(&totalJobs); err != nil {
+		return nil, 0, err
+	}
+
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT je.job_id,
+		       d.file_name,
+		       COALESCE(json_extract(je.metadata, '$.new_phase'), ''),
+		       je.occurred_at,
+		       pj.completed_at
+		FROM job_events je
+		JOIN print_jobs pj ON pj.id = je.job_id
+		JOIN designs d ON d.id = pj.design_id
+		WHERE pj.printer_id = ?
+		  AND pj.status IN ('completed', 'failed', 'cancelled')
+		  AND pj.completed_at IS NOT NULL
+		  AND pj.completed_at >= ?
+		  AND je.event_type = 'phase_changed'
+		  AND je.occurred_at >= ?
+		ORDER BY je.job_id, je.occurred_at
+	`, printerID, since, since)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+
+	records := make([]PrinterPreparationRecord, 0)
+	for rows.Next() {
+		var record PrinterPreparationRecord
+		// scanRow, not rows.Scan: occurred_at/completed_at are TEXT columns and the
+		// driver hands them back as strings, which Scan cannot store into time.Time.
+		if err := scanRow(rows, &record.JobID, &record.JobName, &record.Phase, &record.OccurredAt, &record.JobEndedAt); err != nil {
+			return nil, 0, err
+		}
+		records = append(records, record)
+	}
+	return records, totalJobs, rows.Err()
+}
+
 // GetPrinterUtilizationData retrieves utilization data for a printer since a given time.
 func (r *PrinterRepository) GetPrinterUtilizationData(ctx context.Context, printerID uuid.UUID, since time.Time) (*PrinterUtilizationData, error) {
 	var data PrinterUtilizationData

@@ -158,6 +158,41 @@ func TestSalesChannelRepository_UpsertExternalOrderIsIdempotent(t *testing.T) {
 	}
 }
 
+func TestSalesChannelRepository_UsesConfiguredCurrencyWhenProviderOmitsIt(t *testing.T) {
+	db := openTestDB(t)
+	repo := NewSalesChannelRepository(db)
+	settings := &SettingsRepository{db: db}
+	ctx := context.Background()
+	if err := settings.Set(ctx, "currency_code", "BRL"); err != nil {
+		t.Fatal(err)
+	}
+	connection := testSalesChannelConnection(t, ctx, repo)
+
+	order := &saleschannel.ExternalOrder{
+		ConnectionID: connection.ID, Channel: connection.Channel,
+		ExternalOrderID: "missing-currency-order", TotalCents: 1200,
+		Items: []saleschannel.ExternalOrderItem{{ExternalLineItemID: "line", UnitPriceCents: 1200}},
+	}
+	if err := repo.UpsertExternalOrder(ctx, order); err != nil {
+		t.Fatal(err)
+	}
+	if order.Currency != "BRL" || order.Items[0].Currency != "BRL" {
+		t.Fatalf("expected BRL order fallback, got order=%q item=%q", order.Currency, order.Items[0].Currency)
+	}
+
+	product := &saleschannel.ExternalProduct{
+		ConnectionID: connection.ID, Channel: connection.Channel,
+		ExternalProductID: "missing-currency-product", PriceCents: 2400,
+		Variants: []saleschannel.ExternalProductVariant{{ExternalVariantID: "variant", PriceCents: 2400}},
+	}
+	if err := repo.UpsertExternalProduct(ctx, product); err != nil {
+		t.Fatal(err)
+	}
+	if product.Currency != "BRL" || product.Variants[0].Currency != "BRL" {
+		t.Fatalf("expected BRL product fallback, got product=%q variant=%q", product.Currency, product.Variants[0].Currency)
+	}
+}
+
 func TestSalesChannelRepository_UpsertExternalProductAndLink(t *testing.T) {
 	db := openTestDB(t)
 	repo := NewSalesChannelRepository(db)

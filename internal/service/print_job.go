@@ -891,16 +891,16 @@ func (s *PrintJobService) handlePrinterStatusChange(newState *model.PrinterState
 			slog.Error("failed to find active job for phase change", "printer_id", newState.PrinterID, "error", err)
 		} else if job != nil {
 			slog.Info("printer phase change detected", "printer_id", newState.PrinterID, "job_id", job.ID, "old_phase", oldPhase, "new_phase", newPhase)
-			
+
 			// Record the phase change event
 			event := &model.JobEvent{
-				JobID:      job.ID,
-				EventType:  "phase_changed",
-				Status:     &job.Status,
-				Progress:   &newState.Progress,
-				PrinterID:  &newState.PrinterID,
-				ActorType:  "printer",
-				ActorID:    newState.PrinterID.String(),
+				JobID:     job.ID,
+				EventType: "phase_changed",
+				Status:    &job.Status,
+				Progress:  &newState.Progress,
+				PrinterID: &newState.PrinterID,
+				ActorType: "printer",
+				ActorID:   newState.PrinterID.String(),
 				Metadata: map[string]interface{}{
 					"old_phase": oldPhase,
 					"new_phase": newPhase,

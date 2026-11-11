@@ -217,20 +217,22 @@ func (r *TaskRepository) GetProjectTaskStats(ctx context.Context, projectID uuid
 
 // GetPendingSalesStats returns the count and estimated revenue of tasks in pending/in_progress status.
 // Revenue is estimated from project price_cents if set, otherwise from average gross_cents of past sales.
-func (r *TaskRepository) GetPendingSalesStats(ctx context.Context) (count int, revenueCents int, err error) {
+// The average is scoped to the given currency, because sales carry one. projects.price_cents carries no
+// currency, so pending revenue stays an estimate in whatever currency the project price was entered in.
+func (r *TaskRepository) GetPendingSalesStats(ctx context.Context, currency string) (count int, revenueCents int, err error) {
 	err = r.db.QueryRowContext(ctx, `
 		SELECT
 			COALESCE(SUM(t.quantity), 0),
 			COALESCE(SUM(t.quantity * COALESCE(
 				p.price_cents,
 				(SELECT CASE WHEN COUNT(*) > 0 THEN SUM(s.gross_cents) / COUNT(*) ELSE 0 END
-				 FROM sales s WHERE s.project_id = p.id),
+				 FROM sales s WHERE s.project_id = p.id AND s.currency = ?),
 				0
 			)), 0)
 		FROM tasks t
 		JOIN projects p ON t.project_id = p.id
 		WHERE t.status IN ('pending', 'in_progress')
-	`).Scan(&count, &revenueCents)
+	`, currency).Scan(&count, &revenueCents)
 	return
 }
 

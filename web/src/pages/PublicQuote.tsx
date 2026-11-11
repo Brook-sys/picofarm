@@ -1,13 +1,10 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { publicApi } from '../api/client'
+import { formatMoneyCents, normalizeCurrencyCode } from '../lib/currency'
 import type { Quote, QuoteOption, QuoteLineItem, QuoteLineItemType, Address } from '../types'
 
 // ── Helpers ────────────────────────────────────────────────
-
-function formatCents(cents: number): string {
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(cents / 100)
-}
 
 function calculateFinancials(subtotalCents: number, quote: Quote) {
   const discountAmount = quote.discount_type === 'flat'
@@ -60,6 +57,7 @@ interface BusinessInfo {
   business_email?: string
   business_website?: string
   business_address?: Address
+  currency_code?: string
 }
 
 // ── Component ──────────────────────────────────────────────
@@ -84,6 +82,7 @@ export default function PublicQuote() {
         business_phone: (b as Record<string, string>).business_phone,
         business_email: (b as Record<string, string>).business_email,
         business_website: (b as Record<string, string>).business_website,
+        currency_code: normalizeCurrencyCode((b as Record<string, string>).currency_code),
       }
       const addrJson = (b as Record<string, string>).business_address_json
       if (addrJson) {
@@ -117,6 +116,7 @@ export default function PublicQuote() {
   }
 
   const hasAdjustments = quote.discount_type !== 'none' || quote.rush_fee_cents > 0 || quote.tax_rate > 0
+  const currencyCode = normalizeCurrencyCode(business.currency_code)
   const businessAddrLines = formatAddressLines(business.business_address)
   const billingLines = formatAddressLines(quote.billing_address)
   const shippingLines = formatAddressLines(quote.shipping_address)
@@ -211,7 +211,7 @@ export default function PublicQuote() {
 
           {/* Options */}
           {quote.options && quote.options.map((option) => (
-            <OptionSection key={option.id} option={option} quote={quote} hasAdjustments={hasAdjustments} />
+            <OptionSection key={option.id} option={option} quote={quote} hasAdjustments={hasAdjustments} currencyCode={currencyCode} />
           ))}
 
           {/* Terms */}
@@ -238,7 +238,8 @@ export default function PublicQuote() {
 
 // ── OptionSection ──────────────────────────────────────────
 
-function OptionSection({ option, quote, hasAdjustments }: { option: QuoteOption; quote: Quote; hasAdjustments: boolean }) {
+function OptionSection({ option, quote, hasAdjustments, currencyCode }: { option: QuoteOption; quote: Quote; hasAdjustments: boolean; currencyCode: string }) {
+  const formatCents = (cents: number) => formatMoneyCents(cents, currencyCode)
   const financials = calculateFinancials(option.total_cents, quote)
 
   // Group items by type

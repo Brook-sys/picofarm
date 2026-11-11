@@ -18,9 +18,6 @@ func (r *SaleRepository) Create(ctx context.Context, s *model.Sale) error {
 	s.ID = uuid.New()
 	s.CreatedAt = time.Now()
 	s.UpdatedAt = time.Now()
-	if s.Currency == "" {
-		s.Currency = "USD"
-	}
 	if s.Channel == "" {
 		s.Channel = model.SalesChannelOther
 	}
@@ -110,12 +107,12 @@ func (r *SaleRepository) Delete(ctx context.Context, id uuid.UUID) error {
 	return err
 }
 
-// GetTotalsByDateRange calculates totals for a date range.
-func (r *SaleRepository) GetTotalsByDateRange(ctx context.Context, start, end time.Time) (grossCents, netCents, feesCents int, count int, err error) {
+// GetTotalsByDateRange calculates totals for a date range in one currency.
+func (r *SaleRepository) GetTotalsByDateRange(ctx context.Context, start, end time.Time, currency string) (grossCents, netCents, feesCents int, count int, err error) {
 	err = scanRow(r.db.QueryRowContext(ctx, `
 		SELECT COALESCE(SUM(gross_cents), 0), COALESCE(SUM(net_cents), 0), COALESCE(SUM(fees_cents), 0), COUNT(*)
-		FROM sales WHERE occurred_at >= ? AND occurred_at < ?
-	`, start, end), &grossCents, &netCents, &feesCents, &count)
+		FROM sales WHERE occurred_at >= ? AND occurred_at < ? AND currency = ?
+	`, start, end, currency), &grossCents, &netCents, &feesCents, &count)
 	return
 }
 
@@ -131,8 +128,8 @@ type ProjectSalesRow struct {
 	LastSale    string
 }
 
-// GetSalesByProject returns sales aggregated by project.
-func (r *SaleRepository) GetSalesByProject(ctx context.Context) ([]ProjectSalesRow, error) {
+// GetSalesByProject returns sales aggregated by project in one currency.
+func (r *SaleRepository) GetSalesByProject(ctx context.Context, currency string) ([]ProjectSalesRow, error) {
 	rows, err := r.db.QueryContext(ctx, `
 		SELECT
 			COALESCE(s.project_id, ''),
@@ -145,9 +142,10 @@ func (r *SaleRepository) GetSalesByProject(ctx context.Context) ([]ProjectSalesR
 			MAX(s.occurred_at)
 		FROM sales s
 		LEFT JOIN projects p ON s.project_id = p.id
+		WHERE s.currency = ?
 		GROUP BY COALESCE(s.project_id, s.item_description)
 		ORDER BY SUM(s.gross_cents) DESC
-	`)
+	`, currency)
 	if err != nil {
 		return nil, err
 	}
@@ -177,13 +175,13 @@ type ChannelBreakdownRow struct {
 	Count   int
 }
 
-// GetSalesOverTime returns gross_cents grouped by date bucket.
-func (r *SaleRepository) GetSalesOverTime(ctx context.Context, since time.Time, strftimeFmt string) ([]TimeSeriesRow, error) {
+// GetSalesOverTime returns gross_cents grouped by date bucket in one currency.
+func (r *SaleRepository) GetSalesOverTime(ctx context.Context, since time.Time, strftimeFmt, currency string) ([]TimeSeriesRow, error) {
 	rows, err := r.db.QueryContext(ctx, `
 		SELECT strftime(?, occurred_at) AS bucket, COALESCE(SUM(gross_cents), 0)
-		FROM sales WHERE occurred_at >= ?
+		FROM sales WHERE occurred_at >= ? AND currency = ?
 		GROUP BY bucket ORDER BY bucket
-	`, strftimeFmt, since)
+	`, strftimeFmt, since, currency)
 	if err != nil {
 		return nil, err
 	}
@@ -200,13 +198,13 @@ func (r *SaleRepository) GetSalesOverTime(ctx context.Context, since time.Time, 
 	return result, rows.Err()
 }
 
-// GetNetOverTime returns net_cents grouped by date bucket.
-func (r *SaleRepository) GetNetOverTime(ctx context.Context, since time.Time, strftimeFmt string) ([]TimeSeriesRow, error) {
+// GetNetOverTime returns net_cents grouped by date bucket in one currency.
+func (r *SaleRepository) GetNetOverTime(ctx context.Context, since time.Time, strftimeFmt, currency string) ([]TimeSeriesRow, error) {
 	rows, err := r.db.QueryContext(ctx, `
 		SELECT strftime(?, occurred_at) AS bucket, COALESCE(SUM(net_cents), 0)
-		FROM sales WHERE occurred_at >= ?
+		FROM sales WHERE occurred_at >= ? AND currency = ?
 		GROUP BY bucket ORDER BY bucket
-	`, strftimeFmt, since)
+	`, strftimeFmt, since, currency)
 	if err != nil {
 		return nil, err
 	}
@@ -224,12 +222,12 @@ func (r *SaleRepository) GetNetOverTime(ctx context.Context, since time.Time, st
 }
 
 // GetSalesByChannel returns gross_cents and count grouped by channel.
-func (r *SaleRepository) GetSalesByChannel(ctx context.Context, since time.Time) ([]ChannelBreakdownRow, error) {
+func (r *SaleRepository) GetSalesByChannel(ctx context.Context, since time.Time, currency string) ([]ChannelBreakdownRow, error) {
 	rows, err := r.db.QueryContext(ctx, `
 		SELECT channel, COALESCE(SUM(gross_cents), 0), COUNT(*)
-		FROM sales WHERE occurred_at >= ?
+		FROM sales WHERE occurred_at >= ? AND currency = ?
 		GROUP BY channel ORDER BY SUM(gross_cents) DESC
-	`, since)
+	`, since, currency)
 	if err != nil {
 		return nil, err
 	}
@@ -253,13 +251,13 @@ type CategoryBreakdownRow struct {
 	Count    int
 }
 
-// GetExpensesOverTime returns total_cents for confirmed expenses grouped by date bucket.
-func (r *ExpenseRepository) GetExpensesOverTime(ctx context.Context, since time.Time, strftimeFmt string) ([]TimeSeriesRow, error) {
+// GetExpensesOverTime returns confirmed expenses grouped by date bucket in one currency.
+func (r *ExpenseRepository) GetExpensesOverTime(ctx context.Context, since time.Time, strftimeFmt, currency string) ([]TimeSeriesRow, error) {
 	rows, err := r.db.QueryContext(ctx, `
 		SELECT strftime(?, occurred_at) AS bucket, COALESCE(SUM(total_cents), 0)
-		FROM expenses WHERE status = 'confirmed' AND occurred_at >= ?
+		FROM expenses WHERE status = 'confirmed' AND occurred_at >= ? AND currency = ?
 		GROUP BY bucket ORDER BY bucket
-	`, strftimeFmt, since)
+	`, strftimeFmt, since, currency)
 	if err != nil {
 		return nil, err
 	}
@@ -276,13 +274,13 @@ func (r *ExpenseRepository) GetExpensesOverTime(ctx context.Context, since time.
 	return result, rows.Err()
 }
 
-// GetExpensesByCategory returns total_cents and count for confirmed expenses grouped by category.
-func (r *ExpenseRepository) GetExpensesByCategory(ctx context.Context, since time.Time) ([]CategoryBreakdownRow, error) {
+// GetExpensesByCategory returns confirmed expenses grouped by category in one currency.
+func (r *ExpenseRepository) GetExpensesByCategory(ctx context.Context, since time.Time, currency string) ([]CategoryBreakdownRow, error) {
 	rows, err := r.db.QueryContext(ctx, `
 		SELECT category, COALESCE(SUM(total_cents), 0), COUNT(*)
-		FROM expenses WHERE status = 'confirmed' AND occurred_at >= ?
+		FROM expenses WHERE status = 'confirmed' AND occurred_at >= ? AND currency = ?
 		GROUP BY category ORDER BY SUM(total_cents) DESC
-	`, since)
+	`, since, currency)
 	if err != nil {
 		return nil, err
 	}

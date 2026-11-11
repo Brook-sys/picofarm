@@ -16,6 +16,8 @@ import {
 } from 'lucide-react'
 import { salesApi, statsApi, projectsApi, customersApi } from '../api/client'
 import { cn } from '../lib/utils'
+import { currencySymbol } from '../lib/currency'
+import { useCurrency } from '../hooks/useCurrency'
 import type { Sale, SalesChannel, ProjectSummary, WeeklyInsights, Customer } from '../types'
 import {
   Chart as ChartJS,
@@ -36,7 +38,6 @@ const channelConfig: Record<SalesChannel, { icon: React.ElementType; color: stri
   other: { icon: DollarSign, color: 'text-surface-400', bgColor: 'bg-surface-500/20' },
 }
 
-const formatCents = (cents: number) => `$${(cents / 100).toFixed(2)}`
 
 const formatTime = (seconds: number) => {
   if (!seconds || seconds <= 0) return '-'
@@ -50,6 +51,7 @@ const toCents = (val: string) => Math.round(parseFloat(val || '0') * 100)
 const fromCents = (cents: number) => (cents / 100).toFixed(2)
 
 export default function Sales() {
+  const { currencyCode, formatCents } = useCurrency()
   const queryClient = useQueryClient()
   const [editingSale, setEditingSale] = useState<Sale | null>(null)
   const [showModal, setShowModal] = useState(false)
@@ -77,14 +79,19 @@ export default function Sales() {
   })
 
   const totals = useMemo(() => {
-    const totalGross = sales.reduce((sum, s) => sum + s.gross_cents, 0)
-    const totalNet = sales.reduce((sum, s) => sum + s.net_cents, 0)
+    const compatibleSales = sales.filter((sale) => (sale.currency || currencyCode) === currencyCode)
+    const totalGross = compatibleSales.reduce((sum, s) => sum + s.gross_cents, 0)
+    const totalNet = compatibleSales.reduce((sum, s) => sum + s.net_cents, 0)
     const totalCOGS = projectSales.reduce((sum, p) => sum + (p.total_cogs_cents || 0), 0)
     const totalProfit = totalNet - totalCOGS
-    const count = sales.length
+    const count = compatibleSales.length
     const avgOrder = count > 0 ? Math.round(totalGross / count) : 0
     return { totalGross, totalNet, totalCOGS, totalProfit, count, avgOrder }
-  }, [sales, projectSales])
+  }, [currencyCode, sales, projectSales])
+
+  const excludedCurrencyCount = sales.filter(
+    (sale) => (sale.currency || currencyCode) !== currencyCode,
+  ).length
 
   const openAdd = () => {
     setEditingSale(null)
@@ -154,6 +161,12 @@ export default function Sales() {
         </div>
       </div>
 
+      {excludedCurrencyCount > 0 && (
+        <div className="mb-6 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-300">
+          {excludedCurrencyCount} sale{excludedCurrencyCount === 1 ? '' : 's'} in other currencies are shown below but excluded from {currencyCode} totals.
+        </div>
+      )}
+
       {/* This Week in Sales */}
       {weeklyInsights && (
         <WeeklyInsightsCard insights={weeklyInsights} />
@@ -192,7 +205,7 @@ export default function Sales() {
                         titleColor: '#e2e8f0',
                         bodyColor: '#e2e8f0',
                         callbacks: {
-                          label: (ctx) => `$${((ctx.parsed.x ?? 0) / 100).toFixed(2)}`,
+                          label: (ctx) => formatCents(ctx.parsed.x ?? 0),
                         },
                       },
                       legend: { display: false },
@@ -201,7 +214,7 @@ export default function Sales() {
                       x: {
                         ticks: {
                           color: '#64748b',
-                          callback: (value) => `$${(Number(value) / 100).toFixed(0)}`,
+                          callback: (value) => formatCents(Number(value)),
                         },
                         grid: { color: '#1e293b' },
                       },
@@ -338,10 +351,10 @@ export default function Sales() {
                 <div className="flex items-center gap-4">
                   <div className="text-right">
                     <div className="font-semibold text-surface-100">
-                      {formatCents(sale.gross_cents)}
+                      {formatCents(sale.gross_cents, sale.currency)}
                     </div>
                     <div className="text-xs text-surface-500">
-                      net {formatCents(sale.net_cents)}
+                      net {formatCents(sale.net_cents, sale.currency)}
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
@@ -409,6 +422,7 @@ function formatWeekRange(start: string, end: string) {
 }
 
 function WeeklyInsightsCard({ insights }: { insights: WeeklyInsights }) {
+  const { formatCents } = useCurrency()
   const tw = insights.this_week
   const lw = insights.last_week
   const avgOrder = tw.count > 0 ? Math.round(tw.gross_cents / tw.count) : 0
@@ -511,6 +525,9 @@ function SaleModal({
   onClose: () => void
   onSuccess: () => void
 }) {
+  const { currencyCode, formatCents } = useCurrency()
+  const formCurrency = sale?.currency || currencyCode
+  const symbol = currencySymbol(formCurrency)
   const isEdit = !!sale
 
   const [selectedProjectId, setSelectedProjectId] = useState<string>(sale?.project_id || '')
@@ -605,6 +622,7 @@ function SaleModal({
         order_reference: orderReference,
         notes,
         project_id: selectedProjectId || undefined,
+        currency: formCurrency,
       }
 
       if (isEdit) {
@@ -690,7 +708,7 @@ function SaleModal({
                       <span className={cn(
                         netCents - projectSummary.total_cost_cents >= 0 ? 'text-emerald-400' : 'text-red-400'
                       )}>
-                        {formatCents(netCents - projectSummary.total_cost_cents)}
+                        {formatCents(netCents - projectSummary.total_cost_cents, formCurrency)}
                       </span>
                     </div>
                   )}
@@ -767,7 +785,7 @@ function SaleModal({
               />
             </div>
             <div>
-              <label className="block text-sm text-surface-400 mb-1">Gross Amount ($)</label>
+              <label className="block text-sm text-surface-400 mb-1">Gross Amount ({symbol})</label>
               <input
                 type="number"
                 step="0.01"
@@ -783,7 +801,7 @@ function SaleModal({
           {/* Row 4: Fees + Shipping Charged */}
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm text-surface-400 mb-1">Fees ($)</label>
+              <label className="block text-sm text-surface-400 mb-1">Fees ({symbol})</label>
               <input
                 type="number"
                 step="0.01"
@@ -794,7 +812,7 @@ function SaleModal({
               />
             </div>
             <div>
-              <label className="block text-sm text-surface-400 mb-1">Shipping Charged ($)</label>
+              <label className="block text-sm text-surface-400 mb-1">Shipping Charged ({symbol})</label>
               <input
                 type="number"
                 step="0.01"
@@ -809,7 +827,7 @@ function SaleModal({
           {/* Row 5: Shipping Cost + Tax Collected */}
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm text-surface-400 mb-1">Shipping Cost ($)</label>
+              <label className="block text-sm text-surface-400 mb-1">Shipping Cost ({symbol})</label>
               <input
                 type="number"
                 step="0.01"
@@ -820,7 +838,7 @@ function SaleModal({
               />
             </div>
             <div>
-              <label className="block text-sm text-surface-400 mb-1">Tax Collected ($)</label>
+              <label className="block text-sm text-surface-400 mb-1">Tax Collected ({symbol})</label>
               <input
                 type="number"
                 step="0.01"
@@ -890,7 +908,7 @@ function SaleModal({
                 'text-lg font-semibold',
                 netCents >= 0 ? 'text-emerald-400' : 'text-red-400'
               )}>
-                {formatCents(netCents)}
+                {formatCents(netCents, formCurrency)}
               </span>
             </div>
             <div className="text-xs text-surface-500 mt-1">

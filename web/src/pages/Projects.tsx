@@ -5,6 +5,7 @@ import { useQueries } from '@tanstack/react-query'
 import { useProjects, useCreateProject, useDeleteProject } from '../hooks/useProjects'
 import { projectsApi, enqueueProjectParts, modelImportApi } from '../api/client'
 import { cn, formatRelativeTime } from '../lib/utils'
+import { useCurrency } from '../hooks/useCurrency'
 import type { ProjectSummary } from '../types'
 
 type SortField = 'name' | 'updated_at' | 'revenue' | 'profit' | 'profit_per_hour' | 'success_rate' | 'print_time'
@@ -37,6 +38,7 @@ function SortHeader({
 }
 
 export default function Projects() {
+  const { formatCents } = useCurrency()
   const [showCreate, setShowCreate] = useState(false)
   const [showImport, setShowImport] = useState(false)
   const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid')
@@ -189,11 +191,6 @@ export default function Projects() {
     setConfirmDelete(null)
   }
 
-  const formatCents = (cents: number) => {
-    const negative = cents < 0
-    const abs = Math.abs(cents)
-    return `${negative ? '-' : ''}$${(abs / 100).toFixed(2)}`
-  }
 
   const formatPrintTime = (seconds: number) => {
     if (seconds <= 0) return '-'

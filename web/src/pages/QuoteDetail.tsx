@@ -6,6 +6,7 @@ import {
   MoreHorizontal, Copy, MapPin, DollarSign, Link2,
 } from 'lucide-react'
 import { quotesApi, projectsApi } from '../api/client'
+import { useCurrency } from '../hooks/useCurrency'
 import type { Quote, QuoteStatus, QuoteOption, QuoteLineItem, QuoteLineItemType, Project, Address, DiscountType } from '../types'
 
 // ── Constants ──────────────────────────────────────────────
@@ -38,9 +39,6 @@ const lineItemTypes = typeOrder.map(t => ({ value: t, label: typeConfig[t].label
 
 // ── Helpers ────────────────────────────────────────────────
 
-function formatCents(cents: number): string {
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(cents / 100)
-}
 
 function calculateFinancials(subtotalCents: number, quote: Quote) {
   const discountAmount = quote.discount_type === 'flat'
@@ -83,6 +81,7 @@ function emptyPendingItem(key: number): PendingLineItem {
 // ── Main Component ─────────────────────────────────────────
 
 export default function QuoteDetail() {
+  const { formatCents, symbol } = useCurrency()
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const [quote, setQuote] = useState<Quote | null>(null)
@@ -497,7 +496,7 @@ export default function QuoteDetail() {
                   className="px-2 py-1.5 bg-surface-800 border border-surface-700 rounded text-xs text-surface-200 focus:outline-none focus:ring-1 focus:ring-accent-500 disabled:opacity-50"
                 >
                   <option value="none">None</option>
-                  <option value="flat">Flat ($)</option>
+                  <option value="flat">Flat ({symbol})</option>
                   <option value="percent">Percent (%)</option>
                 </select>
                 {quote.discount_type !== 'none' && (
@@ -512,7 +511,7 @@ export default function QuoteDetail() {
                     }}
                     disabled={!isDraft}
                     className="flex-1 px-2 py-1.5 bg-surface-800 border border-surface-700 rounded text-xs text-surface-200 text-right focus:outline-none focus:ring-1 focus:ring-accent-500 disabled:opacity-50"
-                    placeholder={quote.discount_type === 'flat' ? '$0.00' : '0.00%'}
+                    placeholder={quote.discount_type === 'flat' ? `${symbol}0.00` : '0.00%'}
                   />
                 )}
               </div>
@@ -522,7 +521,7 @@ export default function QuoteDetail() {
             <div>
               <label className="block text-xs text-surface-500 mb-1">Rush Fee</label>
               <div className="relative">
-                <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-surface-500">$</span>
+                <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-surface-500">{symbol}</span>
                 <input
                   type="number"
                   step="0.01"
@@ -713,7 +712,7 @@ export default function QuoteDetail() {
                           <option value="units">units</option>
                           <option value="grams">grams</option>
                         </select>
-                        <input value={item.unit_price} onChange={(e) => setPendingItems(prev => prev.map((it, i) => i === idx ? { ...it, unit_price: e.target.value } : it))} type="number" step="0.01" placeholder="Rate $" className="col-span-1 px-2 py-1.5 bg-surface-800 border border-surface-700 rounded text-sm text-surface-200 text-right focus:outline-none focus:ring-1 focus:ring-accent-500" />
+                        <input value={item.unit_price} onChange={(e) => setPendingItems(prev => prev.map((it, i) => i === idx ? { ...it, unit_price: e.target.value } : it))} type="number" step="0.01" placeholder={`Rate ${symbol}`} className="col-span-1 px-2 py-1.5 bg-surface-800 border border-surface-700 rounded text-sm text-surface-200 text-right focus:outline-none focus:ring-1 focus:ring-accent-500" />
                       </div>
                     </div>
                   ))}
@@ -839,6 +838,7 @@ interface OptionCardProps {
 }
 
 function OptionCard({ option, quote, isDraft, isSent, isAccepted, addingItem, projects, actionLoading, onAddItem, onCancelAddItem, onSubmitItem, onDeleteItem, onDelete, onAccept }: OptionCardProps) {
+  const { formatCents, symbol } = useCurrency()
   const projectMap = new Map(projects.map(p => [p.id, p]))
   const financials = calculateFinancials(option.total_cents, quote)
   const hasAdjustments = quote.discount_type !== 'none' || quote.rush_fee_cents > 0 || quote.tax_rate > 0
@@ -1006,7 +1006,7 @@ function OptionCard({ option, quote, isDraft, isSent, isAccepted, addingItem, pr
               <option value="units">units</option>
               <option value="grams">grams</option>
             </select>
-            <input name="unit_price" type="number" step="0.01" required placeholder="Rate $" className="col-span-1 px-2 py-1.5 bg-surface-800 border border-surface-700 rounded text-sm text-surface-200 text-right focus:outline-none focus:ring-1 focus:ring-accent-500" />
+            <input name="unit_price" type="number" step="0.01" required placeholder={`Rate ${symbol}`} className="col-span-1 px-2 py-1.5 bg-surface-800 border border-surface-700 rounded text-sm text-surface-200 text-right focus:outline-none focus:ring-1 focus:ring-accent-500" />
           </div>
           <div className="flex justify-end gap-2 mt-2">
             <button type="button" onClick={onCancelAddItem} className="px-3 py-1 text-xs text-surface-400 hover:text-surface-200">Cancel</button>

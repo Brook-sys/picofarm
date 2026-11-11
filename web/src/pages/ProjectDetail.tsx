@@ -31,6 +31,7 @@ import { usePrinters, usePrinterStates } from '../hooks/usePrinters'
 import { useSpoolsWithMaterials } from '../hooks/useMaterials'
 import { designsApi, printJobsApi, projectsApi, partsApi, suppliesApi, materialsApi, queueApi, gcodeLibraryApi, fileLibraryApi, fileApi, enqueueProjectParts } from '../api/client'
 import { cn, getStatusBadge, formatBytes, formatRelativeTime } from '../lib/utils'
+import { useCurrency } from '../hooks/useCurrency'
 import AppToast, { type AppToastState } from '../components/AppToast'
 import { FailureModal } from '../components/FailureModal'
 import { ExpandableJobEvents } from '../components/JobEventTimeline'
@@ -923,6 +924,7 @@ function PartCard({
 
 // Supplies Section Component
 function SuppliesSection({ projectId }: { projectId: string }) {
+  const { formatAmount, formatCents, symbol } = useCurrency()
   const queryClient = useQueryClient()
   const [showAddForm, setShowAddForm] = useState(false)
   const [addMode, setAddMode] = useState<'catalog' | 'manual'>('catalog')
@@ -1070,13 +1072,13 @@ function SuppliesSection({ projectId }: { projectId: string }) {
                     <option value="">Select a supply...</option>
                     {supplyMaterials.map((mat) => (
                       <option key={mat.id} value={mat.id}>
-                        {mat.name} {mat.manufacturer ? `(${mat.manufacturer})` : ''} — ${mat.cost_per_kg.toFixed(2)}
+                        {mat.name} {mat.manufacturer ? `(${mat.manufacturer})` : ''} — {formatAmount(mat.cost_per_kg)}
                       </option>
                     ))}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-surface-400 mb-1">Unit Cost ($)</label>
+                  <label className="block text-xs font-medium text-surface-400 mb-1">Unit Cost ({symbol})</label>
                   <input
                     type="number"
                     value={newCost}
@@ -1122,7 +1124,7 @@ function SuppliesSection({ projectId }: { projectId: string }) {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-surface-400 mb-1">Unit Cost ($)</label>
+                  <label className="block text-xs font-medium text-surface-400 mb-1">Unit Cost ({symbol})</label>
                   <input
                     type="number"
                     value={newCost}
@@ -1176,11 +1178,11 @@ function SuppliesSection({ projectId }: { projectId: string }) {
                 <tr key={supply.id} className="border-b border-surface-800/50">
                   <td className="px-4 py-3 text-surface-200">{supply.name}</td>
                   <td className="px-4 py-3 text-right text-surface-300">
-                    ${(supply.unit_cost_cents / 100).toFixed(2)}
+                    {formatCents(supply.unit_cost_cents)}
                   </td>
                   <td className="px-4 py-3 text-right text-surface-300">{supply.quantity}</td>
                   <td className="px-4 py-3 text-right text-surface-100 font-medium">
-                    ${((supply.unit_cost_cents * supply.quantity) / 100).toFixed(2)}
+                    {formatCents(supply.unit_cost_cents * supply.quantity)}
                   </td>
                   <td className="px-4 py-3">
                     {confirmDeleteSupplyId === supply.id ? (
@@ -1210,7 +1212,7 @@ function SuppliesSection({ projectId }: { projectId: string }) {
                   Total Supplies
                 </td>
                 <td className="px-4 py-3 text-right font-semibold text-surface-100">
-                  ${(totalCents / 100).toFixed(2)}
+                  {formatCents(totalCents)}
                 </td>
                 <td></td>
               </tr>
@@ -1236,6 +1238,7 @@ function PrintHistoryTab({
   onRecordOutcome: (job: PrintJob) => void
   onHandleFailure: (job: PrintJob) => void
 }) {
+  const { formatAmount } = useCurrency()
   const queryClient = useQueryClient()
   const [confirmDeleteJob, setConfirmDeleteJob] = useState<string | null>(null)
   const [confirmClearHistory, setConfirmClearHistory] = useState(false)
@@ -1417,7 +1420,7 @@ function PrintHistoryTab({
         <div className="card p-4">
           <div className="text-sm text-surface-500 mb-1">Total Cost</div>
           <div className="text-2xl font-semibold text-emerald-400">
-            ${totalCost.toFixed(2)}
+            {formatAmount(totalCost)}
           </div>
         </div>
       </div>
@@ -1508,7 +1511,7 @@ function PrintHistoryTab({
                       {job.outcome.material_used.toFixed(1)}g used
                       {job.outcome.material_cost > 0 && (
                         <span className="text-emerald-400 ml-2">
-                          ${job.outcome.material_cost.toFixed(2)}
+                          {formatAmount(job.outcome.material_cost)}
                         </span>
                       )}
                     </div>
@@ -1595,11 +1598,7 @@ function PrintHistoryTab({
 
 // Quick Stats Bar (above tabs)
 function ProjectQuickStats({ summary }: { summary: ProjectSummary }) {
-  const formatCents = (cents: number) => {
-    const negative = cents < 0
-    const abs = Math.abs(cents)
-    return `${negative ? '-' : ''}$${(abs / 100).toFixed(2)}`
-  }
+  const { formatCents } = useCurrency()
 
   const formatTime = (seconds: number) => {
     if (seconds <= 0) return '-'
@@ -1668,6 +1667,7 @@ function ProjectQuickStats({ summary }: { summary: ProjectSummary }) {
 
 // Project Analytics Tab
 function ProjectAnalyticsTab({ summary }: { summary?: ProjectSummary }) {
+  const { formatAmount, formatCents } = useCurrency()
   if (!summary) {
     return (
       <div className="card p-8 text-center">
@@ -1680,12 +1680,6 @@ function ProjectAnalyticsTab({ summary }: { summary?: ProjectSummary }) {
         </p>
       </div>
     )
-  }
-
-  const formatCents = (cents: number) => {
-    const negative = cents < 0
-    const abs = Math.abs(cents)
-    return `${negative ? '-' : ''}$${(abs / 100).toFixed(2)}`
   }
 
   const formatSeconds = (seconds: number) => {
@@ -1815,7 +1809,7 @@ function ProjectAnalyticsTab({ summary }: { summary?: ProjectSummary }) {
             <div className="card p-4">
               <div className="flex items-center gap-1.5 text-sm text-surface-500 mb-1">
                 Est. Material
-                <Tooltip text="Estimated material cost calculated from slice profile weight data at a default rate of $19.99/kg. Used when actual costs aren't available." />
+                <Tooltip text={`Estimated material cost calculated from slice profile weight data at a default rate of ${formatAmount(19.99)}/kg. Used when actual costs aren't available.`} />
               </div>
               <div className="text-2xl font-semibold text-amber-400">
                 {formatCents(summary.estimated_material_cost_cents)}

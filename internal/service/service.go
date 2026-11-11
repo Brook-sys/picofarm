@@ -72,6 +72,7 @@ type ServicesConfig struct {
 func NewServices(repos *repository.Repositories, store storage.Storage, printerMgr *printer.Manager, hub *realtime.Hub) *Services {
 	// Create shared Bambu cloud client
 	bambuCloudClient := bambu.NewCloudClient()
+	settingsService := &SettingsService{repo: repos.Settings}
 
 	services := &Services{
 		Projects:        &ProjectService{repo: repos.Projects, printJobRepo: repos.PrintJobs, printerRepo: repos.Printers, spoolRepo: repos.Spools, designRepo: repos.Designs, tagRepo: repos.Tags, saleRepo: repos.Sales, partRepo: repos.Parts, supplyRepo: repos.ProjectSupplies, repos: repos, printerMgr: printerMgr, hub: hub, storage: store},
@@ -83,12 +84,12 @@ func NewServices(repos *repository.Repositories, store storage.Storage, printerM
 		PrintJobs:       &PrintJobService{repo: repos.PrintJobs, printerRepo: repos.Printers, designRepo: repos.Designs, spoolRepo: repos.Spools, materialRepo: repos.Materials, projectRepo: repos.Projects, queueRepo: repos.QueueItems, printerMgr: printerMgr, hub: hub, storage: store},
 		Files:           &FileService{repo: repos.Files, storage: store},
 		Expenses:        &ExpenseService{repo: repos.Expenses, materialRepo: repos.Materials, spoolRepo: repos.Spools, fileRepo: repos.Files, settingsRepo: repos.Settings, repos: repos, storage: store},
-		Sales:           &SaleService{repo: repos.Sales, taskRepo: repos.Tasks},
-		Stats:           &StatsService{expenseRepo: repos.Expenses, saleRepo: repos.Sales, printJobRepo: repos.PrintJobs, queueRepo: repos.QueueItems, spoolRepo: repos.Spools, materialRepo: repos.Materials},
+		Sales:           &SaleService{repo: repos.Sales, taskRepo: repos.Tasks, settings: settingsService},
+		Stats:           &StatsService{expenseRepo: repos.Expenses, saleRepo: repos.Sales, printJobRepo: repos.PrintJobs, queueRepo: repos.QueueItems, spoolRepo: repos.Spools, materialRepo: repos.Materials, settings: settingsService},
 		Etsy:            nil, // Initialize separately with config
 		Squarespace:     nil, // Initialize separately with config
 		BambuCloud:      NewBambuCloudService(repos.BambuCloud, repos.Printers, printerMgr, bambuCloudClient),
-		Settings:        &SettingsService{repo: repos.Settings},
+		Settings:        settingsService,
 		ProjectSupplies: &ProjectSupplyService{repo: repos.ProjectSupplies, materialRepo: repos.Materials},
 	}
 	// Wire cross-service dependencies
