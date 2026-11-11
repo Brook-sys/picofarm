@@ -18,6 +18,9 @@ uploads/
 .ai/
 .hermes/
 
+# Local-only operations notes (hostnames, tailnet IPs, webhook GUIDs, deploy runbook)
+LOCAL.md
+
 printfarm
 printfarm.cp
 *.db

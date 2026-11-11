@@ -59,6 +59,17 @@ When changing sales channels, product/listing sync, external order processing, p
 
 Keep docs factual and operational. Do not document planned behavior as current behavior.
 
+## Local-only runbook
+
+Deploy topology, Portainer/webhook access paths, tailnet hostnames and anything
+else that must never reach the public repo live in `LOCAL.md` (git-ignored, local
+only). It is written in Portuguese on purpose — it is an operator's private
+notebook, not project documentation.
+
+Key operational fact, safe to state publicly: pushing to the `picofarm` remote
+triggers the GHCR build, but the production container only updates when the
+Portainer redeploy is triggered. See `LOCAL.md` for the exact procedure.
+
 ## Git policy
 
 The user requested that code changes be committed from now on.
