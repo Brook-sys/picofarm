@@ -3,6 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 VERSION_FILE="$ROOT_DIR/VERSION"
+REMOTE="${PICOFARM_REMOTE:-picofarm}"
 
 # Colors
 RED='\033[0;31m'
@@ -81,17 +82,17 @@ fi
 # Commit, tag, push
 git add VERSION web/package.json CHANGELOG.md
 git commit -m "Release v$NEW_VERSION"
-git tag "v$NEW_VERSION"
+git tag -a "v$NEW_VERSION" -m "Release v$NEW_VERSION"
 
 echo ""
-read -rp "Push to origin? [y/N]: " PUSH
+read -rp "Push to ${REMOTE}? [y/N]: " PUSH
 if [[ "$PUSH" =~ ^[Yy]$ ]]; then
-    git push origin main --tags
-    echo -e "${GREEN}Pushed v$NEW_VERSION to origin. Release workflow will start automatically.${NC}"
+    git push "$REMOTE" main --tags
+    echo -e "${GREEN}Pushed v$NEW_VERSION to ${REMOTE}. Release workflow will start automatically.${NC}"
 else
     echo ""
     echo "Run these commands when ready:"
-    echo "  git push origin main --tags"
+    echo "  git push ${REMOTE} main --tags"
 fi
 
 echo ""
