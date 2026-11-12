@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Link as RouterLink } from 'react-router-dom'
 import { RefreshCw, Package, CheckCircle, Clock, ExternalLink, ShoppingBag, Store, Link, Filter } from 'lucide-react'
-import { etsyApi, squarespaceApi, templatesApi, salesChannelsApi } from '../api/client'
-import type { EtsyReceipt, EtsyListing, SquarespaceOrder, SquarespaceProduct, SyncResult, Template, SalesChannelID, SalesChannelSummary, SalesChannelSyncKind, SalesChannelExternalOrder, SalesChannelExternalProduct } from '../types'
+import { etsyApi, squarespaceApi, projectsApi, salesChannelsApi } from '../api/client'
+import type { EtsyReceipt, EtsyListing, SquarespaceOrder, SquarespaceProduct, SyncResult, Project, SalesChannelID, SalesChannelSummary, SalesChannelSyncKind, SalesChannelExternalOrder, SalesChannelExternalProduct } from '../types'
 import { cn } from '../lib/utils'
 import { formatMoneyCents } from '../lib/currency'
 import { useCurrency } from '../hooks/useCurrency'
@@ -45,7 +45,6 @@ interface UnifiedProduct {
   skus: string[]
   priceCents?: number
   currency?: string
-  linkedTemplateId?: string
   raw: SalesChannelExternalProduct | EtsyListing | SquarespaceProduct
 }
 
@@ -61,7 +60,7 @@ export default function Channels() {
   // Data
   const [orders, setOrders] = useState<UnifiedOrder[]>([])
   const [products, setProducts] = useState<UnifiedProduct[]>([])
-  const [templates, setTemplates] = useState<Template[]>([])
+  const [projects, setProjects] = useState<Project[]>([])
 
   // UI state
   const [loading, setLoading] = useState(true)
@@ -70,7 +69,7 @@ export default function Channels() {
   const [syncResult, setSyncResult] = useState<{ channel: string; result: SyncResult } | null>(null)
   const [processingId, setProcessingId] = useState<string | null>(null)
   const [linkingId, setLinkingId] = useState<string | null>(null)
-  const [selectedTemplate, setSelectedTemplate] = useState<Record<string, string>>({})
+  const [selectedProject, setSelectedProject] = useState<Record<string, string>>({})
 
   const visibleSalesChannels = salesChannels
   const hasConfiguredOrPlannedChannel = salesChannels.length > 0
@@ -142,9 +141,12 @@ export default function Channels() {
     setError(null)
 
     try {
-      // Load templates for linking
-      const tpls = await templatesApi.list(true)
-      setTemplates(tpls)
+      // Load projects for linking. Products link to projects: the recipe /
+      // template catalog was removed from the product (projects and tasks are
+      // the catalog), and /api/templates no longer exists, so requesting it
+      // here 404'd and took the whole product list down with it.
+      const projectList = await projectsApi.list()
+      setProjects(projectList)
 
       const response = await salesChannelsApi.listProducts({
         channel: channel === 'all' ? undefined : channel,
@@ -259,7 +261,7 @@ export default function Channels() {
 
   // Link product to project
   async function handleLink(product: UnifiedProduct) {
-    const projectId = selectedTemplate[product.id]
+    const projectId = selectedProject[product.id]
     if (!projectId) {
       setError('Please select a project')
       return
@@ -275,7 +277,7 @@ export default function Channels() {
         await squarespaceApi.linkProduct(product.id, projectId, sku)
       }
       await loadProducts()
-      setSelectedTemplate(prev => ({ ...prev, [product.id]: '' }))
+      setSelectedProject(prev => ({ ...prev, [product.id]: '' }))
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to link product')
     } finally {
@@ -630,12 +632,6 @@ export default function Channels() {
                           Hidden
                         </span>
                       )}
-                      {product.linkedTemplateId && (
-                        <span className="flex items-center gap-1 text-xs px-2 py-0.5 bg-green-500/20 text-green-400 rounded">
-                          <Link className="h-3 w-3" />
-                          Linked
-                        </span>
-                      )}
                     </div>
 
                     {product.description && (
@@ -658,23 +654,23 @@ export default function Channels() {
                     </div>
                   </div>
 
-                  {/* Link to Template */}
+                  {/* Link to Project */}
                   <div className="flex items-center gap-2 ml-4">
                     <select
-                      value={selectedTemplate[product.id] || ''}
-                      onChange={(e) => setSelectedTemplate(prev => ({ ...prev, [product.id]: e.target.value }))}
+                      value={selectedProject[product.id] || ''}
+                      onChange={(e) => setSelectedProject(prev => ({ ...prev, [product.id]: e.target.value }))}
                       className="input h-auto py-1 w-auto"
                     >
-                      <option value="">Select template...</option>
-                      {templates.map((template) => (
-                        <option key={template.id} value={template.id}>
-                          {template.name} {template.sku && `(${template.sku})`}
+                      <option value="">Select project...</option>
+                      {projects.map((project) => (
+                        <option key={project.id} value={project.id}>
+                          {project.name} {project.sku && `(${project.sku})`}
                         </option>
                       ))}
                     </select>
                     <button
                       onClick={() => handleLink(product)}
-                      disabled={linkingId === product.id || !selectedTemplate[product.id]}
+                      disabled={linkingId === product.id || !selectedProject[product.id]}
                       className="flex items-center gap-1 px-3 py-1.5 text-sm bg-accent-600 text-white rounded hover:bg-accent-500 disabled:opacity-50"
                     >
                       {linkingId === product.id ? (

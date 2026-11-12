@@ -13,8 +13,8 @@ import {
   Mail,
   Calendar,
 } from 'lucide-react'
-import { ordersApi, templatesApi } from '../api/client'
-import type { Order, OrderProgress, OrderStatus, Template } from '../types'
+import { ordersApi, projectsApi } from '../api/client'
+import type { Order, OrderProgress, OrderStatus, Project } from '../types'
 
 const statusConfig: Record<OrderStatus, { label: string; color: string; icon: React.ReactNode }> = {
   pending: { label: 'Pending', color: 'bg-gray-100 text-gray-700', icon: <Clock className="w-4 h-4" /> },
@@ -371,23 +371,27 @@ interface AddItemModalProps {
 }
 
 function AddItemModal({ orderId, onClose, onAdded }: AddItemModalProps) {
-  const [templates, setTemplates] = useState<Template[]>([])
-  const [templateId, setTemplateId] = useState('')
+  const [projects, setProjects] = useState<Project[]>([])
+  const [projectId, setProjectId] = useState('')
   const [sku, setSku] = useState('')
   const [quantity, setQuantity] = useState(1)
   const [notes, setNotes] = useState('')
   const [adding, setAdding] = useState(false)
 
   useEffect(() => {
-    loadTemplates()
+    loadProjects()
   }, [])
 
-  const loadTemplates = async () => {
+  const loadProjects = async () => {
     try {
-      const data = await templatesApi.list()
-      setTemplates(data)
+      // Projects are the product catalog. The recipe/template catalog was
+      // removed from the product, and /api/templates no longer exists: this
+      // call used to 404, the error was swallowed by the catch below, and the
+      // selector stayed permanently empty with no visible symptom.
+      const data = await projectsApi.list()
+      setProjects(data)
     } catch (err) {
-      console.error('Failed to load templates:', err)
+      console.error('Failed to load projects:', err)
     }
   }
 
@@ -396,7 +400,7 @@ function AddItemModal({ orderId, onClose, onAdded }: AddItemModalProps) {
     setAdding(true)
     try {
       await ordersApi.addItem(orderId, {
-        template_id: templateId || undefined,
+        project_id: projectId || undefined,
         sku: sku.trim() || undefined,
         quantity,
         notes: notes.trim() || undefined,
@@ -418,17 +422,17 @@ function AddItemModal({ orderId, onClose, onAdded }: AddItemModalProps) {
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-surface-300 mb-1">
-                Template (Recipe)
+                Project (product catalog)
               </label>
               <select
-                value={templateId}
-                onChange={e => setTemplateId(e.target.value)}
+                value={projectId}
+                onChange={e => setProjectId(e.target.value)}
                 className="input"
               >
-                <option value="">No template</option>
-                {templates.map(t => (
-                  <option key={t.id} value={t.id}>
-                    {t.name} {t.sku && `(${t.sku})`}
+                <option value="">No project</option>
+                {projects.map(p => (
+                  <option key={p.id} value={p.id}>
+                    {p.name} {p.sku && `(${p.sku})`}
                   </option>
                 ))}
               </select>

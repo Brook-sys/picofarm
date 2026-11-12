@@ -9,7 +9,7 @@ export interface Project {
   source: string
   external_order_id?: string
   customer_notes?: string
-  // Template-like fields for product catalog
+  // Product catalog fields (carried over from the old template model)
   sku?: string
   price_cents?: number
   printer_type?: string
@@ -785,178 +785,6 @@ export interface ScrapRequest {
   notes?: string
 }
 
-// Print Profile type
-export type PrintProfile = 'standard' | 'detailed' | 'fast' | 'strong' | 'custom'
-
-// Printer constraints for recipes
-export interface PrinterConstraints {
-  min_bed_size?: BuildVolume
-  nozzle_diameters?: number[]
-  requires_enclosure: boolean
-  requires_ams: boolean
-  printer_tags?: string[]
-}
-
-// Color specification for material matching
-export interface ColorSpec {
-  mode: 'exact' | 'category' | 'any'
-  hex?: string
-  name?: string
-}
-
-// Recipe material requirement
-export interface RecipeMaterial {
-  id: string
-  recipe_id: string
-  material_type: MaterialType
-  color_spec?: ColorSpec
-  weight_grams: number
-  ams_position?: number
-  sequence_order: number
-  notes?: string
-  created_at: string
-}
-
-// Cost estimate breakdown
-export interface RecipeCostEstimate {
-  material_cost_cents: number
-  time_cost_cents: number
-  labor_cost_cents: number
-  supply_cost_cents: number
-  total_cost_cents: number
-  estimated_print_time_seconds: number
-  labor_minutes: number
-  material_breakdown: RecipeMaterialCostBreakdown[]
-  supply_breakdown?: RecipeSupplyCostBreakdown[]
-  hourly_rate_cents: number
-  labor_rate_cents: number
-  printer_name?: string
-  // Margin calculation
-  sale_price_cents: number
-  gross_margin_cents: number
-  gross_margin_percent: number
-  profit_per_hour_cents: number
-}
-
-// Supply cost breakdown
-export interface RecipeSupplyCostBreakdown {
-  name: string
-  unit_cost_cents: number
-  quantity: number
-  total_cents: number
-}
-
-// Recipe supply item (non-printed BOM)
-export interface RecipeSupply {
-  id: string
-  recipe_id: string
-  name: string
-  unit_cost_cents: number
-  quantity: number
-  material_id?: string
-  notes?: string
-  created_at: string
-}
-
-export interface RecipeMaterialCostBreakdown {
-  material_type: string
-  weight_grams: number
-  cost_cents: number
-  color_name?: string
-}
-
-// Compatible spool result
-export interface CompatibleSpool {
-  spool: MaterialSpool
-  material: Material
-  match_reason: string
-}
-
-// Printer validation result
-export interface PrinterValidationResult {
-  valid: boolean
-  errors?: string[]
-  warnings?: string[]
-}
-
-// Template types (enhanced as Recipe)
-export interface Template {
-  id: string
-  name: string
-  description: string
-  sku: string
-  tags: string[]
-  material_type: MaterialType
-  estimated_material_grams: number
-  preferred_printer_id?: string
-  allow_any_printer: boolean
-  quantity_per_order: number
-  post_process_checklist: string[]
-  is_active: boolean
-  printer_constraints?: PrinterConstraints
-  print_profile: PrintProfile
-  estimated_print_seconds: number
-  // Pricing fields for margin calculation
-  labor_minutes: number
-  sale_price_cents: number
-  material_cost_per_gram_cents: number
-  version: number
-  archived_at?: string
-  created_at: string
-  updated_at: string
-  designs?: TemplateDesign[]
-  materials?: RecipeMaterial[]
-  supplies?: RecipeSupply[]
-}
-
-// Aggregated performance analytics from projects created from a template
-export interface TemplateAnalytics {
-  template_id: string
-  project_count: number
-  // Revenue
-  total_revenue_cents: number
-  total_fees_cents: number
-  net_revenue_cents: number
-  total_sales_count: number
-  // Costs
-  total_cost_cents: number
-  avg_unit_cost_cents: number
-  total_printer_time_cost: number
-  total_material_cost: number
-  total_supply_cost: number
-  // Profit
-  total_gross_profit_cents: number
-  avg_gross_margin_percent: number
-  profit_per_hour_cents: number
-  // Performance
-  total_job_count: number
-  total_completed: number
-  total_failed: number
-  success_rate: number
-  // Print time
-  total_print_seconds: number
-  avg_print_seconds: number
-  // Material
-  total_material_grams: number
-  avg_material_grams: number
-  // Estimated vs Actual comparison
-  estimated_print_seconds: number
-  estimated_material_grams: number
-  estimated_cost_cents: number
-}
-
-export interface TemplateDesign {
-  id: string
-  template_id: string
-  design_id: string
-  is_primary: boolean
-  quantity: number
-  sequence_order: number
-  notes: string
-  created_at: string
-  design?: Design
-}
-
 // API response types
 export interface ApiError {
   error: string
@@ -1131,7 +959,6 @@ export interface EtsyListing {
   synced_at: string
   created_at: string
   updated_at: string
-  linked_template?: Template
 }
 
 // Etsy Webhook Event types
