@@ -1,4 +1,4 @@
-.PHONY: help dev build run test clean frontend backend stop start restart show-version bump-patch bump-minor bump-major release site site-build lint lint-go lint-web
+.PHONY: help dev build build-backend build-frontend test test-coverage lint lint-go lint-web clean deps frontend backend show-version bump-patch bump-minor bump-major release site site-build
 
 # Version
 VERSION := $(shell cat VERSION | tr -d 'v\n')
@@ -11,7 +11,7 @@ LDFLAGS := -X github.com/Brook-sys/picofarm/internal/version.Version=$(VERSION) 
 
 # Etsy OAuth (optional - set these to enable Etsy integration)
 ETSY_CLIENT_ID ?=
-ETSY_REDIRECT_URI ?= http://localhost:8080/api/integrations/etsy/callback
+ETSY_REDIRECT_URI ?= http://localhost:8084/api/integrations/etsy/callback
 
 # Default target
 help:

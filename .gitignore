@@ -29,7 +29,7 @@ PENDENCIAS-LOCAL.md
 printfarm
 printfarm.cp
 *.db
-server
+/server
 bin/
 build/
 
