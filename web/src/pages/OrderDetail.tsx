@@ -12,6 +12,7 @@ import {
   Play,
   Mail,
   Calendar,
+  Trash2,
 } from 'lucide-react'
 import { ordersApi, projectsApi } from '../api/client'
 import type { Order, OrderProgress, OrderStatus, Project } from '../types'
@@ -31,6 +32,7 @@ export function OrderDetail() {
   const [loading, setLoading] = useState(true)
   const [showAddItem, setShowAddItem] = useState(false)
   const [processingItem, setProcessingItem] = useState<string | null>(null)
+  const [removingItem, setRemovingItem] = useState<string | null>(null)
   const [updatingStatus, setUpdatingStatus] = useState(false)
 
   const loadOrder = useCallback(async () => {
@@ -82,6 +84,26 @@ export function OrderDetail() {
     }
   }
 
+  // Items that already produced a task cannot be removed: tasks.order_item_id
+  // references order_items(id) with no ON DELETE rule and the connection runs
+  // with foreign_keys=ON, so the DELETE fails with "FOREIGN KEY constraint
+  // failed" and the handler answers 500. The page knows which items have
+  // tasks (order.tasks carries order_item_id), so the button is disabled with
+  // the reason instead of failing on click.
+  const handleRemoveItem = async (itemId: string) => {
+    if (!id) return
+    if (!confirm('Remove this item from the order?')) return
+    setRemovingItem(itemId)
+    try {
+      await ordersApi.removeItem(id, itemId)
+      loadOrder()
+    } catch (err) {
+      console.error('Failed to remove item:', err)
+    } finally {
+      setRemovingItem(null)
+    }
+  }
+
   const handleShip = async () => {
     if (!id) return
     const trackingNumber = prompt('Enter tracking number (optional):')
@@ -119,6 +141,11 @@ export function OrderDetail() {
       </div>
     )
   }
+
+  // Items already turned into tasks (tasks.order_item_id → order_items.id).
+  const processedItemIds = new Set(
+    (order.tasks ?? []).map(task => task.order_item_id).filter((id): id is string => !!id)
+  )
 
   return (
     <div className="p-6">
@@ -212,6 +239,17 @@ export function OrderDetail() {
                       ) : (
                         <span className="text-sm text-amber-600">No template linked</span>
                       )}
+                      <button
+                        onClick={() => handleRemoveItem(item.id)}
+                        disabled={removingItem === item.id || processedItemIds.has(item.id)}
+                        title={processedItemIds.has(item.id)
+                          ? 'This item already has a task. The database blocks removing an order item that a task references — remove the task first.'
+                          : 'Remove this item from the order'}
+                        className="inline-flex items-center gap-1 px-3 py-1.5 text-sm text-red-600 border border-red-200 rounded hover:bg-red-50 disabled:opacity-50"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                        {removingItem === item.id ? 'Removing...' : 'Remove'}
+                      </button>
                     </div>
                   </div>
                 ))}
