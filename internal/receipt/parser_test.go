@@ -10,34 +10,23 @@ import (
 	"testing"
 )
 
-func TestNewParser_ReadsAnthropicAPIKey(t *testing.T) {
-	t.Setenv("ANTHROPIC_API_KEY", "test-key-123")
-	p := NewParser()
-	if p.apiKey != "test-key-123" {
-		t.Errorf("expected apiKey %q, got %q", "test-key-123", p.apiKey)
-	}
-}
-
-func TestNewParser_DefaultModel(t *testing.T) {
-	t.Setenv("ANTHROPIC_API_KEY", "k")
-	p := NewParser()
+func TestNewParserWithKey_DefaultModel(t *testing.T) {
+	p := NewParserWithKey("k")
 	if p.model != "claude-sonnet-4-20250514" {
 		t.Errorf("expected default model claude-sonnet-4-20250514, got %q", p.model)
 	}
 }
 
-func TestNewParser_CustomModel(t *testing.T) {
-	t.Setenv("ANTHROPIC_API_KEY", "k")
+func TestNewParserWithKey_CustomModel(t *testing.T) {
 	t.Setenv("RECEIPT_PARSER_MODEL", "claude-3-haiku-20240307")
-	p := NewParser()
+	p := NewParserWithKey("k")
 	if p.model != "claude-3-haiku-20240307" {
 		t.Errorf("expected model claude-3-haiku-20240307, got %q", p.model)
 	}
 }
 
 func TestParseFromBytes_NoAPIKey(t *testing.T) {
-	t.Setenv("ANTHROPIC_API_KEY", "")
-	p := NewParser()
+	p := NewParserWithKey("")
 
 	_, err := p.ParseFromBytes(context.Background(), []byte("data"), "image/jpeg")
 	if err == nil {
@@ -255,16 +244,6 @@ func TestParseFromBytes_ResponseWithMarkdownCodeBlock(t *testing.T) {
 	}
 }
 
-func TestParseFromFile_NonExistent(t *testing.T) {
-	t.Setenv("ANTHROPIC_API_KEY", "test-key")
-	p := NewParser()
-
-	_, err := p.ParseFromFile(context.Background(), "/tmp/nonexistent-receipt-file.pdf")
-	if err == nil {
-		t.Fatal("expected error for non-existent file")
-	}
-}
-
 func TestCleanJSONResponse(t *testing.T) {
 	tests := []struct {
 		input    string
@@ -280,33 +259,6 @@ func TestCleanJSONResponse(t *testing.T) {
 		got := cleanJSONResponse(tt.input)
 		if got != tt.expected {
 			t.Errorf("cleanJSONResponse(%q) = %q, want %q", tt.input, got, tt.expected)
-		}
-	}
-}
-
-func TestDetectContentType(t *testing.T) {
-	tests := []struct {
-		path     string
-		data     []byte
-		expected string
-	}{
-		{"receipt.pdf", nil, "application/pdf"},
-		{"photo.png", nil, "image/png"},
-		{"photo.jpg", nil, "image/jpeg"},
-		{"photo.jpeg", nil, "image/jpeg"},
-		{"photo.webp", nil, "image/webp"},
-		{"photo.gif", nil, "image/gif"},
-		// Magic bytes detection
-		{"unknown", []byte{0x89, 'P', 'N', 'G'}, "image/png"},
-		{"unknown", []byte{0xFF, 0xD8, 0x00, 0x00}, "image/jpeg"},
-		{"unknown", []byte{'%', 'P', 'D', 'F'}, "application/pdf"},
-		{"unknown", []byte{0x00, 0x00, 0x00, 0x00}, "application/octet-stream"},
-	}
-
-	for _, tt := range tests {
-		got := detectContentType(tt.path, tt.data)
-		if got != tt.expected {
-			t.Errorf("detectContentType(%q, ...) = %q, want %q", tt.path, got, tt.expected)
 		}
 	}
 }

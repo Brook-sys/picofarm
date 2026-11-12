@@ -22,12 +22,6 @@ type Parser struct {
 	httpClient *http.Client
 }
 
-// NewParser creates a new receipt parser using the Anthropic API.
-// It reads the API key from the ANTHROPIC_API_KEY env var.
-func NewParser() *Parser {
-	return NewParserWithKey(os.Getenv("ANTHROPIC_API_KEY"))
-}
-
 // NewParserWithKey creates a new receipt parser with an explicit API key.
 // If apiKey is empty, parsing will fail with a descriptive error.
 func NewParserWithKey(apiKey string) *Parser {
@@ -52,9 +46,9 @@ func (p *Parser) HasAPIKey() bool {
 // Anthropic API request/response types
 
 type anthropicRequest struct {
-	Model     string              `json:"model"`
-	MaxTokens int                 `json:"max_tokens"`
-	Messages  []anthropicMessage  `json:"messages"`
+	Model     string             `json:"model"`
+	MaxTokens int                `json:"max_tokens"`
+	Messages  []anthropicMessage `json:"messages"`
 }
 
 type anthropicMessage struct {
@@ -95,17 +89,6 @@ type anthropicResponse struct {
 		Type    string `json:"type"`
 		Message string `json:"message"`
 	} `json:"error,omitempty"`
-}
-
-// ParseFromFile parses a receipt from a file path.
-func (p *Parser) ParseFromFile(ctx context.Context, filePath string) (*model.ParsedReceipt, error) {
-	data, err := os.ReadFile(filePath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read file: %w", err)
-	}
-
-	contentType := detectContentType(filePath, data)
-	return p.ParseFromBytes(ctx, data, contentType)
 }
 
 // ParseFromBytes parses a receipt from raw bytes.
@@ -321,36 +304,4 @@ func resolveMediaType(contentType string) string {
 	default:
 		return "image/jpeg"
 	}
-}
-
-// detectContentType determines the content type from file extension and magic bytes.
-func detectContentType(filePath string, data []byte) string {
-	lower := strings.ToLower(filePath)
-	switch {
-	case strings.HasSuffix(lower, ".png"):
-		return "image/png"
-	case strings.HasSuffix(lower, ".jpg"), strings.HasSuffix(lower, ".jpeg"):
-		return "image/jpeg"
-	case strings.HasSuffix(lower, ".pdf"):
-		return "application/pdf"
-	case strings.HasSuffix(lower, ".webp"):
-		return "image/webp"
-	case strings.HasSuffix(lower, ".gif"):
-		return "image/gif"
-	}
-
-	// Fall back to magic bytes detection
-	if len(data) >= 4 {
-		if data[0] == 0x89 && data[1] == 'P' && data[2] == 'N' && data[3] == 'G' {
-			return "image/png"
-		}
-		if data[0] == 0xFF && data[1] == 0xD8 {
-			return "image/jpeg"
-		}
-		if data[0] == '%' && data[1] == 'P' && data[2] == 'D' && data[3] == 'F' {
-			return "application/pdf"
-		}
-	}
-
-	return "application/octet-stream"
 }
