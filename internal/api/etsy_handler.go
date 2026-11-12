@@ -21,9 +21,8 @@ import (
 type EtsyHandler struct {
 	service *service.EtsyService
 
-	projectSvc    *service.ProjectService
-	orderSvc      *service.OrderService
-	webhookSecret string
+	projectSvc *service.ProjectService
+	orderSvc   *service.OrderService
 
 	// warnedNoWebhookSecret guards the one-time warning about accepting
 	// unsigned events. It stops a missing secret from flooding the log.
@@ -39,20 +38,10 @@ func (h *EtsyHandler) SetProjectSvc(svc *service.ProjectService) {
 	h.projectSvc = svc
 }
 
-// SetWebhookSecret sets the webhook secret for signature verification.
-// Intended for tests and explicit overrides; production resolves the secret
-// from ETSY_WEBHOOK_SECRET or the etsy_webhook_secret setting.
-func (h *EtsyHandler) SetWebhookSecret(secret string) {
-	h.webhookSecret = secret
-}
-
-// resolveWebhookSecret resolves the secret used to verify Etsy signatures:
-// explicit override first, then startup/settings configuration via the service.
-// A service error degrades to "no secret" and is logged by the caller path.
+// resolveWebhookSecret resolves the secret used to verify Etsy signatures,
+// as configured via startup (ETSY_WEBHOOK_SECRET) or the etsy_webhook_secret
+// setting. A service error degrades to "no secret" and is logged by the caller path.
 func (h *EtsyHandler) resolveWebhookSecret(ctx context.Context) string {
-	if h.webhookSecret != "" {
-		return h.webhookSecret
-	}
 	secret, err := h.service.GetWebhookSecret(ctx)
 	if err != nil {
 		slog.Warn("failed to load Etsy webhook secret", "error", err)

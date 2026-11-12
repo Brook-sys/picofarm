@@ -9,37 +9,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Brook-sys/picofarm/internal/model"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
-	"github.com/Brook-sys/picofarm/internal/model"
 )
-
-// MockEtsyReceiptService implements receipt-related methods for testing.
-type MockEtsyReceiptService struct {
-	receipts     map[uuid.UUID]*model.EtsyReceipt
-	syncResult   *model.SyncResult
-	syncError    error
-	processError error
-}
-
-func NewMockEtsyReceiptService() *MockEtsyReceiptService {
-	return &MockEtsyReceiptService{
-		receipts: make(map[uuid.UUID]*model.EtsyReceipt),
-	}
-}
-
-func (m *MockEtsyReceiptService) AddReceipt(r *model.EtsyReceipt) {
-	m.receipts[r.ID] = r
-}
-
-func (m *MockEtsyReceiptService) SetSyncResult(result *model.SyncResult, err error) {
-	m.syncResult = result
-	m.syncError = err
-}
-
-func (m *MockEtsyReceiptService) SetProcessError(err error) {
-	m.processError = err
-}
 
 // TestListReceipts_QueryParams tests the query parameter parsing for ListReceipts.
 func TestListReceipts_QueryParams(t *testing.T) {
