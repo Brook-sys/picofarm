@@ -1,1 +1,0 @@
-ALTER TABLE printers ADD COLUMN default_print_folder TEXT NOT NULL DEFAULT '';

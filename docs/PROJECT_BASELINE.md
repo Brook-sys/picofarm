@@ -8,7 +8,7 @@ This document defines the current operational baseline for PicoFarm. Use it befo
 - Primary branch: `main`
 - Normal push target: `picofarm main`
 - Version file: `VERSION`
-- Current application name in code/docs: PicoFarm. The legacy Daedalus name only survives in a few places outside the runtime path (the marketing/docs site under `site/` and the historical SQL under `migrations/`, which no code executes).
+- Current application name in code/docs: PicoFarm. The legacy Daedalus name only survives in the marketing/docs site under `site/` (tracked for cleanup); the runtime path has none left.
 
 ## Stack
 

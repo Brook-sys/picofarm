@@ -44,7 +44,6 @@ web/src/
   contexts/          # React contexts
   types/             # TypeScript type definitions
   lib/               # Utilities
-migrations/          # Historical SQL. NOT executed by any code — see "Database & Migrations"
 site/                # Docs/marketing site (Next.js; Vercel deploy is disabled)
 ```
 
@@ -94,7 +93,7 @@ There is no `make migrate`: the schema is embedded in the binary and applied on 
 - SQLite with WAL mode. Default path `~/.picofarm/picofarm.db`, overridable with `DATABASE_PATH`
 - The schema lives in `internal/database/schema.sql`, embedded in the binary (`//go:embed`) and applied on startup by `RunMigrations`
 - Older databases are brought up to date by idempotent in-Go compatibility statements in `internal/database/sqlite.go`
-- `migrations/` holds 42 numbered SQL files from the pre-Go lineage. **No code reads them.** They are history, not a migration path; do not add files there expecting them to run
+- The numbered SQL files that used to live in `migrations/` are gone: no code ever executed them. Schema changes are made in `schema.sql` for new databases plus a guarded compatibility statement for existing ones — see `docs/ARCHITECTURE.md` for the policy
 
 ## Code Conventions
 

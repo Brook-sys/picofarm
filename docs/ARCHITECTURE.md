@@ -18,7 +18,7 @@ Services (`internal/service`)
 Repositories (`internal/repository`)
         |
         v
-SQLite (`internal/database`, `migrations/`)
+SQLite (`internal/database`: embedded `schema.sql` + compatibility bootstrap)
 ```
 
 Runtime files such as uploads, generated thumbnails, backups, and downloaded/processed model files live outside the source tree during normal operation.
@@ -66,17 +66,19 @@ Current complexity hotspots:
 ## Database and migrations
 
 - The default database path is `~/.picofarm/picofarm.db`.
-- Versioned SQL migrations live under `migrations/`.
+- The schema lives in `internal/database/schema.sql`, embedded in the binary (`//go:embed`) and applied on startup by `RunMigrations`.
 - `internal/database/sqlite.go` opens the database, configures SQLite behavior, and applies schema/migration logic at startup.
 - There is historical compatibility logic in the database bootstrap path that performs idempotent `ALTER TABLE`/`CREATE` work. Treat this area carefully: do not change it without tests for both a fresh database and an upgrade/partial-upgrade database.
+- The old numbered SQL files under `migrations/` were removed: no code ever read them, and the schema file is the single source of truth. If you need that history, read it from git (`git log --diff-filter=D --name-only -- migrations/`).
 
-Recommended migration policy:
+Recommended schema-change policy:
 
-1. Add new schema changes as a new numbered migration whenever possible.
-2. Do not destructively edit old migrations without a clear upgrade strategy.
-3. Add tests that open a fresh DB and validate required tables/columns/foreign keys.
-4. Add upgrade tests when touching legacy compatibility paths.
-5. Log or surface unexpected migration failures; do not hide real errors as harmless idempotency.
+1. Make schema changes in `internal/database/schema.sql` for new databases.
+2. Add the matching idempotent statement (`CREATE TABLE IF NOT EXISTS`, `ALTER TABLE ... ADD COLUMN` guarded by the compatibility helper) for databases created by an older build.
+3. Do not rewrite history: never edit a statement that an existing production database has already applied without a plan for the upgrade path.
+4. Add tests that open a fresh DB and validate required tables/columns/foreign keys.
+5. Add upgrade tests when touching legacy compatibility paths.
+6. Log or surface unexpected migration failures; do not hide real errors as harmless idempotency.
 
 ## Realtime/event flow
 
@@ -107,7 +109,7 @@ Use mocks/fakes or isolated unit tests when adding regression coverage for exter
 | --- | --- | --- |
 | New backend endpoint | `internal/api/` | service, repository, model, frontend API client, `docs/API_CONTRACTS.md` |
 | New business workflow | `internal/service/` | repository transactions, model tests, API handler tests |
-| New database field/table | `migrations/`, `internal/database` | repository code, fresh/upgrade tests, TS types, `docs/API_CONTRACTS.md` when JSON changes |
+| New database field/table | `internal/database/schema.sql`, `internal/database/sqlite.go` | repository code, fresh/upgrade tests, TS types, `docs/API_CONTRACTS.md` when JSON changes |
 | New frontend server data | `web/src/api/`, `web/src/types/` | route/page, hooks, backend JSON tests, `docs/API_CONTRACTS.md` |
 | Printer behavior | `internal/printer/`, relevant service | safety docs, regression matrix, mocks |
 | Upload/file behavior | `internal/storage/`, API handlers | security model, cleanup/retention behavior |

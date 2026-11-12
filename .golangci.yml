@@ -63,7 +63,6 @@ linters:
       - web
       - site
       - build
-      - migrations
     rules:
       # Test files: relax errcheck and unparam
       - path: _test\.go

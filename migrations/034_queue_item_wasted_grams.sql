@@ -1,1 +1,0 @@
-ALTER TABLE queue_items ADD COLUMN wasted_grams REAL NOT NULL DEFAULT 0;

@@ -1,1 +1,0 @@
-ALTER TABLE queue_items ADD COLUMN failed_attempts INTEGER NOT NULL DEFAULT 0;

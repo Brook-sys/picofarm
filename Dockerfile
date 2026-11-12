@@ -35,7 +35,6 @@ RUN apk add --no-cache ca-certificates tzdata curl && \
 WORKDIR /app
 COPY --from=backend /out/picofarm /app/picofarm
 COPY --from=frontend /src/web/dist /app/web/dist
-COPY migrations /app/migrations
 RUN mkdir -p /data/uploads && chown -R picofarm:picofarm /data /app
 USER picofarm
 ENV ENVIRONMENT=production

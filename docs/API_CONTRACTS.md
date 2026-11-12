@@ -11,7 +11,7 @@ This document records the current HTTP/JSON contract conventions between the Go 
 | Backend JSON shapes | `internal/model/*.go` plus handler-local request/response structs |
 | Frontend API calls | `web/src/api/client.ts` |
 | Frontend domain/API types | `web/src/types/index.ts` |
-| Database schema | `migrations/*.sql` plus compatibility logic in `internal/database/sqlite.go` |
+| Database schema | `internal/database/schema.sql` (embedded in the binary) plus the idempotent compatibility statements in `internal/database/sqlite.go` |
 
 When an endpoint or JSON shape changes, update the backend model/handler, frontend API client, frontend type, tests, and this document in the same cycle. If the route can read private data, mutate state, touch files, control hardware, change settings, use credentials, or interact with an external service, update `docs/SECURITY_ENDPOINTS.md` too.
 
