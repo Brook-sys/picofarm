@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Link as RouterLink } from 'react-router-dom'
-import { RefreshCw, Package, CheckCircle, Clock, ExternalLink, ShoppingBag, Store, Link, Filter } from 'lucide-react'
+import { RefreshCw, Package, CheckCircle, Clock, ExternalLink, ShoppingBag, Store, Link, Unlink, Filter } from 'lucide-react'
 import { etsyApi, squarespaceApi, projectsApi, salesChannelsApi } from '../api/client'
 import type { EtsyReceipt, EtsyListing, SquarespaceOrder, SquarespaceProduct, SyncResult, Project, SalesChannelID, SalesChannelSummary, SalesChannelSyncKind, SalesChannelExternalOrder, SalesChannelExternalProduct } from '../types'
 import { cn } from '../lib/utils'
@@ -69,6 +69,7 @@ export default function Channels() {
   const [syncResult, setSyncResult] = useState<{ channel: string; result: SyncResult } | null>(null)
   const [processingId, setProcessingId] = useState<string | null>(null)
   const [linkingId, setLinkingId] = useState<string | null>(null)
+  const [unlinkingId, setUnlinkingId] = useState<string | null>(null)
   const [selectedProject, setSelectedProject] = useState<Record<string, string>>({})
 
   const visibleSalesChannels = salesChannels
@@ -77,6 +78,18 @@ export default function Channels() {
   const syncableVisibleChannels = visibleSalesChannels.filter(({ descriptor, status }) =>
     status.connected && descriptor.capabilities.includes(tab === 'orders' ? 'orders_read' : 'products_read')
   )
+
+  // Connection status per channel, used to gate the legacy readers below.
+  // The provider-neutral read model (the sales_channel_* tables) is only fed
+  // by the Shopee / Mercado Livre / OLX adapters — see
+  // internal/service/sales_channel_adapters.go. Etsy and Squarespace still
+  // live in their own tables (etsy_receipts, squarespace_orders, ...), so a
+  // page that read only the neutral model showed nothing at all for the two
+  // channels that have real credentials. Both sources are therefore merged:
+  // legacy per channel (gated here by that channel's connection status) plus
+  // the neutral model (gated by the channel filter).
+  const etsyStatus = salesChannels.find(({ descriptor }) => descriptor.id === 'etsy')?.status
+  const squarespaceStatus = salesChannels.find(({ descriptor }) => descriptor.id === 'squarespace')?.status
 
   // Load provider-neutral connection status
   const loadSalesChannelStatus = useCallback(async () => {
@@ -96,34 +109,103 @@ export default function Channels() {
   const loadOrders = useCallback(async () => {
     setLoading(true)
     setError(null)
+    const unified: UnifiedOrder[] = []
 
     try {
       const processed = orderFilter === 'all' ? undefined : orderFilter === 'processed'
+
+      // Etsy receipts — legacy storage; the neutral read model has no Etsy rows
+      if ((channel === 'all' || channel === 'etsy') && etsyStatus?.connected) {
+        try {
+          const etsyOrders = await etsyApi.listReceipts({ processed })
+          for (const r of etsyOrders) {
+            unified.push({
+              id: r.id,
+              channel: 'etsy',
+              orderNumber: String(r.etsy_receipt_id),
+              customerName: r.name,
+              customerEmail: r.buyer_email,
+              totalCents: r.grandtotal_cents,
+              currency: r.currency,
+              isProcessed: r.is_processed,
+              projectId: r.project_id,
+              createdAt: r.create_timestamp || r.created_at,
+              status: r.status,
+              items: (r.items || []).map(i => ({
+                id: i.id,
+                name: i.title,
+                quantity: i.quantity,
+                priceCents: i.price_cents,
+                sku: i.sku,
+              })),
+              raw: r,
+            })
+          }
+        } catch (err) {
+          console.error('Failed to load Etsy orders:', err)
+        }
+      }
+
+      // Squarespace orders — same situation: legacy storage only
+      if ((channel === 'all' || channel === 'squarespace') && squarespaceStatus?.connected) {
+        try {
+          const sqOrders = await squarespaceApi.listOrders({ processed })
+          for (const o of sqOrders) {
+            unified.push({
+              id: o.id,
+              channel: 'squarespace',
+              orderNumber: o.order_number,
+              customerName: o.customer_name || o.customer_email,
+              customerEmail: o.customer_email,
+              totalCents: o.grand_total_cents,
+              currency: o.currency,
+              isProcessed: o.is_processed,
+              projectId: o.project_id,
+              createdAt: o.created_on || o.created_at,
+              status: o.fulfillment_status,
+              items: (o.items || []).map(i => ({
+                id: i.id,
+                name: i.product_name,
+                quantity: i.quantity,
+                priceCents: i.unit_price_cents,
+                sku: i.sku,
+              })),
+              raw: o,
+            })
+          }
+        } catch (err) {
+          console.error('Failed to load Squarespace orders:', err)
+        }
+      }
+
+      // Provider-neutral read model — today only Shopee / Mercado Livre / OLX
       const response = await salesChannelsApi.listOrders({
         channel: channel === 'all' ? undefined : channel,
         processed,
       })
-      const unified: UnifiedOrder[] = response.orders.map((order) => ({
-        id: order.id,
-        channel: order.channel,
-        orderNumber: order.order_number || order.external_order_id,
-        customerName: order.customer_name || order.customer_email || 'Unknown customer',
-        customerEmail: order.customer_email,
-        totalCents: order.total_cents,
-        currency: order.currency,
-        isProcessed: order.is_processed,
-        projectId: order.order_id,
-        createdAt: order.created_at,
-        status: order.status,
-        items: (order.items || []).map(item => ({
-          id: item.id,
-          name: item.title,
-          quantity: item.quantity,
-          priceCents: item.unit_price_cents,
-          sku: item.sku,
-        })),
-        raw: order,
-      }))
+      for (const order of response.orders) {
+        unified.push({
+          id: order.id,
+          channel: order.channel,
+          orderNumber: order.order_number || order.external_order_id,
+          customerName: order.customer_name || order.customer_email || 'Unknown customer',
+          customerEmail: order.customer_email,
+          totalCents: order.total_cents,
+          currency: order.currency,
+          isProcessed: order.is_processed,
+          projectId: order.order_id,
+          createdAt: order.created_at,
+          status: order.status,
+          items: (order.items || []).map(item => ({
+            id: item.id,
+            name: item.title,
+            quantity: item.quantity,
+            priceCents: item.unit_price_cents,
+            sku: item.sku,
+          })),
+          raw: order,
+        })
+      }
 
       // Sort by date descending
       unified.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
@@ -133,12 +215,13 @@ export default function Channels() {
     } finally {
       setLoading(false)
     }
-  }, [channel, orderFilter])
+  }, [channel, orderFilter, etsyStatus?.connected, squarespaceStatus?.connected])
 
   // Load products
   const loadProducts = useCallback(async () => {
     setLoading(true)
     setError(null)
+    const unified: UnifiedProduct[] = []
 
     try {
       // Load projects for linking. Products link to projects: the recipe /
@@ -148,21 +231,70 @@ export default function Channels() {
       const projectList = await projectsApi.list()
       setProjects(projectList)
 
+      // Etsy listings — legacy storage; the neutral read model has no Etsy rows
+      if ((channel === 'all' || channel === 'etsy') && etsyStatus?.connected) {
+        try {
+          const listings = await etsyApi.listListings()
+          for (const l of listings) {
+            unified.push({
+              id: l.id,
+              channel: 'etsy',
+              name: l.title,
+              description: l.description,
+              type: l.state,
+              isVisible: l.state === 'active',
+              skus: l.skus || [],
+              priceCents: l.price_cents,
+              currency: l.currency,
+              raw: l,
+            })
+          }
+        } catch (err) {
+          console.error('Failed to load Etsy listings:', err)
+        }
+      }
+
+      // Squarespace products — same situation: legacy storage only
+      if ((channel === 'all' || channel === 'squarespace') && squarespaceStatus?.connected) {
+        try {
+          const prods = await squarespaceApi.listProducts()
+          for (const p of prods) {
+            unified.push({
+              id: p.id,
+              channel: 'squarespace',
+              name: p.name,
+              description: p.description,
+              type: p.type,
+              isVisible: p.is_visible,
+              skus: (p.variants || []).map(v => v.sku).filter(Boolean) as string[],
+              priceCents: p.variants?.[0]?.price_cents,
+              currency: p.variants?.[0]?.currency,
+              raw: p,
+            })
+          }
+        } catch (err) {
+          console.error('Failed to load Squarespace products:', err)
+        }
+      }
+
+      // Provider-neutral read model — today only Shopee / Mercado Livre / OLX
       const response = await salesChannelsApi.listProducts({
         channel: channel === 'all' ? undefined : channel,
       })
-      const unified: UnifiedProduct[] = response.products.map((product) => ({
-        id: product.id,
-        channel: product.channel,
-        name: product.title,
-        description: product.description,
-        type: product.status,
-        isVisible: product.is_visible,
-        skus: (product.variants || []).map(v => v.sku).filter(Boolean) as string[],
-        priceCents: product.price_cents || product.variants?.[0]?.price_cents,
-        currency: product.currency || product.variants?.[0]?.currency,
-        raw: product,
-      }))
+      for (const product of response.products) {
+        unified.push({
+          id: product.id,
+          channel: product.channel,
+          name: product.title,
+          description: product.description,
+          type: product.status,
+          isVisible: product.is_visible,
+          skus: (product.variants || []).map(v => v.sku).filter(Boolean) as string[],
+          priceCents: product.price_cents || product.variants?.[0]?.price_cents,
+          currency: product.currency || product.variants?.[0]?.currency,
+          raw: product,
+        })
+      }
 
       // Sort by name
       unified.sort((a, b) => a.name.localeCompare(b.name))
@@ -172,7 +304,7 @@ export default function Channels() {
     } finally {
       setLoading(false)
     }
-  }, [channel])
+  }, [channel, etsyStatus?.connected, squarespaceStatus?.connected])
 
   // Load data when tab or filters change
   useEffect(() => {
@@ -248,8 +380,10 @@ export default function Channels() {
     try {
       if (order.channel === 'etsy') {
         await etsyApi.processReceipt(order.id)
-      } else {
+      } else if (order.channel === 'squarespace') {
         await squarespaceApi.processOrder(order.id)
+      } else {
+        await salesChannelsApi.processOrder(order.id)
       }
       await loadOrders()
     } catch (err) {
@@ -270,11 +404,13 @@ export default function Channels() {
     setLinkingId(product.id)
     setError(null)
     try {
-      const sku = product.skus[0] || ''
+      const sku = product.skus[0]
       if (product.channel === 'etsy') {
         await etsyApi.linkListing(product.id, { project_id: projectId, sku })
-      } else {
+      } else if (product.channel === 'squarespace') {
         await squarespaceApi.linkProduct(product.id, projectId, sku)
+      } else {
+        await salesChannelsApi.linkProduct(product.id, { project_id: projectId, sku })
       }
       await loadProducts()
       setSelectedProject(prev => ({ ...prev, [product.id]: '' }))
@@ -282,6 +418,35 @@ export default function Channels() {
       setError(err instanceof Error ? err.message : 'Failed to link product')
     } finally {
       setLinkingId(null)
+    }
+  }
+
+  // Unlink product from project — the inverse of handleLink. The link is
+  // stored per (product, project), so the same project selection identifies
+  // which link to remove; the read model does not expose the current link.
+  async function handleUnlink(product: UnifiedProduct) {
+    const projectId = selectedProject[product.id]
+    if (!projectId) {
+      setError('Please select the linked project')
+      return
+    }
+
+    setUnlinkingId(product.id)
+    setError(null)
+    try {
+      if (product.channel === 'etsy') {
+        await etsyApi.unlinkListing(product.id, projectId)
+      } else if (product.channel === 'squarespace') {
+        await squarespaceApi.unlinkProduct(product.id, projectId)
+      } else {
+        await salesChannelsApi.unlinkProduct(product.id, { project_id: projectId })
+      }
+      await loadProducts()
+      setSelectedProject(prev => ({ ...prev, [product.id]: '' }))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to unlink product')
+    } finally {
+      setUnlinkingId(null)
     }
   }
 
@@ -679,6 +844,19 @@ export default function Channels() {
                         <Link className="h-3 w-3" />
                       )}
                       Link
+                    </button>
+                    <button
+                      onClick={() => handleUnlink(product)}
+                      disabled={unlinkingId === product.id || !selectedProject[product.id]}
+                      title="Remove the link between this product and the selected project"
+                      className="flex items-center gap-1 px-3 py-1.5 text-sm border border-surface-600 text-surface-300 rounded hover:bg-surface-800 disabled:opacity-50"
+                    >
+                      {unlinkingId === product.id ? (
+                        <RefreshCw className="h-3 w-3 animate-spin" />
+                      ) : (
+                        <Unlink className="h-3 w-3" />
+                      )}
+                      Unlink
                     </button>
                   </div>
                 </div>
