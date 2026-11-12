@@ -46,10 +46,16 @@ export function AlertBanner({ className = '' }: AlertBannerProps) {
     return null
   }
 
+  // Group alerts by severity, showing critical first
+  const criticalAlerts = alerts.filter(a => a.severity === 'critical')
+  const warningAlerts = alerts.filter(a => a.severity === 'warning')
+  const infoAlerts = alerts.filter(a => a.severity === 'info')
+  const sortedAlerts = [...criticalAlerts, ...warningAlerts, ...infoAlerts]
+
   const severityStyles: Record<AlertSeverity, string> = {
-    info: 'bg-blue-50 border-blue-200 text-blue-800',
-    warning: 'bg-amber-50 border-amber-200 text-amber-800',
-    critical: 'bg-red-50 border-red-200 text-red-800',
+    info: 'bg-blue-500/10 border-blue-500/30 text-blue-300',
+    warning: 'bg-amber-500/10 border-amber-500/30 text-amber-300',
+    critical: 'bg-red-500/10 border-red-500/30 text-red-300',
   }
 
   const severityIcons: Record<AlertSeverity, React.ReactNode> = {
@@ -58,14 +64,10 @@ export function AlertBanner({ className = '' }: AlertBannerProps) {
     critical: <AlertTriangle className="w-4 h-4" />,
   }
 
-  // Group alerts by severity, showing critical first
-  const criticalAlerts = alerts.filter(a => a.severity === 'critical')
-  const warningAlerts = alerts.filter(a => a.severity === 'warning')
-  const infoAlerts = alerts.filter(a => a.severity === 'info')
-  const sortedAlerts = [...criticalAlerts, ...warningAlerts, ...infoAlerts]
+  const snoozeDurations = ['1h', '4h', '24h', 'permanent']
 
   return (
-    <div className={`space-y-2 ${className}`}>
+    <div className={`space-y-2 ${className}`} role="region" aria-label="Active alerts">
       {sortedAlerts.slice(0, 3).map(alert => (
         <div
           key={alert.id}
@@ -82,37 +84,22 @@ export function AlertBanner({ className = '' }: AlertBannerProps) {
               <button
                 onClick={() => handleDismiss(alert, '1h')}
                 disabled={dismissingId === alert.id}
-                className="p-1.5 rounded hover:bg-black/10 transition-colors"
+                className="p-1.5 rounded hover:bg-white/10 transition-colors"
                 title="Snooze for 1 hour"
               >
                 <Clock className="w-4 h-4" />
               </button>
               <div className="absolute right-0 top-full mt-1 hidden group-hover:block z-10">
-                <div className="bg-white border rounded-lg shadow-lg py-1 min-w-[120px]">
-                  <button
-                    onClick={() => handleDismiss(alert, '1h')}
-                    className="w-full px-3 py-1.5 text-left text-sm hover:bg-gray-100"
-                  >
-                    1 hour
-                  </button>
-                  <button
-                    onClick={() => handleDismiss(alert, '4h')}
-                    className="w-full px-3 py-1.5 text-left text-sm hover:bg-gray-100"
-                  >
-                    4 hours
-                  </button>
-                  <button
-                    onClick={() => handleDismiss(alert, '24h')}
-                    className="w-full px-3 py-1.5 text-left text-sm hover:bg-gray-100"
-                  >
-                    24 hours
-                  </button>
-                  <button
-                    onClick={() => handleDismiss(alert, 'permanent')}
-                    className="w-full px-3 py-1.5 text-left text-sm hover:bg-gray-100"
-                  >
-                    Dismiss permanently
-                  </button>
+                <div className="bg-surface-800 border border-surface-700 rounded-lg shadow-lg py-1 min-w-[120px]">
+                  {snoozeDurations.map(duration => (
+                    <button
+                      key={duration}
+                      onClick={() => handleDismiss(alert, duration)}
+                      className="w-full px-3 py-1.5 text-left text-sm text-surface-300 hover:bg-surface-700 hover:text-surface-100"
+                    >
+                      {duration === 'permanent' ? 'Dismiss permanently' : duration.replace('h', ' hour(s)')}
+                    </button>
+                  ))}
                 </div>
               </div>
             </div>
@@ -121,7 +108,7 @@ export function AlertBanner({ className = '' }: AlertBannerProps) {
             <button
               onClick={() => handleDismiss(alert, '1h')}
               disabled={dismissingId === alert.id}
-              className="p-1.5 rounded hover:bg-black/10 transition-colors"
+              className="p-1.5 rounded hover:bg-white/10 transition-colors"
               title="Dismiss"
             >
               <X className="w-4 h-4" />
@@ -129,14 +116,6 @@ export function AlertBanner({ className = '' }: AlertBannerProps) {
           </div>
         </div>
       ))}
-
-      {alerts.length > 3 && (
-        <div className="text-center">
-          <button className="text-sm text-gray-500 hover:text-gray-700">
-            +{alerts.length - 3} more alerts
-          </button>
-        </div>
-      )}
     </div>
   )
 }

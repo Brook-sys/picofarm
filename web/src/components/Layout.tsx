@@ -24,6 +24,7 @@ import {
   Bell,
 } from 'lucide-react'
 import { cn } from '../lib/utils'
+import AlertBanner from './AlertBanner'
 import DispatchNotificationProvider from './DispatchNotificationProvider'
 import FeedbackButton from './FeedbackButton'
 
@@ -165,6 +166,12 @@ export default function Layout() {
 
       {/* Main content */}
       <main className="flex-1 overflow-auto min-w-0">
+        {/* Operational alerts (low spools, orders due). The component and its
+            API existed and worked; nothing ever rendered it, so no alert was
+            ever seen by a user. */}
+        <div className="px-6 pt-4">
+          <AlertBanner />
+        </div>
         <Outlet />
       </main>
 
