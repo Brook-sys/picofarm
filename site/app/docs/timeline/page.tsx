@@ -1,5 +1,5 @@
 export const metadata = {
-  title: "Timeline - Daedalus Docs",
+  title: "Timeline - PicoFarm Docs",
   description: "Gantt-style production timeline with status color coding, date range controls, and progress tracking.",
 };
 
@@ -13,7 +13,7 @@ export default function TimelineDocs() {
       </p>
 
       <div className="docs-screenshot">
-        <img src="/screenshots/timeline.png" alt="Daedalus production timeline showing Gantt-style order scheduling" />
+        <img src="/screenshots/timeline.png" alt="PicoFarm production timeline showing Gantt-style order scheduling" />
       </div>
 
       <h2>Overview</h2>

@@ -1,6 +1,6 @@
 export const metadata = {
-  title: "Dashboard - Daedalus Docs",
-  description: "Learn about the Daedalus dashboard: stats cards, financial overview, charts, and fleet panel.",
+  title: "Dashboard - PicoFarm Docs",
+  description: "Learn about the PicoFarm dashboard: stats cards, financial overview, charts, and fleet panel.",
 };
 
 export default function DashboardDocs() {
@@ -13,12 +13,12 @@ export default function DashboardDocs() {
       </p>
 
       <div className="docs-screenshot">
-        <img src="/screenshots/dashboard.png" alt="Daedalus dashboard showing financial overview, revenue charts, and print farm status" />
+        <img src="/screenshots/dashboard.png" alt="PicoFarm dashboard showing financial overview, revenue charts, and print farm status" />
       </div>
 
       <h2>Overview</h2>
       <p>
-        The dashboard is the first page you see when you open Daedalus. It aggregates data
+        The dashboard is the first page you see when you open PicoFarm. It aggregates data
         from across the platform into a single view so you can understand the health of your
         business without clicking through multiple pages.
       </p>

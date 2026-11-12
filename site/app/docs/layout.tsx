@@ -19,7 +19,6 @@ import {
   CalendarRange,
   Settings,
   Cloud,
-  Download,
   Menu,
   X,
   ArrowLeft,
@@ -42,7 +41,6 @@ const navItems = [
   { href: "/docs/timeline", label: "Timeline", icon: CalendarRange },
   { href: "/docs/settings", label: "Settings", icon: Settings },
   { href: "/docs/deployment", label: "Deployment", icon: Cloud },
-  { href: "/docs/downloads", label: "Downloads", icon: Download },
 ];
 
 export default function DocsLayout({
@@ -79,7 +77,7 @@ export default function DocsLayout({
               <Layers className="h-4 w-4 text-accent-500" />
             </div>
             <span className="text-sm font-bold text-surface-50">
-              Daedalus Docs
+              PicoFarm Docs
             </span>
           </div>
 

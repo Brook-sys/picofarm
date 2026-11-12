@@ -16,8 +16,8 @@ import {
 } from "lucide-react";
 
 export const metadata = {
-  title: "Getting Started - Daedalus Docs",
-  description: "Get up and running with Daedalus, the all-in-one 3D print farm management platform.",
+  title: "Getting Started - PicoFarm Docs",
+  description: "Get up and running with PicoFarm, the all-in-one 3D print farm management platform.",
 };
 
 const sections = [
@@ -32,7 +32,7 @@ const sections = [
   { href: "/docs/channels", label: "Sales Channels", icon: ShoppingCart, desc: "Etsy, Shopify, and Squarespace" },
   { href: "/docs/timeline", label: "Timeline", icon: CalendarRange, desc: "Gantt-style production timeline" },
   { href: "/docs/settings", label: "Settings", icon: Settings, desc: "Integrations and backup management" },
-  { href: "/docs/deployment", label: "Deployment", icon: Cloud, desc: "Desktop, Docker, and cloud deploy" },
+  { href: "/docs/deployment", label: "Deployment", icon: Cloud, desc: "Docker, build from source, configuration" },
 ];
 
 export default function DocsHome() {
@@ -40,20 +40,22 @@ export default function DocsHome() {
     <div className="docs-prose">
       <h1>Getting Started</h1>
       <p className="text-lg !text-surface-300">
-        Welcome to the Daedalus documentation. This guide will walk you through setting up
+        Welcome to the PicoFarm documentation. This guide will walk you through setting up
         your print farm and using every feature of the platform.
       </p>
 
-      <h2>What is Daedalus?</h2>
+      <h2>What is PicoFarm?</h2>
       <p>
-        Daedalus is an all-in-one desktop platform for managing 3D printers, fulfilling orders
-        from Etsy, Shopify &amp; Squarespace, tracking materials, and growing your maker business.
-        It runs as a native desktop app (macOS/Windows) or a Docker container.
+        PicoFarm is an all-in-one platform for managing 3D printers, fulfilling
+        orders from Etsy, Shopify &amp; Squarespace, tracking materials, and
+        growing your maker business. It runs as a web application: one binary
+        serves the API and the interface on the same port, either from Docker or
+        straight from a build on your own machine.
       </p>
 
       <h2>Prerequisites</h2>
       <ul>
-        <li>A computer running macOS or Windows (for the desktop app), or a server with Docker</li>
+        <li>A machine with Docker, or Go 1.24 and Node.js 20 to build from source</li>
         <li>One or more 3D printers (Bambu Lab, OctoPrint, Klipper, or manual logging)</li>
         <li>Marketplace accounts (Etsy, Shopify, or Squarespace) if you want order sync</li>
       </ul>
@@ -61,8 +63,9 @@ export default function DocsHome() {
       <h2>Quick Start</h2>
       <ol>
         <li>
-          <strong>Install Daedalus</strong> &mdash; Download the desktop app or run via Docker.
-          See the <Link href="/docs/deployment">Deployment</Link> page for all options.
+          <strong>Run PicoFarm</strong> &mdash; Build the image or the binary and
+          open it in your browser. See the{" "}
+          <Link href="/docs/deployment">Deployment</Link> page for all options.
         </li>
         <li>
           <strong>Add your printers</strong> &mdash; Go to the Printers page and add your fleet.
@@ -88,7 +91,7 @@ export default function DocsHome() {
 
       <div className="docs-callout">
         <strong>Tip:</strong> If you&apos;re just getting started with a single printer, you can skip
-        the sales channel setup and create orders manually. Daedalus scales from one printer
+        the sales channel setup and create orders manually. PicoFarm scales from one printer
         to a full farm.
       </div>
 

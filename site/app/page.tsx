@@ -270,7 +270,7 @@ function Nav() {
             <Layers className="h-4.5 w-4.5 text-accent-500" />
           </div>
           <span className="text-lg font-bold tracking-tight text-surface-50">
-            Daedalus
+            PicoFarm
           </span>
         </a>
 
@@ -353,8 +353,8 @@ export default function Home() {
             </h1>
 
             <p className="mx-auto mb-10 max-w-xl text-lg leading-relaxed text-surface-400">
-              Daedalus is the all-in-one desktop platform for managing printers,
-              fulfilling orders from Etsy, Shopify & Squarespace, tracking
+              PicoFarm is the all-in-one platform for managing printers,
+              fulfilling orders from Etsy, Shopify &amp; Squarespace, tracking
               materials, and growing your maker business.
             </p>
 
@@ -391,7 +391,7 @@ export default function Home() {
             <div className="glow-accent rounded-2xl border border-surface-800 bg-surface-900/80 p-2">
               <Screenshot
                 src="/screenshots/dashboard.png"
-                alt="Daedalus dashboard showing financial overview, revenue charts, and print farm status"
+                alt="PicoFarm dashboard showing financial overview, revenue charts, and print farm status"
               />
             </div>
           </AnimatedSection>
@@ -404,7 +404,7 @@ export default function Home() {
           <SectionHeading
             badge="Features"
             title="Everything you need to scale"
-            description="From a single printer to a full farm, Daedalus gives you complete visibility and control over every part of your operation."
+            description="From a single printer to a full farm, PicoFarm gives you complete visibility and control over every part of your operation."
           />
 
           <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
@@ -493,7 +493,7 @@ export default function Home() {
           <ShowcaseRow
             icon={<Printer className="h-5 w-5" />}
             title="Fleet management for every printer"
-            description="Connect your entire fleet regardless of manufacturer. Daedalus speaks every protocol so you don't have to."
+            description="Connect your entire fleet regardless of manufacturer. PicoFarm speaks every protocol so you don't have to."
             bullets={[
               "Bambu Lab via MQTT with AMS spool & tray management",
               "OctoPrint REST API with file upload and direct control",
@@ -503,7 +503,7 @@ export default function Home() {
               "Real-time temperature, progress, and HMS error tracking",
             ]}
             screenshot="/screenshots/printers.png"
-            screenshotAlt="Daedalus printer fleet showing Bambu Lab P1S, A1, and H2S printers with status and temperature readings"
+            screenshotAlt="PicoFarm printer fleet showing Bambu Lab P1S, A1, and H2S printers with status and temperature readings"
           />
 
           <ShowcaseRow
@@ -520,7 +520,7 @@ export default function Home() {
             ]}
             reversed
             screenshot="/screenshots/tasks.png"
-            screenshotAlt="Daedalus task view showing order fulfillment progress with completion tracking"
+            screenshotAlt="PicoFarm task view showing order fulfillment progress with completion tracking"
           />
 
           <ShowcaseRow
@@ -536,7 +536,7 @@ export default function Home() {
               "Per-product profitability with unit cost analysis",
             ]}
             screenshot="/screenshots/sales.png"
-            screenshotAlt="Daedalus sales analytics showing revenue by project, profit breakdown, and weekly insights"
+            screenshotAlt="PicoFarm sales analytics showing revenue by project, profit breakdown, and weekly insights"
           />
         </div>
       </section>
@@ -557,7 +557,7 @@ export default function Home() {
               <div className="glow-card rounded-2xl border border-surface-800 bg-surface-900/50 p-1">
                 <Screenshot
                   src="/screenshots/timeline.png"
-                  alt="Daedalus production timeline showing Gantt-style order scheduling"
+                  alt="PicoFarm production timeline showing Gantt-style order scheduling"
                 />
               </div>
               <div className="mt-4 px-2">
@@ -575,7 +575,7 @@ export default function Home() {
               <div className="glow-card rounded-2xl border border-surface-800 bg-surface-900/50 p-1">
                 <Screenshot
                   src="/screenshots/materials.png"
-                  alt="Daedalus material inventory showing spool tracking with weight and color"
+                  alt="PicoFarm material inventory showing spool tracking with weight and color"
                 />
               </div>
               <div className="mt-4 px-2">
@@ -599,7 +599,7 @@ export default function Home() {
           <ShowcaseRow
             icon={<Receipt className="h-5 w-5" />}
             title="Receipt OCR that actually works"
-            description="Upload a photo of any receipt and Daedalus extracts the details automatically. Confirm with a click and categorize across 8 expense types."
+            description="Upload a photo of any receipt and PicoFarm extracts the details automatically. Confirm with a click and categorize across 8 expense types."
             bullets={[
               "Automatic vendor, amount, date, and line item extraction",
               "Confidence scores so you know when to double-check",
@@ -608,7 +608,7 @@ export default function Home() {
               "Retry OCR processing if results need improvement",
             ]}
             screenshot="/screenshots/expenses.png"
-            screenshotAlt="Daedalus expense tracking showing OCR-parsed receipts from Amazon, Bambu Lab, and Home Depot"
+            screenshotAlt="PicoFarm expense tracking showing OCR-parsed receipts from Amazon, Bambu Lab, and Home Depot"
           />
 
           <ShowcaseRow
@@ -625,7 +625,7 @@ export default function Home() {
             ]}
             reversed
             screenshot="/screenshots/projects.png"
-            screenshotAlt="Daedalus project catalog showing maker products with descriptions and dates"
+            screenshotAlt="PicoFarm project catalog showing maker products with descriptions and dates"
           />
         </div>
       </section>
@@ -636,7 +636,7 @@ export default function Home() {
           <SectionHeading
             badge="Smart Workflows"
             title="From file to finished product"
-            description="Upload 3MF files and Daedalus extracts everything it needs. Paired with immutable design versioning and automated job management, you always know exactly what was printed."
+            description="Upload 3MF files and PicoFarm extracts everything it needs. Paired with immutable design versioning and automated job management, you always know exactly what was printed."
           />
 
           <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
@@ -746,28 +746,28 @@ export default function Home() {
           <SectionHeading
             badge="Deploy"
             title="Run it your way"
-            description="Desktop app for macOS and Windows, self-hosted Docker container, or deploy to the cloud. Your data, your infrastructure."
+            description="Self-hosted Docker container, or build the binary and serve it anywhere. Your data, your infrastructure."
           />
 
           <div className="grid gap-5 sm:grid-cols-3">
             {[
               {
-                icon: <Monitor className="h-6 w-6" />,
-                title: "Desktop App",
-                desc: "Native macOS and Windows app powered by Wails. Full filesystem access, system tray, and native performance.",
-                code: "wails build",
-              },
-              {
                 icon: <Container className="h-6 w-6" />,
                 title: "Docker",
-                desc: "Multi-stage Docker build with embedded SQLite. Mount a volume for persistence and you're running.",
-                code: "docker compose up",
+                desc: "Multi-stage Docker build with embedded SQLite. Mount one volume at /data for the database and uploads and you're running.",
+                code: "docker run -p 8084:8084",
               },
               {
                 icon: <Cloud className="h-6 w-6" />,
                 title: "Self-Hosted",
-                desc: "Deploy anywhere with Docker. Mount a volume for your database, configure with environment variables, and you're live.",
-                code: "docker compose up -d",
+                desc: "Build the Go server and the frontend, then serve both from the same port. Configure entirely with environment variables.",
+                code: "make build",
+              },
+              {
+                icon: <Monitor className="h-6 w-6" />,
+                title: "On Your Network",
+                desc: "Printer discovery runs from the server, so a container on the same LAN as your printers sees the whole fleet.",
+                code: "curl localhost:8084/health",
               },
             ].map((item, i) => (
               <AnimatedSection key={item.title} delay={i * 100}>
@@ -809,7 +809,6 @@ export default function Home() {
                   { label: "React 19", detail: "Frontend" },
                   { label: "TypeScript", detail: "Type Safety" },
                   { label: "SQLite", detail: "Database" },
-                  { label: "Wails", detail: "Desktop" },
                   { label: "Tailwind CSS 4", detail: "Styling" },
                   { label: "WebSocket", detail: "Real-time" },
                   { label: "TanStack Query", detail: "Data Fetching" },
@@ -851,12 +850,12 @@ export default function Home() {
             </h2>
             <p className="mb-8 text-lg leading-relaxed text-surface-400">
               Stop juggling spreadsheets, browser tabs, and printer UIs.
-              Daedalus brings your entire operation into one place.
+              PicoFarm brings your entire operation into one place.
             </p>
 
             <div className="flex flex-col items-center gap-4 sm:flex-row sm:justify-center">
               <a
-                href="https://github.com/philjestin/Daedalus"
+                href="https://github.com/Brook-sys/picofarm"
                 className="group inline-flex items-center gap-2 rounded-xl bg-accent-500 px-8 py-3.5 text-sm font-semibold text-white transition-all hover:bg-accent-600"
               >
                 <Github className="h-4 w-4" />
@@ -865,7 +864,7 @@ export default function Home() {
               </a>
               <div className="rounded-xl border border-surface-700 bg-surface-900/50 px-6 py-3.5 font-mono text-sm text-surface-300">
                 <span className="text-surface-600">$ </span>
-                git clone philjestin/Daedalus && make dev
+                git clone Brook-sys/picofarm &amp;&amp; make dev
               </div>
             </div>
           </AnimatedSection>
@@ -881,11 +880,11 @@ export default function Home() {
                 <Layers className="h-4 w-4 text-accent-500" />
               </div>
               <span className="text-sm font-bold text-surface-300">
-                Daedalus
+                PicoFarm
               </span>
             </div>
             <div className="flex items-center gap-6 text-xs text-surface-500">
-              <span>Built with Go, React & Wails</span>
+              <span>Built with Go and React</span>
               <span className="hidden sm:inline text-surface-700">|</span>
               <span>Print Farm Management</span>
             </div>
