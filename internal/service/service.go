@@ -1,9 +1,12 @@
 package service
 
 import (
+	"context"
+	"log/slog"
 	"time"
 
 	"github.com/Brook-sys/picofarm/internal/bambu"
+	"github.com/Brook-sys/picofarm/internal/model"
 	"github.com/Brook-sys/picofarm/internal/printer"
 	"github.com/Brook-sys/picofarm/internal/realtime"
 	"github.com/Brook-sys/picofarm/internal/repository"
@@ -144,6 +147,17 @@ func NewServices(repos *repository.Repositories, store storage.Storage, printerM
 	// Wire job completion callback to auto-complete checklist items
 	services.PrintJobs.SetOnJobCompleted(services.Tasks.HandleJobCompleted)
 
+	// Wire task completion to order completion: an order whose tasks are all
+	// done moves itself to completed instead of waiting for a manual update.
+	services.Tasks.SetOnTaskCompleted(func(ctx context.Context, task *model.Task) {
+		if task.OrderID == nil {
+			return
+		}
+		if err := services.Orders.CheckOrderCompletion(ctx, *task.OrderID); err != nil {
+			slog.Warn("failed to check order completion after task completion", "order_id", task.OrderID, "task_id", task.ID, "error", err)
+		}
+	})
+
 	// Wire task repo to order service (needed for ProcessItem)
 	services.Orders.SetTaskRepo(repos.Tasks)
 
@@ -168,6 +182,16 @@ func NewServicesWithConfig(repos *repository.Repositories, store storage.Storage
 }
 
 func mustNewSalesChannelRegistry(services *Services) *saleschannel.Registry {
+	// Etsy, Squarespace and Shopify are wired to real clients/services.
+	// Mercado Livre and Shopee are registered for their descriptors/tests only:
+	// their providers have no credential source in this build, so Status stays
+	// disconnected and Sync fails closed. Do not treat them as connectable
+	// until a client and settings keys are wired here.
+	//
+	// OLX is deliberately NOT registered: docs/SALES_CHANNELS.md records the
+	// product decision to keep it hidden until OLX partner/integrator access is
+	// practical. Note the consequence: the olx_api_key setting and its Settings
+	// screen field currently feed nothing.
 	registry, err := NewSalesChannelRegistry(
 		NewEtsySalesChannelProvider(services.Etsy),
 		NewSquarespaceSalesChannelProvider(services.Squarespace),

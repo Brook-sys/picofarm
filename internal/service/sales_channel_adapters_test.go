@@ -738,3 +738,41 @@ func openSalesChannelAdapterRepos(t *testing.T) *repository.Repositories {
 	t.Cleanup(func() { db.Close() })
 	return repository.NewRepositories(db)
 }
+
+// TestProductionRegistry_ExposesWiredChannels pins the channel set the HTTP API
+// actually advertises. Mercado Livre and Shopee must stay visible only as
+// descriptor-only shells until a client and credential source are wired, and
+// OLX must stay out because docs/SALES_CHANNELS.md records the product decision
+// to keep it hidden until OLX partner/integrator access is practical.
+func TestProductionRegistry_ExposesWiredChannels(t *testing.T) {
+	repos := openSalesChannelAdapterRepos(t)
+	services := NewServices(repos, storage.NewLocalStorage(t.TempDir()), printer.NewManager(), realtime.NewHub())
+	registry := mustNewSalesChannelRegistry(services)
+
+	want := []saleschannel.ChannelID{
+		saleschannel.ChannelEtsy,
+		saleschannel.ChannelSquarespace,
+		saleschannel.ChannelShopify,
+		saleschannel.ChannelMercadoLivre,
+		saleschannel.ChannelShopee,
+	}
+
+	got := make([]saleschannel.ChannelID, 0, len(want))
+	for _, descriptor := range registry.Descriptors() {
+		got = append(got, descriptor.ID)
+	}
+
+	if len(got) != len(want) {
+		t.Fatalf("registry exposes %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("registry exposes %v, want %v", got, want)
+		}
+	}
+
+	// OLX must not leak into the API surface while it is disabled by decision.
+	if _, err := registry.Get(saleschannel.ChannelOLX); !errors.Is(err, saleschannel.ErrProviderNotFound) {
+		t.Fatalf("expected OLX to be absent, got err=%v", err)
+	}
+}

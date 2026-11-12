@@ -111,6 +111,11 @@ func main() {
 	// Reconnect all saved printers at startup
 	services.Printers.ConnectAllPrinters(context.Background())
 
+	// Keep retrying printers that are still offline. Without this call the
+	// reconnect loop existed but was never started, so a printer that missed
+	// its initial connection stayed offline until manually reconnected.
+	services.Printers.StartAutoReconnect(context.Background())
+
 	if etsyClientID != "" {
 		slog.Info("Etsy integration enabled", "redirect_uri", etsyRedirectURI)
 	} else {

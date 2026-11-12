@@ -277,6 +277,10 @@ func TestRouterRegistersAllExpectedRoutes(t *testing.T) {
 		{"GET", "/api/printers/{id}/jobs"},
 		{"GET", "/api/printers/{id}/stats"},
 
+		// Dispatch (per-printer auto-dispatch settings; used by PrinterDetail)
+		{"GET", "/api/dispatch/printers/{id}/dispatch-settings"},
+		{"PUT", "/api/dispatch/printers/{id}/dispatch-settings"},
+
 		// Materials
 		{"GET", "/api/materials/"},
 		{"POST", "/api/materials/"},

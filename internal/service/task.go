@@ -21,6 +21,10 @@ type TaskService struct {
 	checklistRepo *repository.TaskChecklistRepository
 	designRepo    *repository.DesignRepository
 	hub           *realtime.Hub
+
+	// onTaskCompleted runs after a task transitions to completed. It lets the
+	// order layer react without TaskService knowing about orders.
+	onTaskCompleted func(ctx context.Context, task *model.Task)
 }
 
 // NewTaskService creates a new TaskService.
@@ -42,6 +46,19 @@ func NewTaskService(
 		designRepo:    designRepo,
 		hub:           hub,
 	}
+}
+
+// SetOnTaskCompleted registers the callback invoked when a task completes.
+func (s *TaskService) SetOnTaskCompleted(fn func(ctx context.Context, task *model.Task)) {
+	s.onTaskCompleted = fn
+}
+
+// notifyTaskCompleted invokes the completion callback, if any.
+func (s *TaskService) notifyTaskCompleted(ctx context.Context, task *model.Task) {
+	if s.onTaskCompleted == nil || task == nil {
+		return
+	}
+	s.onTaskCompleted(ctx, task)
 }
 
 // Create creates a new task.
@@ -201,6 +218,11 @@ func (s *TaskService) UpdateStatus(ctx context.Context, id uuid.UUID, status mod
 	s.broadcastUpdate("task_status_updated", task)
 
 	slog.Info("task status updated", "id", id, "old_status", oldStatus, "new_status", status)
+
+	// A task reaching completion may complete its parent order.
+	if task != nil && status == model.TaskStatusCompleted && oldStatus != model.TaskStatusCompleted {
+		s.notifyTaskCompleted(ctx, task)
+	}
 	return nil
 }
 

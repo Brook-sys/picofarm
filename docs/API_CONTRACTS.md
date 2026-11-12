@@ -334,6 +334,7 @@ Representative route groups:
 - `/api/integrations/squarespace/*`
 - `/api/integrations/shopify/*`
 - `/api/bambu-cloud/*`
+- `GET`/`PUT /api/dispatch/printers/{id}/dispatch-settings` — per-printer auto-dispatch settings (enabled, require_confirmation, auto_start, timeout_minutes, macro_auto_dispatch_enabled, macro_empty_queue_gcode). Registered because the handlers and tests existed while the routes did not; the frontend calls this exact path.
 
 Primary contracts live in:
 
@@ -347,7 +348,9 @@ Primary contracts live in:
 
 Integration endpoints must be testable without real credentials. Use fake clients or conversion tests for CI.
 
-Sales-channel work should move toward provider descriptors, capabilities, generic connection status, external orders/products, product links, sync runs, and optional webhook events as documented in `docs/SALES_CHANNELS.md`. Keep legacy integration route contracts working until a dedicated migration/deprecation cycle explicitly changes them. Mercado Livre uses channel ID `mercado_livre`, OAuth + `offline_access` for refresh tokens, test users instead of a sandbox, and fake-client fixtures for CI. Shopee uses channel ID `shopee`, OAuth shop authorization plus signed HMAC-SHA256 V2 API calls, initial `orders_read` and `products_read` capabilities, fake-client-backed canonical order/product sync, post-MVP `inventory_write`/`webhooks`, fake-client/sandbox validation, and no real credentials in CI. OLX Brasil code may still use future channel ID `olx`, but the provider is disabled/hidden by default until partner/integrator API access is practical; do not expose it in the default `/api/sales-channels` contract unless explicitly re-enabled.
+Sales-channel work should move toward provider descriptors, capabilities, generic connection status, external orders/products, product links, sync runs, and optional webhook events as documented in `docs/SALES_CHANNELS.md`. Keep legacy integration route contracts working until a dedicated migration/deprecation cycle explicitly changes them. Mercado Livre uses channel ID `mercado_livre`, OAuth + `offline_access` for refresh tokens, test users instead of a sandbox, and fake-client fixtures for CI. Shopee uses channel ID `shopee`, OAuth shop authorization plus signed HMAC-SHA256 V2 API calls, initial `orders_read` and `products_read` capabilities, fake-client-backed canonical order/product sync, post-MVP `inventory_write`/`webhooks`, fake-client/sandbox validation, and no real credentials in CI.
+
+**Channels actually wired in the production registry** (`internal/service/service.go`, `mustNewSalesChannelRegistry`): Etsy, Squarespace, Shopify, Mercado Livre and Shopee. Of those, Etsy, Squarespace and Shopify have a real client or settings-backed credential, so `Status` can connect. Mercado Livre and Shopee are registered as descriptor-only shells: their providers have no credential source in this build, so `Status` reports disconnected and `Sync`/`LinkProduct`/`ProcessOrder` fail closed with `errSalesChannelReadModelPending`. Treat them as non-connectable until a client and settings keys are wired into the registry. OLX is deliberately **not** registered — `docs/SALES_CHANNELS.md` records the product decision to keep it hidden until OLX partner/integrator API access is practical. Consequence to be aware of: the `olx_api_key` setting and its Settings screen field currently feed nothing. The parity test `TestProductionRegistry_ExposesWiredChannels` pins this set so a channel cannot silently appear or disappear again.
 
 ### Notifications, alerts, backups, settings, and feedback
 

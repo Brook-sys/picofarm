@@ -512,6 +512,12 @@ func NewRouterWithOptions(services *service.Services, hub *realtime.Hub, opts Ro
 			r.Post("/requests/{id}/skip", dispatchHandler.Skip)
 			r.Get("/settings", dispatchHandler.GetGlobalSettings)
 			r.Put("/settings", dispatchHandler.UpdateGlobalSettings)
+			// Per-printer auto-dispatch settings. These handlers existed with
+			// test coverage but were never routed, so the PrinterDetail screen
+			// could not read or write them. The path below is the one the
+			// frontend already calls (web/src/api/client.ts, printersApi.dispatchSettings).
+			r.Get("/printers/{id}/dispatch-settings", dispatchHandler.GetPrinterSettings)
+			r.Put("/printers/{id}/dispatch-settings", dispatchHandler.UpdatePrinterSettings)
 		})
 
 		// Backups

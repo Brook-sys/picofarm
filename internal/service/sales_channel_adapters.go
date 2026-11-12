@@ -817,7 +817,7 @@ func (p *MercadoLivreSalesChannelProvider) Descriptor() saleschannel.ProviderDes
 
 func (p *MercadoLivreSalesChannelProvider) Status(ctx context.Context) (saleschannel.ConnectionStatus, error) {
 	status := saleschannel.ConnectionStatus{Channel: saleschannel.ChannelMercadoLivre}
-	if p.client == nil {
+	if p == nil || p.client == nil {
 		return status, nil
 	}
 	user, err := p.client.GetCurrentUser(ctx)
@@ -836,7 +836,7 @@ func (p *MercadoLivreSalesChannelProvider) Sync(ctx context.Context, kind salesc
 	if kind != saleschannel.SyncOrders && kind != saleschannel.SyncProducts && kind != saleschannel.SyncAll {
 		return result, errSalesChannelReadModelPending(saleschannel.ChannelMercadoLivre, string(kind))
 	}
-	if p.client == nil || p.repo == nil {
+	if p == nil || p.client == nil || p.repo == nil {
 		return result, errSalesChannelReadModelPending(saleschannel.ChannelMercadoLivre, "sync")
 	}
 	connection, err := p.upsertConnection(ctx)
@@ -915,7 +915,7 @@ func (p *MercadoLivreSalesChannelProvider) syncProducts(ctx context.Context, con
 }
 
 func (p *MercadoLivreSalesChannelProvider) ListOrders(ctx context.Context, filter saleschannel.OrderFilter) ([]saleschannel.ExternalOrder, error) {
-	if p.client == nil {
+	if p == nil || p.client == nil {
 		return nil, errSalesChannelReadModelPending(saleschannel.ChannelMercadoLivre, "orders")
 	}
 	order, err := p.client.GetOrder(ctx, filter.Status)
@@ -929,7 +929,7 @@ func (p *MercadoLivreSalesChannelProvider) ListOrders(ctx context.Context, filte
 }
 
 func (p *MercadoLivreSalesChannelProvider) GetOrder(ctx context.Context, externalID string) (*saleschannel.ExternalOrder, error) {
-	if p.client == nil {
+	if p == nil || p.client == nil {
 		return nil, errSalesChannelReadModelPending(saleschannel.ChannelMercadoLivre, "order")
 	}
 	order, err := p.client.GetOrder(ctx, externalID)
@@ -1007,7 +1007,7 @@ func mercadoLivreExternalProduct(item *mercadolivre.Item) saleschannel.ExternalP
 }
 
 func (p *MercadoLivreSalesChannelProvider) upsertConnection(ctx context.Context) (*saleschannel.Connection, error) {
-	if p.repo == nil {
+	if p == nil || p.repo == nil || p.client == nil {
 		return nil, errSalesChannelReadModelPending(saleschannel.ChannelMercadoLivre, "connection")
 	}
 	user, err := p.client.GetCurrentUser(ctx)
@@ -1032,11 +1032,11 @@ func (p *MercadoLivreSalesChannelProvider) ProcessOrder(context.Context, string)
 }
 
 func (p *MercadoLivreSalesChannelProvider) ListProducts(ctx context.Context, filter saleschannel.ProductFilter) ([]saleschannel.ExternalProduct, error) {
-	if p.repo != nil {
+	if p != nil && p.repo != nil {
 		filter.Channel = saleschannel.ChannelMercadoLivre
 		return p.repo.ListExternalProducts(ctx, filter)
 	}
-	if p.client == nil {
+	if p == nil || p.client == nil {
 		return nil, errSalesChannelReadModelPending(saleschannel.ChannelMercadoLivre, "products")
 	}
 	items, err := p.client.ListItems(ctx)
