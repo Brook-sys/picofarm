@@ -30,8 +30,8 @@ scripts/dev.sh push
 Defaults:
 
 ```sh
-PICOFARM_BIN=/tmp/daedalus-current
-PICOFARM_LOG=/tmp/opencode/daedalus-backend.log
+PICOFARM_BIN=/tmp/picofarm-current
+PICOFARM_LOG=/tmp/opencode/picofarm-backend.log
 PICOFARM_PORT=8084
 PICOFARM_REMOTE=picofarm
 PICOFARM_BRANCH=main

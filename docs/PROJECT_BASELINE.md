@@ -4,11 +4,11 @@ This document defines the current operational baseline for PicoFarm. Use it befo
 
 ## Current project identity
 
-- Repository path: `/home/alpine/picofarm`
+- Repository path: local clone (path varies per machine; never commit absolute home paths into docs)
 - Primary branch: `main`
 - Normal push target: `picofarm main`
 - Version file: `VERSION`
-- Current application name in code/docs: PicoFarm, with some legacy Daedalus references still present in older docs and helper paths.
+- Current application name in code/docs: PicoFarm. The legacy Daedalus name only survives in a few places outside the runtime path (the marketing/docs site under `site/` and the historical SQL under `migrations/`, which no code executes).
 
 ## Stack
 
@@ -16,7 +16,7 @@ This document defines the current operational baseline for PicoFarm. Use it befo
 | --- | --- |
 | Backend | Go module `github.com/Brook-sys/picofarm`, Go `1.24.0` in `go.mod` |
 | HTTP API | `go-chi/chi` router in `internal/api` |
-| Database | SQLite via `github.com/glebarez/go-sqlite`, migrations in `migrations/` and bootstrap logic in `internal/database` |
+| Database | SQLite via `github.com/glebarez/go-sqlite`, with the schema embedded in the binary (`internal/database/schema.sql`) applied on startup, plus idempotent in-Go compatibility migrations for older databases |
 | Frontend | React 19, TypeScript 5.9, Vite 7, Tailwind CSS 4 |
 | Realtime | WebSocket hub in `internal/realtime`; browser hook in `web/src/hooks/useWebSocket.ts` |
 | Integrations | Etsy, Squarespace, Bambu Lab, OctoPrint, Moonraker/Klipper |
@@ -36,19 +36,17 @@ Backend defaults are defined from `cmd/server/main.go` and database helpers:
 | `SENTRY_DSN` | unset | Optional error reporting |
 | `ETSY_CLIENT_ID` | unset | Optional Etsy integration |
 | `ETSY_WEBHOOK_SECRET` | unset | Optional Etsy webhook signing secret. When set, events with a missing or invalid `X-Etsy-Signature` are rejected with `401` instead of accepted |
-| `ETSY_REDIRECT_URI` | `http://localhost:8080/api/integrations/etsy/callback` in `Makefile` | Check this before production/self-hosted use because backend defaults to port `8084` |
+| `ETSY_REDIRECT_URI` | `http://localhost:8084/api/integrations/etsy/callback` in `Makefile` | Matches the backend default port; override it when the app is reachable on another host/port |
 
 Local helper script defaults from `AGENTS.md` and `scripts/dev.sh`:
 
 | Variable | Default |
 | --- | --- |
-| `PICOFARM_BIN` | `/tmp/daedalus-current` |
-| `PICOFARM_LOG` | `/tmp/opencode/daedalus-backend.log` |
+| `PICOFARM_BIN` | `/tmp/picofarm-current` |
+| `PICOFARM_LOG` | `/tmp/opencode/picofarm-backend.log` |
 | `PICOFARM_PORT` | `8084` |
 | `PICOFARM_REMOTE` | `picofarm` |
 | `PICOFARM_BRANCH` | `main` |
-
-`/tmp/daedalus-current` and related log paths are legacy names. Treat them as local helper details, not product identity.
 
 ## Canonical validation commands
 
@@ -74,7 +72,7 @@ scripts/dev.sh health
 scripts/dev.sh logs
 ```
 
-`script/dev.sh` is intentionally local-only in this workspace and must not be committed unless the project policy changes.
+`scripts/dev.sh` is intentionally local-only in this workspace and must not be committed unless the project policy changes.
 
 ## Current known validation output
 

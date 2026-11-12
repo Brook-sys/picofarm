@@ -4,7 +4,7 @@
 
 A comprehensive platform for makers and small 3D print farms. Manage your product catalog, track orders from multiple sales channels, and coordinate print jobs across your printer fleet.
 
-Runs as a self-hosted/local web app. Some legacy desktop/Wails and Daedalus references may still exist in older project files; use the docs below as the current operational baseline.
+Runs as a self-hosted/local web app. The product is browser-only: the legacy desktop/Wails build is gone, and the binary (`bin/server`) serves both the API and the built frontend from `web/dist`.
 
 ## Documentation
 
@@ -51,7 +51,6 @@ Projects (product catalog)
 | Frontend | React 19, TypeScript, Tailwind CSS 4, TanStack Query v5 |
 | Database | SQLite (embedded, WAL mode) |
 | Real-time | WebSocket |
-| Desktop | Wails v2 |
 | Build | Vite 7 |
 | Deployment | Docker |
 
@@ -61,7 +60,6 @@ Projects (product catalog)
 
 - Go 1.24+
 - Node.js 20+
-- (Optional) [Wails CLI](https://wails.io/docs/gettingstarted/installation) for desktop builds
 
 ### 1. Install Dependencies
 
@@ -76,35 +74,20 @@ make deps
 make dev
 
 # Or run separately:
-make backend   # Go server on :8080
+make backend   # Go server on :8084
 make frontend  # Vite dev server on :5173
 ```
 
 ### 3. Open the App
 
-Navigate to `http://localhost:5173`
+During development, point the browser at the Vite server on `http://localhost:5173` (it proxies `/api` to the backend). In a production build, the backend itself serves `web/dist` on the same port.
 
-The SQLite database is created automatically at `~/.daedalus/daedalus.db` with migrations applied on startup.
-
-### Desktop App (Wails)
-
-```bash
-# Development with hot reload
-wails dev
-
-# Production build
-wails build -platform darwin   # macOS
-wails build -platform windows  # Windows
-```
-
-The built app is output to `build/bin/`.
+The SQLite database is created automatically at `~/.picofarm/picofarm.db`, with the schema embedded in the binary applied on startup.
 
 ## Project Structure
 
 ```
 ├── cmd/server/           # Go entry point (standalone server)
-├── main.go               # Wails desktop app entry point
-├── app.go                # Wails app lifecycle
 ├── internal/
 │   ├── api/              # HTTP handlers & router
 │   ├── service/          # Business logic
@@ -130,7 +113,7 @@ The built app is output to `build/bin/`.
 │       └── lib/          # Utilities
 ├── Makefile              # Build automation
 ├── Dockerfile            # Multi-stage production build
-└── wails.json            # Wails desktop app config
+└── site/                 # Docs/marketing site (Next.js; Vercel deploy is disabled)
 ```
 
 ## API Endpoints
@@ -280,25 +263,28 @@ make test
 ### Docker
 
 ```bash
-docker build -t daedalus .
-docker run -p 8080:8080 -v daedalus-data:/app/data daedalus
+docker build -t picofarm .
+docker run -p 8084:8084 -v picofarm-data:/data picofarm
 ```
 
 ## Environment Variables
 
+Only the variables below are actually read by the code (`cmd/server/main.go`, `internal/api/router.go`, `internal/crypto`):
+
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `DATABASE_PATH` | `~/.daedalus/daedalus.db` | SQLite database file path |
-| `PORT` | `8080` | Backend server port |
+| `PORT` | `8084` | Backend HTTP server port |
+| `DATABASE_PATH` | `~/.picofarm/picofarm.db` | SQLite database file path |
 | `UPLOAD_DIR` | `./uploads` | File storage directory |
-| `STATIC_DIR` | `./web/dist` | Frontend static files |
-| `REQUIRE_AUTH` | `false` | Enable authentication |
-| `JWT_SECRET` | - | Secret for JWT signing (required if auth enabled) |
-| `ETSY_CLIENT_ID` | - | Etsy OAuth app ID |
-| `ETSY_WEBHOOK_SECRET` | - | Etsy webhook signing secret; when set, unsigned or badly signed webhook events get `401` |
-| `ETSY_REDIRECT_URI` | - | Etsy OAuth callback URL |
-| `SQUARESPACE_API_KEY` | - | Squarespace API key |
-| `FRONTEND_URL` | `http://localhost:5173` | Frontend URL (for CORS in dev) |
+| `STATIC_DIR` | `./web/dist` | Static frontend assets served by the backend |
+| `ALLOWED_ORIGINS` | unset | Comma-separated CORS origins; unset allows local development origins only |
+| `API_TOKEN` | unset | When set, requests need `Authorization: Bearer <token>`. Note this also blocks the Etsy webhook unless the caller presents the token |
+| `ENCRYPTION_KEY` | unset | Key used to encrypt integration settings at rest |
+| `ENVIRONMENT` | unset | When `production`, enables production-oriented behavior (Sentry, stricter CORS) |
+| `SENTRY_DSN` | unset | Optional error reporting |
+| `ETSY_CLIENT_ID` | unset | Etsy OAuth app ID |
+| `ETSY_REDIRECT_URI` | `http://localhost:8084/api/integrations/etsy/callback` (Makefile) | Etsy OAuth callback URL |
+| `ETSY_WEBHOOK_SECRET` | unset | Etsy webhook signing secret; when set, unsigned or badly signed webhook events get `401` |
 
 ## License
 
