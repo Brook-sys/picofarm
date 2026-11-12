@@ -18,7 +18,7 @@ export default function Archives() {
     <div className="p-6">
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-2xl font-semibold">Print Archives</h1>
-        <a className="btn btn-secondary" href="/api/archives/log/export">Export CSV</a>
+        <a className="btn btn-secondary" href={archivesApi.exportCSV()}>Export CSV</a>
       </div>
       <div className="card overflow-hidden">
         <table className="w-full text-sm">

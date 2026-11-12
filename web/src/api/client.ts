@@ -604,7 +604,11 @@ export const archivesApi = {
     fetchApi<import('../types').PrintArchive>('/archives', { method: 'POST', body: JSON.stringify(data) }),
   compare: (a: string, b: string) =>
     fetchApi<unknown>(`/archives/compare?a=${a}&b=${b}`),
-  exportCSV: () => `/archives/log/export`,
+  // Browser download, not a fetchApi call: the anchor needs the absolute URL
+  // because the API may live on another origin than the app (VITE_API_URL).
+  // The old body returned a bare "/archives/log/export", missing the /api
+  // prefix, so it never pointed at the real route.
+  exportCSV: () => `${API_URL}/api/archives/log/export`,
 }
 
 // Materials API
