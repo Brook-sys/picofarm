@@ -2,133 +2,16 @@ package api
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
 
+	"github.com/Brook-sys/picofarm/internal/model"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
-	"github.com/Brook-sys/picofarm/internal/model"
 )
-
-// MockSquarespaceService is a mock implementation for testing.
-type MockSquarespaceService struct {
-	ConnectFunc               func(ctx context.Context, apiKey string) (*model.SquarespaceIntegration, error)
-	DisconnectFunc            func(ctx context.Context) error
-	GetStatusFunc             func(ctx context.Context) (*model.SquarespaceIntegration, error)
-	SyncOrdersFunc            func(ctx context.Context) (*model.SyncResult, error)
-	ListOrdersFunc            func(ctx context.Context, processed *bool, limit, offset int) ([]model.SquarespaceOrder, error)
-	GetOrderFunc              func(ctx context.Context, id uuid.UUID) (*model.SquarespaceOrder, error)
-	ProcessOrderFunc          func(ctx context.Context, orderID uuid.UUID) (*model.Project, error)
-	SyncProductsFunc          func(ctx context.Context) (*model.SyncResult, error)
-	ListProductsFunc          func(ctx context.Context, limit, offset int) ([]model.SquarespaceProduct, error)
-	GetProductFunc            func(ctx context.Context, id uuid.UUID) (*model.SquarespaceProduct, error)
-	LinkProductToTemplateFunc func(ctx context.Context, productID, templateID uuid.UUID, sku string) error
-	UnlinkProductFromTemplateFunc func(ctx context.Context, productID, templateID uuid.UUID) error
-}
-
-func (m *MockSquarespaceService) Connect(ctx context.Context, apiKey string) (*model.SquarespaceIntegration, error) {
-	if m.ConnectFunc != nil {
-		return m.ConnectFunc(ctx, apiKey)
-	}
-	return nil, nil
-}
-
-func (m *MockSquarespaceService) Disconnect(ctx context.Context) error {
-	if m.DisconnectFunc != nil {
-		return m.DisconnectFunc(ctx)
-	}
-	return nil
-}
-
-func (m *MockSquarespaceService) GetStatus(ctx context.Context) (*model.SquarespaceIntegration, error) {
-	if m.GetStatusFunc != nil {
-		return m.GetStatusFunc(ctx)
-	}
-	return nil, nil
-}
-
-func (m *MockSquarespaceService) SyncOrders(ctx context.Context) (*model.SyncResult, error) {
-	if m.SyncOrdersFunc != nil {
-		return m.SyncOrdersFunc(ctx)
-	}
-	return &model.SyncResult{}, nil
-}
-
-func (m *MockSquarespaceService) ListOrders(ctx context.Context, processed *bool, limit, offset int) ([]model.SquarespaceOrder, error) {
-	if m.ListOrdersFunc != nil {
-		return m.ListOrdersFunc(ctx, processed, limit, offset)
-	}
-	return []model.SquarespaceOrder{}, nil
-}
-
-func (m *MockSquarespaceService) GetOrder(ctx context.Context, id uuid.UUID) (*model.SquarespaceOrder, error) {
-	if m.GetOrderFunc != nil {
-		return m.GetOrderFunc(ctx, id)
-	}
-	return nil, nil
-}
-
-func (m *MockSquarespaceService) ProcessOrder(ctx context.Context, orderID uuid.UUID) (*model.Project, error) {
-	if m.ProcessOrderFunc != nil {
-		return m.ProcessOrderFunc(ctx, orderID)
-	}
-	return nil, nil
-}
-
-func (m *MockSquarespaceService) SyncProducts(ctx context.Context) (*model.SyncResult, error) {
-	if m.SyncProductsFunc != nil {
-		return m.SyncProductsFunc(ctx)
-	}
-	return &model.SyncResult{}, nil
-}
-
-func (m *MockSquarespaceService) ListProducts(ctx context.Context, limit, offset int) ([]model.SquarespaceProduct, error) {
-	if m.ListProductsFunc != nil {
-		return m.ListProductsFunc(ctx, limit, offset)
-	}
-	return []model.SquarespaceProduct{}, nil
-}
-
-func (m *MockSquarespaceService) GetProduct(ctx context.Context, id uuid.UUID) (*model.SquarespaceProduct, error) {
-	if m.GetProductFunc != nil {
-		return m.GetProductFunc(ctx, id)
-	}
-	return nil, nil
-}
-
-func (m *MockSquarespaceService) LinkProductToTemplate(ctx context.Context, productID, templateID uuid.UUID, sku string) error {
-	if m.LinkProductToTemplateFunc != nil {
-		return m.LinkProductToTemplateFunc(ctx, productID, templateID, sku)
-	}
-	return nil
-}
-
-func (m *MockSquarespaceService) UnlinkProductFromTemplate(ctx context.Context, productID, templateID uuid.UUID) error {
-	if m.UnlinkProductFromTemplateFunc != nil {
-		return m.UnlinkProductFromTemplateFunc(ctx, productID, templateID)
-	}
-	return nil
-}
-
-// SquarespaceServiceInterface defines the interface for the service
-type SquarespaceServiceInterface interface {
-	Connect(ctx context.Context, apiKey string) (*model.SquarespaceIntegration, error)
-	Disconnect(ctx context.Context) error
-	GetStatus(ctx context.Context) (*model.SquarespaceIntegration, error)
-	SyncOrders(ctx context.Context) (*model.SyncResult, error)
-	ListOrders(ctx context.Context, processed *bool, limit, offset int) ([]model.SquarespaceOrder, error)
-	GetOrder(ctx context.Context, id uuid.UUID) (*model.SquarespaceOrder, error)
-	ProcessOrder(ctx context.Context, orderID uuid.UUID) (*model.Project, error)
-	SyncProducts(ctx context.Context) (*model.SyncResult, error)
-	ListProducts(ctx context.Context, limit, offset int) ([]model.SquarespaceProduct, error)
-	GetProduct(ctx context.Context, id uuid.UUID) (*model.SquarespaceProduct, error)
-	LinkProductToTemplate(ctx context.Context, productID, templateID uuid.UUID, sku string) error
-	UnlinkProductFromTemplate(ctx context.Context, productID, templateID uuid.UUID) error
-}
 
 func TestSquarespaceHandler_Connect(t *testing.T) {
 	t.Run("success", func(t *testing.T) {

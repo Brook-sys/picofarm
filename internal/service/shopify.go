@@ -431,11 +431,3 @@ func (s *ShopifyService) LinkProductToProject(ctx context.Context, productID str
 func (s *ShopifyService) UnlinkProductFromProject(ctx context.Context, productID string, projectID uuid.UUID) error {
 	return s.shopifyRepo.DeleteProductTemplate(ctx, productID, projectID)
 }
-
-func (s *ShopifyService) LinkProductToTemplate(ctx context.Context, productID string, templateID uuid.UUID, sku string) error {
-	return s.LinkProductToProject(ctx, productID, templateID, sku)
-}
-
-func (s *ShopifyService) UnlinkProductFromTemplate(ctx context.Context, productID string, templateID uuid.UUID) error {
-	return s.UnlinkProductFromProject(ctx, productID, templateID)
-}

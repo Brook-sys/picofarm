@@ -565,14 +565,6 @@ func (s *SquarespaceService) UnlinkProductFromProject(ctx context.Context, produ
 	return s.repo.DeleteProductTemplate(ctx, product.SquarespaceProductID, projectID)
 }
 
-func (s *SquarespaceService) LinkProductToTemplate(ctx context.Context, productID uuid.UUID, templateID uuid.UUID, sku string) error {
-	return s.LinkProductToProject(ctx, productID, templateID, sku)
-}
-
-func (s *SquarespaceService) UnlinkProductFromTemplate(ctx context.Context, productID uuid.UUID, templateID uuid.UUID) error {
-	return s.UnlinkProductFromProject(ctx, productID, templateID)
-}
-
 // GetProductTemplates retrieves templates linked to a product.
 func (s *SquarespaceService) GetProductTemplates(ctx context.Context, productID uuid.UUID) ([]model.SquarespaceProductProject, error) {
 	product, err := s.repo.GetProductByID(ctx, productID)
