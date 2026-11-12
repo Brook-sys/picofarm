@@ -29,7 +29,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useProject, useParts, useCreatePart, useUpdateProject } from '../hooks/useProjects'
 import { usePrinters, usePrinterStates } from '../hooks/usePrinters'
 import { useSpoolsWithMaterials } from '../hooks/useMaterials'
-import { designsApi, printJobsApi, projectsApi, partsApi, suppliesApi, materialsApi, queueApi, gcodeLibraryApi, fileLibraryApi, fileApi, enqueueProjectParts } from '../api/client'
+import { designsApi, printJobsApi, projectsApi, partsApi, suppliesApi, materialsApi, queueApi, gcodeLibraryApi, fileLibraryApi, fileApi, tagsApi, enqueueProjectParts } from '../api/client'
 import { cn, getStatusBadge, formatBytes, formatRelativeTime } from '../lib/utils'
 import { useCurrency } from '../hooks/useCurrency'
 import AppToast, { type AppToastState } from '../components/AppToast'
@@ -37,6 +37,7 @@ import { FailureModal } from '../components/FailureModal'
 import { ExpandableJobEvents } from '../components/JobEventTimeline'
 import { Tooltip } from '../components/Tooltip'
 import GCodeFilePicker from '../components/GCodeFilePicker'
+import TagSelector from '../components/TagSelector'
 import { STLViewer3D } from '../components/STLViewer3D'
 import type { Design, Part, Material, PrintJob, ProjectSummary, ProjectSupply, GCodeLibraryFile, STLLibraryFile } from '../types'
 
@@ -658,6 +659,13 @@ function PartCard({
     queryKey: ['designs', part.id],
     queryFn: () => designsApi.listByPart(part.id),
   })
+  // Tags for this part. The tag API and the TagSelector component both
+  // existed; nothing ever rendered the selector, so tags could only be managed
+  // through direct API calls.
+  const { data: partTags = [] } = useQuery({
+    queryKey: ['part-tags', part.id],
+    queryFn: () => tagsApi.getPartTags(part.id),
+  })
   const { data: library } = useQuery({ queryKey: ['file-library'], queryFn: () => fileLibraryApi.get() })
   const { data: spools = [] } = useSpoolsWithMaterials()
   const availableSpools = spools.filter(spool => spool.status !== 'empty' && spool.status !== 'archived' && spool.material)
@@ -785,6 +793,16 @@ function PartCard({
           {part.description && (
             <p className="text-sm text-surface-500 mt-1">{part.description}</p>
           )}
+
+          {/* Tags */}
+          <div className="mt-2">
+            <TagSelector
+              entityType="part"
+              entityId={part.id}
+              selectedTags={partTags}
+              onChange={(tags) => queryClient.setQueryData(['part-tags', part.id], tags)}
+            />
+          </div>
 
         </div>
         <div className="flex items-center gap-2">
