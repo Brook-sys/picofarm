@@ -198,29 +198,6 @@ func (r *SaleRepository) GetSalesOverTime(ctx context.Context, since time.Time, 
 	return result, rows.Err()
 }
 
-// GetNetOverTime returns net_cents grouped by date bucket in one currency.
-func (r *SaleRepository) GetNetOverTime(ctx context.Context, since time.Time, strftimeFmt, currency string) ([]TimeSeriesRow, error) {
-	rows, err := r.db.QueryContext(ctx, `
-		SELECT strftime(?, occurred_at) AS bucket, COALESCE(SUM(net_cents), 0)
-		FROM sales WHERE occurred_at >= ? AND currency = ?
-		GROUP BY bucket ORDER BY bucket
-	`, strftimeFmt, since, currency)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var result []TimeSeriesRow
-	for rows.Next() {
-		var row TimeSeriesRow
-		if err := rows.Scan(&row.DateBucket, &row.Total); err != nil {
-			return nil, err
-		}
-		result = append(result, row)
-	}
-	return result, rows.Err()
-}
-
 // GetSalesByChannel returns gross_cents and count grouped by channel.
 func (r *SaleRepository) GetSalesByChannel(ctx context.Context, since time.Time, currency string) ([]ChannelBreakdownRow, error) {
 	rows, err := r.db.QueryContext(ctx, `

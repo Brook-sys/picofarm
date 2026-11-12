@@ -10,9 +10,8 @@ import (
 )
 
 const (
-	bambuAPIBase = "https://api.bambulab.com"
+	bambuAPIBase   = "https://api.bambulab.com"
 	bambuUserAgent = "bambu_network_agent/01.09.05.01"
-	cloudMQTTBrokerUS = "us.mqtt.bambulab.com"
 )
 
 // CloudClient handles communication with the Bambu Cloud API.
@@ -282,11 +281,6 @@ func (c *CloudClient) RefreshToken(refreshToken string) (*LoginResponse, error) 
 	}
 
 	return &loginResp, nil
-}
-
-// CloudMQTTBroker returns the cloud MQTT broker address for the given region.
-func CloudMQTTBroker() string {
-	return cloudMQTTBrokerUS
 }
 
 // setHeaders sets the required headers for Bambu API requests.

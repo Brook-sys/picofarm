@@ -186,13 +186,6 @@ func (h *Hub) readPump(client *Client) {
 	}
 }
 
-// ClientCount returns the number of connected clients.
-func (h *Hub) ClientCount() int {
-	h.mu.RLock()
-	defer h.mu.RUnlock()
-	return len(h.clients)
-}
-
 // Stop gracefully shuts down the hub, closing all client connections.
 func (h *Hub) Stop() {
 	h.mu.RLock()
@@ -204,4 +197,3 @@ func (h *Hub) Stop() {
 
 	close(h.stop)
 }
-

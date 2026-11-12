@@ -1,33 +1,33 @@
 package printer
 
 import (
-	"strconv"
 	"context"
 	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/Brook-sys/picofarm/internal/model"
+	"github.com/google/uuid"
 )
 
 // DiscoveredPrinter represents a printer found on the network.
 type DiscoveredPrinter struct {
-	ID             string              `json:"id"`
-	Name           string              `json:"name"`
-	Host           string              `json:"host"`
-	Port           int                 `json:"port"`
-	Type           model.ConnectionType `json:"type"`
-	Model          string              `json:"model,omitempty"`
-	Manufacturer   string              `json:"manufacturer,omitempty"`
-	Version        string              `json:"version,omitempty"`
-	SerialNumber   string              `json:"serial_number,omitempty"`
-	AlreadyAdded   bool                `json:"already_added"`
+	ID           string               `json:"id"`
+	Name         string               `json:"name"`
+	Host         string               `json:"host"`
+	Port         int                  `json:"port"`
+	Type         model.ConnectionType `json:"type"`
+	Model        string               `json:"model,omitempty"`
+	Manufacturer string               `json:"manufacturer,omitempty"`
+	Version      string               `json:"version,omitempty"`
+	SerialNumber string               `json:"serial_number,omitempty"`
+	AlreadyAdded bool                 `json:"already_added"`
 }
 
 // Discovery handles automatic printer discovery on the local network.
@@ -66,10 +66,10 @@ func (d *Discovery) ScanNetwork(ctx context.Context) ([]DiscoveredPrinter, error
 			end = len(ips)
 		}
 		batch := ips[i:end]
-		
+
 		var wg sync.WaitGroup
 		var mu sync.Mutex
-		
+
 		for _, ip := range batch {
 			wg.Add(1)
 			go func(ip string) {
@@ -83,7 +83,7 @@ func (d *Discovery) ScanNetwork(ctx context.Context) ([]DiscoveredPrinter, error
 			}(ip)
 		}
 		wg.Wait()
-		
+
 		// Small delay between batches
 		time.Sleep(50 * time.Millisecond)
 	}
@@ -98,16 +98,16 @@ func (d *Discovery) probeHost(ctx context.Context, host string) []DiscoveredPrin
 
 	// Check common printer ports
 	ports := []struct {
-		port    int
-		check   func(ctx context.Context, host string, port int) *DiscoveredPrinter
+		port  int
+		check func(ctx context.Context, host string, port int) *DiscoveredPrinter
 	}{
-		{80, d.checkOctoPrint},      // OctoPrint default
-		{5000, d.checkOctoPrint},    // OctoPrint alt port
-		{7125, d.checkMoonraker},    // Moonraker default
-		{80, d.checkMoonraker},      // Moonraker behind proxy
-		{8883, d.checkBambu},        // Bambu Lab MQTT
-		{3000, d.checkChiTu},        // ChiTu/Elegoo resin printers
-		{6000, d.checkChiTu},        // ChiTu alt port
+		{80, d.checkOctoPrint},   // OctoPrint default
+		{5000, d.checkOctoPrint}, // OctoPrint alt port
+		{7125, d.checkMoonraker}, // Moonraker default
+		{80, d.checkMoonraker},   // Moonraker behind proxy
+		{8883, d.checkBambu},     // Bambu Lab MQTT
+		{3000, d.checkChiTu},     // ChiTu/Elegoo resin printers
+		{6000, d.checkChiTu},     // ChiTu alt port
 	}
 
 	for _, p := range ports {
@@ -156,14 +156,14 @@ func (d *Discovery) isPortOpenTimeout(host string, port int, timeout time.Durati
 // checkOctoPrint probes for OctoPrint API.
 func (d *Discovery) checkOctoPrint(ctx context.Context, host string, port int) *DiscoveredPrinter {
 	url := fmt.Sprintf("http://%s:%d/api/version", host, port)
-	
+
 	// Use a transport that closes idle connections
 	transport := &http.Transport{
 		DisableKeepAlives: true,
 	}
 	client := &http.Client{Timeout: d.timeout, Transport: transport}
 	req, _ := http.NewRequestWithContext(ctx, "GET", url, nil)
-	
+
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil
@@ -181,24 +181,24 @@ func (d *Discovery) checkOctoPrint(ctx context.Context, host string, port int) *
 		Server string `json:"server"`
 		Text   string `json:"text"`
 	}
-	
+
 	body := make([]byte, 1024)
 	n, _ := resp.Body.Read(body)
 	bodyStr := string(body[:n])
-	
+
 	// Verify this is OctoPrint - must have "OctoPrint" in response
 	if !strings.Contains(bodyStr, "OctoPrint") && !strings.Contains(bodyStr, "octoprint") {
 		return nil
 	}
-	
+
 	// Parse JSON for version info
 	if err := json.Unmarshal(body[:n], &version); err != nil {
 		// Still return if we found OctoPrint string
 		version.Server = "unknown"
 	}
-	
+
 	name := fmt.Sprintf("OctoPrint @ %s", host)
-	
+
 	return &DiscoveredPrinter{
 		ID:           uuid.New().String(),
 		Name:         name,
@@ -213,11 +213,11 @@ func (d *Discovery) checkOctoPrint(ctx context.Context, host string, port int) *
 // checkMoonraker probes for Moonraker API.
 func (d *Discovery) checkMoonraker(ctx context.Context, host string, port int) *DiscoveredPrinter {
 	url := fmt.Sprintf("http://%s:%d/server/info", host, port)
-	
+
 	transport := &http.Transport{DisableKeepAlives: true}
 	client := &http.Client{Timeout: d.timeout, Transport: transport}
 	req, _ := http.NewRequestWithContext(ctx, "GET", url, nil)
-	
+
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil
@@ -232,18 +232,18 @@ func (d *Discovery) checkMoonraker(ctx context.Context, host string, port int) *
 	body := make([]byte, 2048)
 	n, _ := resp.Body.Read(body)
 	bodyStr := string(body[:n])
-	
+
 	// Moonraker response should contain "moonraker" or "klippy"
 	isMoonraker := strings.Contains(strings.ToLower(bodyStr), "moonraker") ||
 		strings.Contains(strings.ToLower(bodyStr), "klippy") ||
 		strings.Contains(strings.ToLower(bodyStr), "klipper")
-	
+
 	if !isMoonraker {
 		return nil
 	}
-	
+
 	name := fmt.Sprintf("Klipper @ %s", host)
-	
+
 	return &DiscoveredPrinter{
 		ID:           uuid.New().String(),
 		Name:         name,
@@ -282,7 +282,7 @@ func (d *Discovery) checkChiTu(ctx context.Context, host string, port int) *Disc
 		body := make([]byte, 2048)
 		n, _ := resp.Body.Read(body)
 		resp.Body.Close()
-		
+
 		bodyStr := string(body[:n])
 		bodyLower := strings.ToLower(bodyStr)
 
@@ -506,142 +506,6 @@ func (d *Discovery) checkBambu(ctx context.Context, host string, port int) *Disc
 	return printer
 }
 
-// ScanSSDPBambu performs SSDP discovery specifically for Bambu printers.
-// Bambu printers advertise via SSDP with specific device types.
-func (d *Discovery) ScanSSDPBambu(ctx context.Context) ([]DiscoveredPrinter, error) {
-	var printers []DiscoveredPrinter
-	var mu sync.Mutex
-
-	// Multiple SSDP search targets to try
-	searchTargets := []string{
-		"urn:bambulab-com:device:3dprinter:1",
-		"ssdp:all",
-		"upnp:rootdevice",
-	}
-
-	for _, st := range searchTargets {
-		found, err := d.sendSSDPSearch(ctx, st)
-		if err != nil {
-			slog.Debug("SSDP search failed", "target", st, "error", err)
-			continue
-		}
-		mu.Lock()
-		printers = append(printers, found...)
-		mu.Unlock()
-	}
-
-	// Deduplicate by host
-	seen := make(map[string]bool)
-	var unique []DiscoveredPrinter
-	for _, p := range printers {
-		if !seen[p.Host] {
-			seen[p.Host] = true
-			unique = append(unique, p)
-		}
-	}
-
-	return unique, nil
-}
-
-// sendSSDPSearch sends an SSDP M-SEARCH and collects Bambu responses.
-func (d *Discovery) sendSSDPSearch(_ context.Context, searchTarget string) ([]DiscoveredPrinter, error) {
-	var printers []DiscoveredPrinter
-
-	// SSDP M-SEARCH request
-	ssdpAddr := "239.255.255.250:1900"
-	searchMsg := fmt.Sprintf("M-SEARCH * HTTP/1.1\r\n"+
-		"HOST: 239.255.255.250:1900\r\n"+
-		"MAN: \"ssdp:discover\"\r\n"+
-		"MX: 3\r\n"+
-		"ST: %s\r\n"+
-		"\r\n", searchTarget)
-
-	// Create UDP socket
-	addr, err := net.ResolveUDPAddr("udp4", ssdpAddr)
-	if err != nil {
-		return nil, err
-	}
-
-	conn, err := net.ListenUDP("udp4", nil)
-	if err != nil {
-		return nil, err
-	}
-	defer conn.Close()
-
-	// Send discovery request multiple times for reliability
-	for i := 0; i < 3; i++ {
-		conn.WriteToUDP([]byte(searchMsg), addr)
-		time.Sleep(100 * time.Millisecond)
-	}
-
-	// Set read deadline
-	conn.SetReadDeadline(time.Now().Add(5 * time.Second)) //nolint:errcheck // best-effort deadline
-
-	// Read responses
-	buffer := make([]byte, 4096)
-	for {
-		n, remoteAddr, err := conn.ReadFromUDP(buffer)
-		if err != nil {
-			break // Timeout or error
-		}
-
-		response := string(buffer[:n])
-		responseLower := strings.ToLower(response)
-		
-		// Check for Bambu-specific identifiers
-		isBambu := strings.Contains(responseLower, "bambu") ||
-			strings.Contains(responseLower, "bbl") ||
-			strings.Contains(responseLower, "x1c") ||
-			strings.Contains(responseLower, "p1p") ||
-			strings.Contains(responseLower, "p1s") ||
-			strings.Contains(responseLower, "a1 mini") ||
-			strings.Contains(responseLower, "a1mini")
-
-		if isBambu {
-			printer := DiscoveredPrinter{
-				ID:           uuid.New().String(),
-				Name:         fmt.Sprintf("Bambu Printer @ %s", remoteAddr.IP.String()),
-				Host:         remoteAddr.IP.String(),
-				Port:         8883,
-				Type:         model.ConnectionTypeBambuLAN,
-				Manufacturer: "Bambu Lab",
-			}
-
-			// Parse headers for more info
-			lines := strings.Split(response, "\r\n")
-			for _, line := range lines {
-				lineLower := strings.ToLower(line)
-				if strings.HasPrefix(lineLower, "usn:") {
-					usn := strings.TrimSpace(line[4:])
-					printer.Model = usn
-					// Try to extract model name
-					if strings.Contains(usn, "X1") {
-						printer.Name = fmt.Sprintf("Bambu X1 @ %s", remoteAddr.IP.String())
-					} else if strings.Contains(usn, "P1P") {
-						printer.Name = fmt.Sprintf("Bambu P1P @ %s", remoteAddr.IP.String())
-					} else if strings.Contains(usn, "P1S") {
-						printer.Name = fmt.Sprintf("Bambu P1S @ %s", remoteAddr.IP.String())
-					} else if strings.Contains(usn, "A1") {
-						printer.Name = fmt.Sprintf("Bambu A1 @ %s", remoteAddr.IP.String())
-					}
-				}
-				if strings.HasPrefix(lineLower, "server:") {
-					printer.Version = strings.TrimSpace(line[7:])
-				}
-				if strings.HasPrefix(lineLower, "location:") {
-					// Location header might have useful info
-					slog.Debug("Bambu location", "location", line)
-				}
-			}
-
-			slog.Info("found Bambu printer", "host", printer.Host, "name", printer.Name)
-			printers = append(printers, printer)
-		}
-	}
-
-	return printers, nil
-}
-
 // getLocalNetwork returns the local IP and network CIDR.
 func getLocalNetwork() (string, *net.IPNet, error) {
 	addrs, err := net.InterfaceAddrs()
@@ -663,10 +527,10 @@ func getLocalNetwork() (string, *net.IPNet, error) {
 // generateIPRange generates all IPs in a /24 network.
 func generateIPRange(network *net.IPNet) []string {
 	var ips []string
-	
+
 	// For simplicity, assume /24 network
 	ip := network.IP.Mask(network.Mask)
-	
+
 	for i := 1; i < 255; i++ {
 		newIP := make(net.IP, len(ip))
 		copy(newIP, ip)
@@ -675,82 +539,6 @@ func generateIPRange(network *net.IPNet) []string {
 	}
 
 	return ips
-}
-
-// ScanBambuUDP uses Bambu's native UDP discovery protocol on port 2021.
-func (d *Discovery) ScanBambuUDP(ctx context.Context) ([]DiscoveredPrinter, error) {
-	var printers []DiscoveredPrinter
-
-	// Bambu printers respond to broadcast on port 2021
-	broadcastAddr := "255.255.255.255:2021"
-
-	// Discovery message (Bambu uses a simple JSON-like format)
-	discoveryMsg := []byte(`M99999`)
-
-	conn, err := net.ListenUDP("udp4", &net.UDPAddr{Port: 0})
-	if err != nil {
-		return nil, fmt.Errorf("failed to create UDP socket: %w", err)
-	}
-	defer conn.Close()
-
-	// Enable broadcast
-	addr, err := net.ResolveUDPAddr("udp4", broadcastAddr)
-	if err != nil {
-		return nil, err
-	}
-
-	// Send discovery packet multiple times
-	for i := 0; i < 3; i++ {
-		conn.WriteToUDP(discoveryMsg, addr)
-		time.Sleep(200 * time.Millisecond)
-	}
-
-	// Set timeout
-	conn.SetReadDeadline(time.Now().Add(5 * time.Second)) //nolint:errcheck // best-effort deadline
-
-	// Read responses
-	buffer := make([]byte, 4096)
-	for {
-		n, remoteAddr, err := conn.ReadFromUDP(buffer)
-		if err != nil {
-			break
-		}
-
-		response := string(buffer[:n])
-		slog.Debug("Bambu UDP response", "from", remoteAddr.IP.String(), "response", response)
-
-		if n == 0 {
-			continue
-		}
-
-		printer := DiscoveredPrinter{
-			ID:           uuid.New().String(),
-			Name:         fmt.Sprintf("Bambu Printer @ %s", remoteAddr.IP.String()),
-			Host:         remoteAddr.IP.String(),
-			Port:         8883,
-			Type:         model.ConnectionTypeBambuLAN,
-			Manufacturer: "Bambu Lab",
-		}
-
-		// Try to parse as JSON (Bambu discovery response)
-		var info bambuUDPInfo
-		if err := json.Unmarshal(buffer[:n], &info); err == nil {
-			if info.DevName != "" {
-				printer.Name = info.DevName
-			}
-			if info.DevProductName != "" {
-				printer.Model = info.DevProductName
-			}
-			if info.DevID != "" {
-				printer.SerialNumber = info.DevID
-			}
-		}
-
-		slog.Info("found Bambu via UDP", "host", printer.Host, "name", printer.Name, "model", printer.Model)
-		printers = append(printers, printer)
-	}
-
-	return printers, nil
 }
 
 // QuickScan does a fast scan of only the most common ports.
@@ -775,4 +563,3 @@ func (d *Discovery) QuickScan(ctx context.Context) ([]DiscoveredPrinter, error) 
 
 	return unique, nil
 }
-

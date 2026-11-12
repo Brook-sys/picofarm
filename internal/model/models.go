@@ -283,49 +283,6 @@ type Template struct {
 	Supplies                 []RecipeSupply   `json:"supplies,omitempty"`
 }
 
-// TemplateAnalytics contains aggregated performance metrics from projects created from a template.
-type TemplateAnalytics struct {
-	TemplateID   uuid.UUID `json:"template_id"`
-	ProjectCount int       `json:"project_count"`
-
-	// Revenue
-	TotalRevenueCents int `json:"total_revenue_cents"`
-	TotalFeesCents    int `json:"total_fees_cents"`
-	NetRevenueCents   int `json:"net_revenue_cents"`
-	TotalSalesCount   int `json:"total_sales_count"`
-
-	// Costs
-	TotalCostCents       int `json:"total_cost_cents"`
-	AvgUnitCostCents     int `json:"avg_unit_cost_cents"`
-	TotalPrinterTimeCost int `json:"total_printer_time_cost"`
-	TotalMaterialCost    int `json:"total_material_cost"`
-	TotalSupplyCost      int `json:"total_supply_cost"`
-
-	// Profit
-	TotalGrossProfitCents int     `json:"total_gross_profit_cents"`
-	AvgGrossMarginPercent float64 `json:"avg_gross_margin_percent"`
-	ProfitPerHourCents    int     `json:"profit_per_hour_cents"`
-
-	// Performance
-	TotalJobCount  int     `json:"total_job_count"`
-	TotalCompleted int     `json:"total_completed"`
-	TotalFailed    int     `json:"total_failed"`
-	SuccessRate    float64 `json:"success_rate"`
-
-	// Print time
-	TotalPrintSeconds int `json:"total_print_seconds"`
-	AvgPrintSeconds   int `json:"avg_print_seconds"`
-
-	// Material
-	TotalMaterialGrams float64 `json:"total_material_grams"`
-	AvgMaterialGrams   float64 `json:"avg_material_grams"`
-
-	// Estimated vs Actual comparison (from template)
-	EstimatedPrintSeconds  int     `json:"estimated_print_seconds"`
-	EstimatedMaterialGrams float64 `json:"estimated_material_grams"`
-	EstimatedCostCents     int     `json:"estimated_cost_cents"`
-}
-
 // CostBreakdown contains the cost and margin breakdown for a recipe/order.
 type CostBreakdown struct {
 	MaterialCostCents  int     `json:"material_cost_cents"`
