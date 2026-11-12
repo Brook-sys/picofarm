@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
@@ -11,8 +12,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/Brook-sys/picofarm/internal/model"
+	"github.com/Brook-sys/picofarm/internal/service"
+	"github.com/google/uuid"
 )
 
 // TestWebhookSignatureVerification tests HMAC-SHA256 signature verification.
@@ -482,6 +484,62 @@ func TestWebhookResponse(t *testing.T) {
 			t.Errorf("expected status 200, got %d", rr.Code)
 		}
 	})
+}
+
+// TestHandleWebhook_SignatureEnforcement exercises the real HTTP route and
+// proves that a configured secret fails closed: events without a valid
+// X-Etsy-Signature are rejected with 401 instead of being processed. Before this
+// test, a missing signature was silently accepted whenever no secret had been
+// wired up, which was always the case in production.
+func TestHandleWebhook_SignatureEnforcement(t *testing.T) {
+	const secret = "handler-signing-secret"
+	env := newTestEnv(t)
+
+	if err := env.services.Settings.Set(context.Background(), service.EtsyWebhookSecretKey, secret); err != nil {
+		t.Fatalf("store webhook secret: %v", err)
+	}
+
+	// An event type the handler does not dispatch asynchronously, so the test
+	// stays deterministic (no goroutine touching the database after cleanup).
+	body := []byte(`{"type":"unknown.event","resource_type":"receipt","resource_id":12345,"shop_id":67890}`)
+	mac := hmac.New(sha256.New, []byte(secret))
+	mac.Write(body)
+	validSignature := hex.EncodeToString(mac.Sum(nil))
+
+	cases := []struct {
+		name      string
+		signature string
+		wantCode  int
+	}{
+		{name: "missing signature", signature: "", wantCode: http.StatusUnauthorized},
+		{name: "invalid signature", signature: "not-a-real-signature", wantCode: http.StatusUnauthorized},
+		{name: "valid signature", signature: validSignature, wantCode: http.StatusOK},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodPost, "/api/integrations/etsy/webhook", bytes.NewReader(body))
+			req.Header.Set("Content-Type", "application/json")
+			if tc.signature != "" {
+				req.Header.Set("X-Etsy-Signature", tc.signature)
+			}
+			rec := httptest.NewRecorder()
+			env.handler.ServeHTTP(rec, req)
+
+			if rec.Code != tc.wantCode {
+				t.Fatalf("expected status %d, got %d (body: %s)", tc.wantCode, rec.Code, rec.Body.String())
+			}
+		})
+	}
+
+	// Only the signed event may be persisted; rejected ones must not be saved.
+	events, err := env.services.Etsy.ListWebhookEvents(context.Background(), "", 50, 0)
+	if err != nil {
+		t.Fatalf("list webhook events: %v", err)
+	}
+	if len(events) != 1 {
+		t.Fatalf("expected exactly 1 stored webhook event, got %d", len(events))
+	}
 }
 
 // TestSignatureGeneration tests generating a valid HMAC signature.

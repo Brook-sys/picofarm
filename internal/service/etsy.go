@@ -18,7 +18,14 @@ type EtsyService struct {
 	repo        *repository.EtsyRepository
 	client      *etsy.Client
 	settingsSvc *SettingsService
+
+	// webhookSecret is the signing secret supplied at startup (environment).
+	// When empty the secret is read from settings on each request.
+	webhookSecret string
 }
+
+// EtsyWebhookSecretKey is the settings key that stores the Etsy webhook signing secret.
+const EtsyWebhookSecretKey = "etsy_webhook_secret"
 
 // NewEtsyService creates a new EtsyService.
 func NewEtsyService(repo *repository.EtsyRepository, clientID, redirectURI string, settingsSvc *SettingsService) *EtsyService {
@@ -31,6 +38,39 @@ func NewEtsyService(repo *repository.EtsyRepository, clientID, redirectURI strin
 		client:      client,
 		settingsSvc: settingsSvc,
 	}
+}
+
+// SetWebhookSecret sets the webhook signing secret supplied by startup
+// configuration. An empty value keeps the settings-based lookup in place.
+func (s *EtsyService) SetWebhookSecret(secret string) {
+	if s == nil {
+		return
+	}
+	s.webhookSecret = secret
+}
+
+// GetWebhookSecret resolves the Etsy webhook signing secret.
+// Order: startup configuration (ETSY_WEBHOOK_SECRET) then the etsy_webhook_secret
+// setting. An empty result means no secret is configured, so signature
+// verification cannot be enforced.
+func (s *EtsyService) GetWebhookSecret(ctx context.Context) (string, error) {
+	if s == nil {
+		return "", nil
+	}
+	if s.webhookSecret != "" {
+		return s.webhookSecret, nil
+	}
+	if s.settingsSvc == nil {
+		return "", nil
+	}
+	setting, err := s.settingsSvc.Get(ctx, EtsyWebhookSecretKey)
+	if err != nil {
+		return "", err
+	}
+	if setting == nil {
+		return "", nil
+	}
+	return setting.Value, nil
 }
 
 // Configure sets the Etsy client ID at runtime and persists it to settings.

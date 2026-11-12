@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
@@ -9,6 +10,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
+	"sync/atomic"
 
 	"github.com/Brook-sys/picofarm/internal/model"
 	"github.com/Brook-sys/picofarm/internal/service"
@@ -22,6 +24,10 @@ type EtsyHandler struct {
 	projectSvc    *service.ProjectService
 	orderSvc      *service.OrderService
 	webhookSecret string
+
+	// warnedNoWebhookSecret guards the one-time warning about accepting
+	// unsigned events. It stops a missing secret from flooding the log.
+	warnedNoWebhookSecret atomic.Bool
 }
 
 // NewEtsyHandler creates a new EtsyHandler.
@@ -34,8 +40,25 @@ func (h *EtsyHandler) SetProjectSvc(svc *service.ProjectService) {
 }
 
 // SetWebhookSecret sets the webhook secret for signature verification.
+// Intended for tests and explicit overrides; production resolves the secret
+// from ETSY_WEBHOOK_SECRET or the etsy_webhook_secret setting.
 func (h *EtsyHandler) SetWebhookSecret(secret string) {
 	h.webhookSecret = secret
+}
+
+// resolveWebhookSecret resolves the secret used to verify Etsy signatures:
+// explicit override first, then startup/settings configuration via the service.
+// A service error degrades to "no secret" and is logged by the caller path.
+func (h *EtsyHandler) resolveWebhookSecret(ctx context.Context) string {
+	if h.webhookSecret != "" {
+		return h.webhookSecret
+	}
+	secret, err := h.service.GetWebhookSecret(ctx)
+	if err != nil {
+		slog.Warn("failed to load Etsy webhook secret", "error", err)
+		return ""
+	}
+	return secret
 }
 
 // ConfigureEtsyRequest represents the request body for configuring the Etsy integration.
@@ -433,6 +456,16 @@ func (h *EtsyHandler) SyncInventory(w http.ResponseWriter, r *http.Request) {
 
 // ---- Webhook Handlers ----
 
+// warnMissingWebhookSecret logs once that webhook signature verification is
+// disabled because no secret is configured. Accepting unsigned events is the
+// documented degradation until the operator sets ETSY_WEBHOOK_SECRET or the
+// etsy_webhook_secret setting.
+func (h *EtsyHandler) warnMissingWebhookSecret() {
+	if h.warnedNoWebhookSecret.CompareAndSwap(false, true) {
+		slog.Warn("Etsy webhook secret is not configured: accepting unsigned webhook events. Set ETSY_WEBHOOK_SECRET or the etsy_webhook_secret setting to enforce signature verification.")
+	}
+}
+
 // HandleWebhook processes incoming Etsy webhook events.
 // POST /api/integrations/etsy/webhook
 func (h *EtsyHandler) HandleWebhook(w http.ResponseWriter, r *http.Request) {
@@ -444,14 +477,20 @@ func (h *EtsyHandler) HandleWebhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Verify signature if secret is configured
+	// Verify the Etsy signature. When a secret is configured this fails closed:
+	// a missing or invalid signature is rejected instead of silently accepted.
+	// With no secret configured the previous permissive behaviour is kept, but
+	// it is warned about once so the gap stays visible in the logs.
 	signature := r.Header.Get("X-Etsy-Signature")
-	if h.webhookSecret != "" && signature != "" {
-		if !verifyWebhookSignature(body, signature, h.webhookSecret) {
-			slog.Warn("webhook signature verification failed")
+	secret := h.resolveWebhookSecret(r.Context())
+	if secret != "" {
+		if signature == "" || !verifyWebhookSignature(body, signature, secret) {
+			slog.Warn("rejected Etsy webhook: missing or invalid signature")
 			respondError(w, http.StatusUnauthorized, "invalid signature")
 			return
 		}
+	} else {
+		h.warnMissingWebhookSecret()
 	}
 
 	// Parse event

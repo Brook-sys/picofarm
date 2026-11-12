@@ -295,6 +295,7 @@ docker run -p 8080:8080 -v daedalus-data:/app/data daedalus
 | `REQUIRE_AUTH` | `false` | Enable authentication |
 | `JWT_SECRET` | - | Secret for JWT signing (required if auth enabled) |
 | `ETSY_CLIENT_ID` | - | Etsy OAuth app ID |
+| `ETSY_WEBHOOK_SECRET` | - | Etsy webhook signing secret; when set, unsigned or badly signed webhook events get `401` |
 | `ETSY_REDIRECT_URI` | - | Etsy OAuth callback URL |
 | `SQUARESPACE_API_KEY` | - | Squarespace API key |
 | `FRONTEND_URL` | `http://localhost:5173` | Frontend URL (for CORS in dev) |

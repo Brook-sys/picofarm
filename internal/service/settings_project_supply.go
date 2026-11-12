@@ -32,6 +32,7 @@ var sensitiveKeys = map[string]bool{
 	"etsy_client_id":        true,
 	"etsy_access_token":     true,
 	"etsy_refresh_token":    true,
+	"etsy_webhook_secret":   true,
 	"bambu_cloud_token":     true,
 	"bambu_cloud_password":  true,
 	"thingiverse_api_token": true,

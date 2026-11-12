@@ -53,6 +53,9 @@ func main() {
 	// Etsy OAuth configuration (optional)
 	etsyClientID := os.Getenv("ETSY_CLIENT_ID")
 	etsyRedirectURI := getEnv("ETSY_REDIRECT_URI", "http://localhost:8084/api/integrations/etsy/callback")
+	// Etsy webhook signing secret (optional). When set, webhook events without a
+	// valid X-Etsy-Signature are rejected with 401 instead of accepted.
+	etsyWebhookSecret := os.Getenv("ETSY_WEBHOOK_SECRET")
 
 	// Open SQLite database
 	dbPath := os.Getenv("DATABASE_PATH")
@@ -89,8 +92,9 @@ func main() {
 	// Initialize services
 	servicesConfig := service.ServicesConfig{
 		Etsy: service.EtsyConfig{
-			ClientID:    etsyClientID,
-			RedirectURI: etsyRedirectURI,
+			ClientID:      etsyClientID,
+			RedirectURI:   etsyRedirectURI,
+			WebhookSecret: etsyWebhookSecret,
 		},
 	}
 	services := service.NewServicesWithConfig(repos, fileStorage, printerManager, hub, servicesConfig)

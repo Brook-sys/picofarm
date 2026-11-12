@@ -162,7 +162,7 @@ Sales-channel routes are designed in `docs/SALES_CHANNELS.md`. Any new generic `
 | `POST /api/integrations/etsy/listings/{id}/link` | Integration/write | Links external product to internal project. |
 | `DELETE /api/integrations/etsy/listings/{id}/link` | Integration/write | Unlinks external product. |
 | `POST /api/integrations/etsy/listings/{id}/sync-inventory` | Integration/write | Pushes/syncs inventory. |
-| `POST /api/integrations/etsy/webhook` | Integration/webhook | Inbound webhook. Signature verification should be documented/testable. |
+| `POST /api/integrations/etsy/webhook` | Integration/webhook | Inbound webhook. Fails closed when a secret is configured (`ETSY_WEBHOOK_SECRET` or the `etsy_webhook_secret` setting): a missing or invalid `X-Etsy-Signature` is rejected with `401`. Without a configured secret the event is still accepted, which is a documented degradation. |
 | `POST /api/integrations/etsy/webhook/events/{id}/reprocess` | Integration/write | Replays inbound event. |
 | `POST /api/integrations/squarespace/connect` | Integration/secrets | Connects external account/API. |
 | `POST /api/integrations/squarespace/disconnect` | Integration | Disconnects account. |

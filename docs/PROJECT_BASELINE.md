@@ -35,6 +35,7 @@ Backend defaults are defined from `cmd/server/main.go` and database helpers:
 | `ALLOWED_ORIGINS` | unset | Comma-separated CORS origins; unset allows local development origins only |
 | `SENTRY_DSN` | unset | Optional error reporting |
 | `ETSY_CLIENT_ID` | unset | Optional Etsy integration |
+| `ETSY_WEBHOOK_SECRET` | unset | Optional Etsy webhook signing secret. When set, events with a missing or invalid `X-Etsy-Signature` are rejected with `401` instead of accepted |
 | `ETSY_REDIRECT_URI` | `http://localhost:8080/api/integrations/etsy/callback` in `Makefile` | Check this before production/self-hosted use because backend defaults to port `8084` |
 
 Local helper script defaults from `AGENTS.md` and `scripts/dev.sh`:

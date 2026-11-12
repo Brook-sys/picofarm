@@ -25,18 +25,31 @@ jobs:
       - run: npm ci
       - run: npm run build
 
-  deploy:
-    name: Deploy to Vercel
-    needs: build
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-      - name: Install Vercel CLI
-        run: npm install -g vercel
-      - name: Deploy
-        working-directory: site
-        run: vercel --prod --token ${{ secrets.VERCEL_TOKEN }}
-        env:
-          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+  # Production deploy is intentionally disabled.
+  #
+  # site/app/docs/deployment still documents environment variables that do not
+  # exist in the codebase (DAEDALUS_*, ETSY_API_KEY, OCR_API_KEY), a desktop
+  # build path that was removed with Wails, port 8080 instead of 8084, and
+  # screenshots carrying the old Daedalus branding. Publishing that is worse
+  # than publishing nothing, because it looks authoritative.
+  #
+  # Restore this job only after site/app/docs/deployment matches the real
+  # configuration (PORT, UPLOAD_DIR, DATABASE_PATH, STATIC_DIR, ALLOWED_ORIGINS,
+  # API_TOKEN, ENCRYPTION_KEY, ENVIRONMENT) and the screenshots are re-taken
+  # with the PicoFarm UI.
+  #
+  # deploy:
+  #   name: Deploy to Vercel
+  #   needs: build
+  #   if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@v6
+  #     - name: Install Vercel CLI
+  #       run: npm install -g vercel
+  #     - name: Deploy
+  #       working-directory: site
+  #       run: vercel --prod --token ${{ secrets.VERCEL_TOKEN }}
+  #       env:
+  #         VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+  #         VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
