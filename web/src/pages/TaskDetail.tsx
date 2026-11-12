@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
-import { useParams, Link } from 'react-router-dom'
-import { ArrowLeft, Clock, Play, CheckCircle, XCircle, Package, Printer, AlertCircle, CalendarDays, Square, CheckSquare, DollarSign } from 'lucide-react'
+import { useParams, useNavigate, Link } from 'react-router-dom'
+import { ArrowLeft, Clock, Play, CheckCircle, XCircle, Package, Printer, AlertCircle, CalendarDays, Square, CheckSquare, DollarSign, Pencil, Trash2 } from 'lucide-react'
 import { useQueryClient } from '@tanstack/react-query'
 import { tasksApi, salesApi } from '../api/client'
 import type { Task, TaskStatus, PrintJob, TaskChecklistItem, SalesChannel } from '../types'
@@ -194,6 +194,134 @@ function CompleteTaskModal({
   )
 }
 
+function EditTaskModal({
+  task,
+  onClose,
+  onSaved,
+}: {
+  task: Task
+  onClose: () => void
+  onSaved: () => void
+}) {
+  const [form, setForm] = useState({
+    name: task.name,
+    quantity: String(task.quantity),
+    notes: task.notes ?? '',
+    // The API expects YYYY-MM-DD; the task carries an RFC3339 timestamp
+    pickup_date: task.pickup_date ? task.pickup_date.slice(0, 10) : '',
+  })
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState('')
+
+  const handleSubmit = async () => {
+    if (!form.name.trim()) {
+      setError('Name is required')
+      return
+    }
+    const quantity = Number(form.quantity)
+    if (!Number.isInteger(quantity) || quantity < 1) {
+      setError('Quantity must be a whole number of at least 1')
+      return
+    }
+    setSubmitting(true)
+    setError('')
+    try {
+      await tasksApi.update(task.id, {
+        name: form.name.trim(),
+        quantity,
+        notes: form.notes,
+        // Clearing the date means sending "", not null: the handler decodes
+        // pickup_date into a *string, so a JSON null leaves the stored value
+        // untouched while "" resets it to no date.
+        pickup_date: form.pickup_date,
+      })
+      onSaved()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update task')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+      <div className="bg-surface-800 border border-surface-700 rounded-xl w-full max-w-md mx-4 shadow-2xl">
+        <div className="p-6">
+          <h2 className="text-lg font-semibold text-surface-100 mb-1">Edit Task</h2>
+          <p className="text-sm text-surface-400 mb-5">
+            {task.name} &times; {task.quantity}
+          </p>
+
+          <div className="space-y-3">
+            <div>
+              <label className="block text-xs text-surface-500 mb-1">Name</label>
+              <input
+                type="text"
+                value={form.name}
+                onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+                className="input"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs text-surface-500 mb-1">Quantity</label>
+                <input
+                  type="number"
+                  min={1}
+                  value={form.quantity}
+                  onChange={e => setForm(f => ({ ...f, quantity: e.target.value }))}
+                  className="input"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-surface-500 mb-1">Pickup Date</label>
+                <input
+                  type="date"
+                  value={form.pickup_date}
+                  onChange={e => setForm(f => ({ ...f, pickup_date: e.target.value }))}
+                  className="input"
+                />
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs text-surface-500 mb-1">Notes</label>
+              <textarea
+                value={form.notes}
+                onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
+                rows={3}
+                placeholder="Optional"
+                className="input resize-none"
+              />
+            </div>
+          </div>
+
+          {error && (
+            <p className="text-sm text-red-400 mb-4">{error}</p>
+          )}
+
+          <div className="flex gap-3 justify-end">
+            <button
+              onClick={onClose}
+              disabled={submitting}
+              className="px-4 py-2 text-sm text-surface-300 border border-surface-600 rounded-lg hover:bg-surface-700 transition-colors disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleSubmit}
+              disabled={submitting}
+              className="inline-flex items-center gap-2 px-4 py-2 text-sm bg-accent-600 text-white rounded-lg hover:bg-accent-500 transition-colors disabled:opacity-50"
+            >
+              <CheckCircle className="w-4 h-4" />
+              {submitting ? 'Saving...' : 'Save'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 const statusConfig: Record<TaskStatus, { label: string; color: string; bgColor: string; icon: React.ReactNode }> = {
   pending: { label: 'Pending', color: 'text-surface-300', bgColor: 'bg-surface-700', icon: <Clock className="w-5 h-5" /> },
   in_progress: { label: 'In Progress', color: 'text-blue-400', bgColor: 'bg-blue-500/20', icon: <Play className="w-5 h-5" /> },
@@ -215,11 +343,13 @@ const jobStatusColors: Record<string, string> = {
 
 export function TaskDetail() {
   const { id } = useParams<{ id: string }>()
+  const navigate = useNavigate()
   const [task, setTask] = useState<Task | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [actionLoading, setActionLoading] = useState(false)
   const [showCompleteModal, setShowCompleteModal] = useState(false)
+  const [showEditModal, setShowEditModal] = useState(false)
 
   const loadTask = useCallback(async () => {
     if (!id) return
@@ -302,6 +432,22 @@ export function TaskDetail() {
     }
   }
 
+  // Deleting is blocked by the database while the task still has print jobs:
+  // print_jobs.task_id references tasks(id) with no ON DELETE rule and the
+  // connection runs with foreign_keys=ON, so the DELETE fails with a raw
+  // "FOREIGN KEY constraint failed" (handler maps it to 500). The checklist
+  // does cascade, so only jobs need to be removed first.
+  const handleDelete = async () => {
+    if (!id) return
+    if (!confirm('Delete this task? Its checklist goes with it. This cannot be undone.')) return
+    try {
+      await tasksApi.delete(id)
+      navigate('/tasks')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete task')
+    }
+  }
+
   const formatDate = (dateStr?: string) => {
     if (!dateStr) return '-'
     return new Date(dateStr).toLocaleString()
@@ -360,9 +506,29 @@ export function TaskDetail() {
               Quantity: {task.quantity} | Created: {formatDate(task.created_at)}
             </p>
           </div>
-          <div className={cn('inline-flex items-center gap-2 px-3 py-1.5 rounded-full', config.bgColor, config.color)}>
-            {config.icon}
-            <span className="font-medium">{config.label}</span>
+          <div className="flex items-center gap-2">
+            <div className={cn('inline-flex items-center gap-2 px-3 py-1.5 rounded-full', config.bgColor, config.color)}>
+              {config.icon}
+              <span className="font-medium">{config.label}</span>
+            </div>
+            <button
+              onClick={() => setShowEditModal(true)}
+              className="inline-flex items-center gap-2 px-3 py-1.5 text-sm text-surface-300 border border-surface-600 rounded-lg hover:bg-surface-700 transition-colors"
+            >
+              <Pencil className="w-3.5 h-3.5" />
+              Edit
+            </button>
+            <button
+              onClick={handleDelete}
+              disabled={jobs.length > 0}
+              title={jobs.length > 0
+                ? `This task still has ${jobs.length} print job(s). The database blocks deleting a task with jobs — remove the jobs first.`
+                : 'Delete this task'}
+              className="inline-flex items-center gap-2 px-3 py-1.5 text-sm text-red-400 border border-red-500/50 rounded-lg hover:bg-red-500/10 transition-colors disabled:opacity-50"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              Delete
+            </button>
           </div>
         </div>
       </div>
@@ -634,6 +800,17 @@ export function TaskDetail() {
           onClose={() => setShowCompleteModal(false)}
           onCompleted={() => {
             setShowCompleteModal(false)
+            loadTask()
+          }}
+        />
+      )}
+
+      {showEditModal && (
+        <EditTaskModal
+          task={task}
+          onClose={() => setShowEditModal(false)}
+          onSaved={() => {
+            setShowEditModal(false)
             loadTask()
           }}
         />
