@@ -1534,44 +1534,6 @@ export interface OrderCounts {
 }
 
 // ============================================
-// Shopify Integration (Phase 3)
-// ============================================
-
-export interface ShopifyIntegrationStatus {
-  connected: boolean
-  shop_domain?: string
-  last_sync_at?: string
-  order_count?: number
-}
-
-export interface ShopifyOrder {
-  id: string
-  shopify_order_id: string
-  order_id?: string
-  shop_domain: string
-  order_number: string
-  customer_name: string
-  customer_email: string
-  total_cents: number
-  status: string
-  synced_at: string
-  created_at: string
-  updated_at: string
-  items?: ShopifyOrderItem[]
-}
-
-export interface ShopifyOrderItem {
-  id: string
-  shopify_order_id: string
-  shopify_line_item_id: string
-  sku: string
-  title: string
-  quantity: number
-  price_cents: number
-  created_at: string
-}
-
-// ============================================
 // Timeline / Gantt View (Phase 4)
 // ============================================
 

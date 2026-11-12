@@ -811,10 +811,6 @@ export const printJobsApi = {
       method: 'POST',
       body: JSON.stringify(request || {}),
     }),
-
-  // Jobs by recipe
-  listByRecipe: (recipeId: string) =>
-    fetchApi<import('../types').PrintJob[]>(`/templates/${recipeId}/jobs`),
 }
 
 // Queue API
@@ -1582,49 +1578,6 @@ export const tagsApi = {
 
   listDesignsByTag: (tagId: string) =>
     fetchApi<import('../types').Design[]>(`/tags/${tagId}/designs`),
-}
-
-// Shopify API
-export const shopifyApi = {
-  getAuthUrl: (shopDomain: string) =>
-    fetchApi<{ auth_url: string }>(`/integrations/shopify/auth-url?shop=${encodeURIComponent(shopDomain)}`),
-
-  getStatus: () =>
-    fetchApi<import('../types').ShopifyIntegrationStatus>('/integrations/shopify/status'),
-
-  disconnect: () =>
-    fetchApi<{ status: string }>('/integrations/shopify', { method: 'DELETE' }),
-
-  syncOrders: () =>
-    fetchApi<import('../types').SyncResult>('/integrations/shopify/sync', { method: 'POST' }),
-
-  listOrders: (params?: { processed?: boolean; limit?: number; offset?: number }) => {
-    const searchParams = new URLSearchParams()
-    if (params?.processed !== undefined) searchParams.set('processed', String(params.processed))
-    if (params?.limit) searchParams.set('limit', String(params.limit))
-    if (params?.offset) searchParams.set('offset', String(params.offset))
-    const query = searchParams.toString()
-    return fetchApi<import('../types').ShopifyOrder[]>(`/integrations/shopify/orders${query ? `?${query}` : ''}`)
-  },
-
-  getOrder: (id: string) =>
-    fetchApi<import('../types').ShopifyOrder>(`/integrations/shopify/orders/${id}`),
-
-  processOrder: (id: string) =>
-    fetchApi<import('../types').Order>(`/integrations/shopify/orders/${id}/process`, {
-      method: 'POST',
-    }),
-
-  linkProduct: (productId: string, projectId: string, sku?: string) =>
-    fetchApi<{ status: string }>(`/integrations/shopify/products/${productId}/link`, {
-      method: 'POST',
-      body: JSON.stringify({ project_id: projectId, sku }),
-    }),
-
-  unlinkProduct: (productId: string, projectId: string) =>
-    fetchApi<void>(`/integrations/shopify/products/${productId}/link?project_id=${projectId}`, {
-      method: 'DELETE',
-    }),
 }
 
 // Timeline API (Gantt View)
