@@ -229,6 +229,21 @@ Representative routes:
 - `POST /api/printers/{id}/speed|fan|led|skip-object|jog|temperature|plate-cleared`
 - `POST /api/printers/{id}/ams/load|unload|refresh|backup`
 - `GET /api/printers/{id}/analytics`
+- `POST /api/printers/discover`
+
+Discovery is the one printer route whose cost depends on the network, not on the payload:
+
+- The subnet scanned is `PICOFARM_SCAN_NETWORK` when set, otherwise the first non-loopback IPv4
+  interface. In a container on a bridge network that interface is the container's own, so the scan
+  finds nothing: set the variable or run the container on the host network.
+- The scan honors the real prefix length and probes only usable host addresses (no network or
+  broadcast address). A /31 or /32 yields nothing, and a network larger than 1024 usable hosts is
+  truncated from the start of the range, with a `network is larger than the scan cap` warning logged.
+- One scan is bounded by a five minute deadline, and the scan stops as soon as the HTTP request is
+  cancelled: the request context is used instead of `context.Background()`, so a client that
+  navigates away no longer leaves the LAN being probed.
+- There is no "quick" scan. `QuickScan` performs the same full sweep as `ScanNetwork` and only
+  deduplicates results by host and type.
 
 Automatic reconnect is background behavior with no route of its own:
 

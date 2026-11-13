@@ -1,7 +1,6 @@
 package api
 
 import (
-	"context"
 	"encoding/json"
 	"log/slog"
 	"net/http"
@@ -558,7 +557,10 @@ func (h *PrinterHandler) GetAllStates(w http.ResponseWriter, r *http.Request) {
 func (h *PrinterHandler) Discover(w http.ResponseWriter, r *http.Request) {
 	slog.Info("starting printer discovery")
 
-	ctx := context.Background()
+	// The request context, not Background(): a scan that outlives its caller
+	// keeps probing the LAN after the operator gave up and after the server
+	// starts shutting down.
+	ctx := r.Context()
 	printers, err := h.service.DiscoverPrinters(ctx)
 	if err != nil {
 		slog.Error("discovery failed", "error", err)

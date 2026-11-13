@@ -37,6 +37,8 @@ Backend defaults are defined from `cmd/server/main.go` and database helpers:
 | `ETSY_CLIENT_ID` | unset | Optional Etsy integration |
 | `ETSY_WEBHOOK_SECRET` | unset | Optional Etsy webhook signing secret. When set, events with a missing or invalid `X-Etsy-Signature` are rejected with `401` instead of accepted |
 | `ETSY_REDIRECT_URI` | `http://localhost:8084/api/integrations/etsy/callback` | Same single default the backend uses (`etsy.DefaultRedirectURI`). The value must also be registered as a Callback URL on the Etsy app, or Etsy refuses the authorization with `The requested redirect URL is not permitted.`; override it for any host, port, or reverse-proxy path difference |
+| `SLICER_CONNECTION_URL` | unset | Overrides the stored `slicer_connection_url` setting. Use it to pin the orca-slicer-api container address from the deployment (compose/systemd/k8s) instead of relying on what an earlier version wrote into the database. `GET /api/slicer/config` reports `connection_url_source` (`env` or `settings`) so the UI can explain why a saved URL has no effect |
+| `PICOFARM_SCAN_NETWORK` | unset | CIDR to scan for printers (`192.0.2.0/24` style value; use your own LAN subnet). Required whenever the backend runs in a container on a bridge network: the first non-loopback interface belongs to the container, not to the LAN where the printers live. Host networking is the alternative. Scans honor the real prefix length and are capped at 1024 hosts per pass, so pin a small subnet rather than a /8 |
 
 ### Etsy connection checklist
 

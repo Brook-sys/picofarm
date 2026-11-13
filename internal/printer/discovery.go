@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -42,10 +43,22 @@ func NewDiscovery() *Discovery {
 	}
 }
 
+// scanDeadline bounds one full network scan. Each probe gets d.timeout, and the
+// batches are sequential, so a /24 with 254 hosts is ~5 minutes in the worst
+// case (254 × 3s ÷ 20 concurrent). Past that the caller is better served by a
+// partial result than by a request that never completes.
+const scanDeadline = 5 * time.Minute
+
 // ScanNetwork discovers printers on the local network.
 // Uses sequential scanning to avoid file descriptor exhaustion.
 func (d *Discovery) ScanNetwork(ctx context.Context) ([]DiscoveredPrinter, error) {
 	var printers []DiscoveredPrinter
+
+	// A full scan is 254+ probes; without an overall deadline a caller that
+	// passes a context without one (or one that is never cancelled) leaves the
+	// goroutines probing forever.
+	scanCtx, cancel := context.WithTimeout(ctx, scanDeadline)
+	defer cancel()
 
 	// Get local network range
 	localIP, network, err := getLocalNetwork()
@@ -61,6 +74,13 @@ func (d *Discovery) ScanNetwork(ctx context.Context) ([]DiscoveredPrinter, error
 	// Scan sequentially with batches to avoid FD exhaustion
 	batchSize := 20
 	for i := 0; i < len(ips); i += batchSize {
+		// The per-probe HTTP calls honor the context, but nothing stopped the
+		// outer loop: a client that disconnected kept the whole scan running.
+		if err := scanCtx.Err(); err != nil {
+			slog.Info("network scan stopped early", "scanned", i, "of", len(ips), "reason", err)
+			return printers, nil
+		}
+
 		end := i + batchSize
 		if end > len(ips) {
 			end = len(ips)
@@ -506,8 +526,27 @@ func (d *Discovery) checkBambu(ctx context.Context, host string, port int) *Disc
 	return printer
 }
 
+// ScanNetworkEnv pins the subnet to scan. In a container on a Docker bridge
+// network the first non-loopback interface belongs to the container, not to the
+// LAN where the printers live, so the operator needs a way to name the subnet
+// explicitly (or to run the container with the host network).
+const ScanNetworkEnv = "PICOFARM_SCAN_NETWORK"
+
 // getLocalNetwork returns the local IP and network CIDR.
+//
+// The CIDR comes from PICOFARM_SCAN_NETWORK when set. Interface enumeration
+// alone is not enough in a container: on a bridge network the first
+// non-loopback IPv4 is the container's own address, so the scan would dutifully
+// probe the container's subnet and find nothing.
 func getLocalNetwork() (string, *net.IPNet, error) {
+	if raw := strings.TrimSpace(os.Getenv(ScanNetworkEnv)); raw != "" {
+		ip, network, err := net.ParseCIDR(raw)
+		if err != nil {
+			return "", nil, fmt.Errorf("%s is not a valid CIDR: %q", ScanNetworkEnv, raw)
+		}
+		return ip.String(), network, nil
+	}
+
 	addrs, err := net.InterfaceAddrs()
 	if err != nil {
 		return "", nil, err
@@ -524,27 +563,70 @@ func getLocalNetwork() (string, *net.IPNet, error) {
 	return "", nil, fmt.Errorf("no suitable network interface found")
 }
 
-// generateIPRange generates all IPs in a /24 network.
+// maxScanHosts bounds a single scan. Honoring the mask on a /8 or /16 means
+// hundreds of thousands to millions of probes, which is a self-inflicted denial
+// of service on the host and on the printers being probed. Above this the scan
+// is bounded and says so, instead of taking the whole server down with it.
+const maxScanHosts = 1024
+
+// generateIPRange returns the usable host addresses inside the network, honoring
+// the real prefix length.
+//
+// The previous implementation always varied the last octet and stopped at 254
+// regardless of the mask. On a /16 that meant scanning a single /24 out of 256
+// and missing every printer outside it; on a /28 it probed ~192 addresses that
+// are not on the local link at all; and on a /25 or /26 the hosts past the real
+// boundary are on someone else's segment.
 func generateIPRange(network *net.IPNet) []string {
-	var ips []string
-
-	// For simplicity, assume /24 network
-	ip := network.IP.Mask(network.Mask)
-
-	for i := 1; i < 255; i++ {
-		newIP := make(net.IP, len(ip))
-		copy(newIP, ip)
-		newIP[3] = byte(i)
-		ips = append(ips, newIP.String())
+	base := network.IP.Mask(network.Mask).To4()
+	if base == nil {
+		return nil
+	}
+	ones, bits := network.Mask.Size()
+	if bits != 32 {
+		// Not an IPv4 mask; nothing sensible to enumerate.
+		return nil
 	}
 
+	// uint64 arithmetic: a /0 is 2^32 addresses and would overflow int32 math.
+	start := uint64(base[0])<<24 | uint64(base[1])<<16 | uint64(base[2])<<8 | uint64(base[3])
+	blockSize := uint64(1) << (32 - ones)
+	broadcast := start + blockSize - 1
+	// The first and last addresses of the block are unusable (network and
+	// broadcast) on any prefix up to /30.
+	first := start + 1
+	last := broadcast - 1
+	if last < first {
+		// /31 and /32 have no usable host range.
+		return nil
+	}
+	truncated := false
+	if last-first+1 > maxScanHosts {
+		last = first + maxScanHosts - 1
+		truncated = true
+	}
+
+	ips := make([]string, 0, last-first+1)
+	for ip := first; ip <= last; ip++ {
+		ips = append(ips, net.IPv4(byte(ip>>24), byte(ip>>16), byte(ip>>8), byte(ip)).String())
+	}
+	if truncated {
+		slog.Warn("network is larger than the scan cap, scanning only part of it",
+			"network", network.String(), "usable_hosts", broadcast-first-1, "scanned", len(ips))
+	}
 	return ips
 }
 
-// QuickScan does a fast scan of only the most common ports.
-// Note: UDP-based discovery (SSDP, Bambu UDP) is disabled as it interferes with HTTP responses.
+// QuickScan is the entry point the API uses for printer discovery.
+//
+// It is not a partial scan: it walks the whole subnet and probes the same ports
+// as ScanNetwork, then deduplicates by host+type. The name and the older comments
+// here ("only the most common ports", "UDP discovery disabled") describe a lighter
+// variant that does not exist — UDP discovery was removed, so the TCP sweep of
+// the entire range is all there is. A /24 therefore costs 254 probes × the port
+// list, in batches of 20, which is why the scan has its own deadline and why the
+// subnet can be pinned with PICOFARM_SCAN_NETWORK.
 func (d *Discovery) QuickScan(ctx context.Context) ([]DiscoveredPrinter, error) {
-	// Only run TCP port scan - UDP discovery causes issues with HTTP response
 	printers, err := d.ScanNetwork(ctx)
 	if err != nil {
 		return nil, err
