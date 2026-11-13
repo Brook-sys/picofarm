@@ -94,6 +94,24 @@ Do not add frontend-only enum values unless the backend explicitly returns them 
 - Existing sales and expenses retain their recorded currency. Lists format each record using that currency; totals and analytics include only records matching the current `currency_code`, because PicoFarm does not convert or combine unrelated currencies.
 - Frontend monetary formatting is centralized in `web/src/lib/currency.ts` and `CurrencyProvider`. Fields ending in `_cents` use `formatCents`; decimal-unit fields such as `cost_per_kg` and `material_cost` use `formatAmount`.
 
+## Settings that carry validation
+
+Most keys in `settings` are free-form key/value blobs. Two keys are validated by
+`internal/service/settings_project_supply.go` before they are stored:
+
+- `currency_code` — see the section above.
+- `filament_type_colors` — `PUT /api/settings/filament_type_colors` accepts a JSON object mapping
+  filament type to hex color, for example `{"pla":"#22c55e","petg":"#3b82f6"}`. Keys are
+  normalized with the same rules the G-code parser applies to `material_type`
+  (`internal/service/queue.go` `normalizeMaterialType`), so `"PLA-CF"` is stored as `"pla"`.
+  Two entries that normalize to the same key with different colors are rejected, because the
+  stored value would otherwise depend on map iteration order. Colors must be `#RGB` or `#RRGGBB`;
+  an empty value clears the setting. Invalid payloads return `400` instead of being stored.
+- The Files screen renders one chip per G-code using this setting. A missing setting, an
+  unparseable value, or a type that is not configured falls back to the built-in palette in
+  `web/src/lib/materialColors.ts`, and a material that is neither configured nor known renders a
+  neutral label. `gcode_files.material_color` is not consulted: the parser never populates it.
+
 ## High-value domain contracts
 
 ### Projects and production

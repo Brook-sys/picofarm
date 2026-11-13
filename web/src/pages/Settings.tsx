@@ -1,10 +1,20 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Store, ShoppingBag, ExternalLink, RefreshCw, Unplug, AlertCircle, CheckCircle2, Key, Eye, EyeOff, Save, Database, Download, Trash2, RotateCcw, Plus, Settings as SettingsIcon, Building, Globe } from 'lucide-react'
+import { Store, ShoppingBag, ExternalLink, RefreshCw, Unplug, AlertCircle, CheckCircle2, Key, Eye, EyeOff, Save, Database, Download, Trash2, RotateCcw, Plus, Palette, Settings as SettingsIcon, Building, Globe } from 'lucide-react'
 import { etsyApi, squarespaceApi, settingsApi, backupsApi } from '../api/client'
 import { cn } from '../lib/utils'
 import { CURRENCY_OPTIONS, formatMoney, normalizeCurrencyCode } from '../lib/currency'
+import {
+  CANONICAL_MATERIAL_TYPES,
+  DEFAULT_MATERIAL_COLORS,
+  FILAMENT_TYPE_COLORS_SETTING_KEY,
+  HEX_COLOR,
+  UNKNOWN_MATERIAL_COLOR,
+  normalizeMaterialTypeKey,
+  parseMaterialColors,
+} from '../lib/materialColors'
+import { MaterialBadge } from '../components/MaterialBadge'
 import type { EtsyIntegration, SquarespaceIntegration, BackupInfo, BackupConfig } from '../types'
 
 function formatBytes(bytes: number): string {
@@ -1120,6 +1130,7 @@ export default function Settings() {
                 {activeTab === 'other' && (
                   <>
                     <CurrencySettings />
+                    <FilamentTypeColorSettings />
                     <BusinessInfoSettings />
                   </>
                 )}
@@ -1213,6 +1224,162 @@ function CurrencySettings() {
         <p className="mt-3 text-sm text-red-400">
           {saveCurrency.error instanceof Error ? saveCurrency.error.message : 'Failed to save currency'}
         </p>
+      )}
+    </div>
+  )
+}
+
+/**
+ * Filament label colors. The Files screen shows one colored chip per G-code
+ * material type; the colors live in the generic `filament_type_colors` setting
+ * so they survive backups like any other configuration.
+ */
+function FilamentTypeColorSettings() {
+  const queryClient = useQueryClient()
+  const { data, isLoading } = useQuery({
+    queryKey: ['settings', FILAMENT_TYPE_COLORS_SETTING_KEY],
+    queryFn: () => settingsApi.get(FILAMENT_TYPE_COLORS_SETTING_KEY),
+    retry: false,
+  })
+  const stored = useMemo(() => parseMaterialColors(data?.value), [data])
+  const [draft, setDraft] = useState<Record<string, string> | null>(null)
+  const [newType, setNewType] = useState('')
+  const [saved, setSaved] = useState(false)
+
+  const colors = draft ?? stored
+
+  // Canonical types always come first (in the order people know them), then
+  // whatever else exists in the setting.
+  const rows = useMemo(() => {
+    const extra = Object.keys(colors).filter(k => !CANONICAL_MATERIAL_TYPES.includes(k as (typeof CANONICAL_MATERIAL_TYPES)[number])).sort()
+    return [...CANONICAL_MATERIAL_TYPES, ...extra]
+  }, [colors])
+
+  const updateColor = (type: string, color: string) => {
+    setDraft(prev => ({ ...(prev ?? stored), [type]: color }))
+  }
+
+  const removeType = (type: string) => {
+    setDraft(prev => {
+      const next = { ...(prev ?? stored) }
+      delete next[type]
+      return next
+    })
+  }
+
+  const addType = () => {
+    const type = normalizeMaterialTypeKey(newType)
+    if (!type || rows.includes(type as (typeof rows)[number])) return
+    setDraft(prev => ({ ...(prev ?? stored), [type]: DEFAULT_MATERIAL_COLORS[type] || UNKNOWN_MATERIAL_COLOR }))
+    setNewType('')
+  }
+
+  const saveColors = useMutation({
+    mutationFn: (value: Record<string, string>) => settingsApi.set(FILAMENT_TYPE_COLORS_SETTING_KEY, JSON.stringify(value)),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['settings', FILAMENT_TYPE_COLORS_SETTING_KEY] })
+      setDraft(null)
+      setSaved(true)
+      window.setTimeout(() => setSaved(false), 2500)
+    },
+  })
+
+  return (
+    <div className="bg-surface-900/50 border border-surface-800 rounded-xl p-6 mb-6">
+      <div className="flex items-start gap-3 mb-5">
+        <div className="p-2 bg-sky-500/10 rounded-lg">
+          <Palette className="h-6 w-6 text-sky-400" />
+        </div>
+        <div>
+          <h2 className="text-lg font-semibold text-surface-100">Filament label colors</h2>
+          <p className="text-sm text-surface-400">
+            Each G-code on the Files screen shows a chip with its material type. Pick the color for each type; types you have not
+            configured use the built-in palette, and files with no detected material show a neutral label.
+          </p>
+        </div>
+      </div>
+
+      {isLoading ? (
+        <div className="flex items-center justify-center py-6">
+          <RefreshCw className="h-5 w-5 text-surface-400 animate-spin" />
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {rows.map(type => {
+            const color = colors[type] || DEFAULT_MATERIAL_COLORS[type] || UNKNOWN_MATERIAL_COLOR
+            const isCanonical = CANONICAL_MATERIAL_TYPES.includes(type as (typeof CANONICAL_MATERIAL_TYPES)[number])
+            return (
+              <div key={type} className="flex items-center gap-3 rounded-lg border border-surface-800 bg-surface-900/40 px-3 py-2">
+                <input
+                  type="color"
+                  aria-label={`Color for ${type}`}
+                  value={HEX_COLOR.test(color) ? color.toLowerCase() : '#ffffff'}
+                  onChange={event => updateColor(type, event.target.value)}
+                  className="h-8 w-10 cursor-pointer rounded border border-surface-700 bg-surface-900 p-0.5"
+                />
+                <div className="w-28">
+                  <MaterialBadge material={type} colors={colors} />
+                </div>
+                <div className="flex-1">
+                  <span className="text-sm text-surface-300 font-mono uppercase">{type}</span>
+                  {!isCanonical && <span className="ml-2 text-[10px] text-surface-500">custom</span>}
+                </div>
+                {!isCanonical && (
+                  <button
+                    type="button"
+                    onClick={() => removeType(type)}
+                    className="btn btn-ghost text-xs text-red-400"
+                    title="Remove this type"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
+            )
+          })}
+
+          <div className="flex items-center gap-2 pt-2">
+            <input
+              value={newType}
+              onChange={event => setNewType(event.target.value)}
+              onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); addType() } }}
+              placeholder="Add another type (e.g. pc)"
+              className="input h-9 text-sm flex-1"
+            />
+            <button type="button" onClick={addType} disabled={!newType.trim()} className="btn btn-secondary text-sm">
+              <Plus className="h-4 w-4 mr-1" />Add type
+            </button>
+          </div>
+
+          <p className="text-xs text-surface-500">
+            Names are normalized the same way the G-code parser normalizes material_type: lowercase, without spaces or separators.
+            That is why "PLA-CF" becomes PLA — it is what the file actually reports.
+          </p>
+
+          <div className="flex items-center gap-3 pt-2">
+            <button
+              type="button"
+              onClick={() => saveColors.mutate(colors)}
+              disabled={saveColors.isPending}
+              className="btn btn-primary min-w-28"
+            >
+              {saveColors.isPending ? 'Saving...' : saved ? 'Saved' : 'Save'}
+            </button>
+            <button
+              type="button"
+              onClick={() => setDraft(DEFAULT_MATERIAL_COLORS)}
+              disabled={saveColors.isPending}
+              className="px-4 py-2 text-sm font-medium text-surface-300 hover:text-surface-100 hover:bg-surface-700 rounded-lg transition-colors"
+            >
+              <RotateCcw className="h-4 w-4 mr-1 inline" />Restore built-in palette
+            </button>
+          </div>
+          {saveColors.isError && (
+            <p className="text-sm text-red-400">
+              {saveColors.error instanceof Error ? saveColors.error.message : 'Failed to save colors'}
+            </p>
+          )}
+        </div>
       )}
     </div>
   )

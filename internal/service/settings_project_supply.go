@@ -73,6 +73,13 @@ func (s *SettingsService) Set(ctx context.Context, key, value string) error {
 			return fmt.Errorf("%w: %s", ErrUnsupportedCurrency, value)
 		}
 	}
+	if key == FilamentTypeColorsSettingKey {
+		normalized, err := validateFilamentTypeColors(value)
+		if err != nil {
+			return err
+		}
+		value = normalized
+	}
 
 	// Encrypt sensitive values
 	if isSensitive(key) && value != "" {

@@ -91,7 +91,8 @@ func (h *SettingsHandler) Set(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.service.Set(r.Context(), key, req.Value); err != nil {
-		if errors.Is(err, service.ErrUnsupportedCurrency) {
+		if errors.Is(err, service.ErrUnsupportedCurrency) || errors.Is(err, service.ErrInvalidFilamentTypeColors) {
+			// Operator mistake (unreadable value), not a server problem.
 			respondError(w, http.StatusBadRequest, err.Error())
 			return
 		}

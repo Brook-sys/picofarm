@@ -1,13 +1,20 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { AlertTriangle, FileCode, Grid3X3, Info as InfoIcon, Link2Off, List, Loader2, Plus, Search, Star, Upload, Send } from 'lucide-react'
-import { fileLibraryApi, gcodeLibraryApi, printersApi, slicerApi, stlLibraryApi } from '../api/client'
+import { fileLibraryApi, gcodeLibraryApi, printersApi, settingsApi, slicerApi, stlLibraryApi } from '../api/client'
 import AppToast, { type AppToastState } from '../components/AppToast'
+import { MaterialBadge } from '../components/MaterialBadge'
 import { STLViewer3D } from '../components/STLViewer3D'
 import type { GCodeLibraryFile, STLLibraryFile, Tag } from '../types'
 import { cn, formatDuration } from '../lib/utils'
 import { renderSTLThumbnailWithTimeout } from '../lib/stlThumbnail'
-
-const MATERIAL_OPTIONS = ['pla', 'petg', 'abs', 'asa', 'tpu'] as const
+import {
+  CANONICAL_MATERIAL_TYPES,
+  FILAMENT_TYPE_COLORS_SETTING_KEY,
+  type MaterialColorMap,
+  normalizeMaterialTypeKey,
+  parseMaterialColors,
+} from '../lib/materialColors'
 
 type SortMode = 'created_desc' | 'created_asc' | 'name_asc' | 'name_desc' | 'prints_desc' | 'time_asc' | 'grams_asc' | 'grams_desc'
 type LibraryItem = { type: 'stl'; file: STLLibraryFile } | { type: 'gcode'; file: GCodeLibraryFile }
@@ -82,12 +89,33 @@ export default function GCodeFiles() {
   useEffect(() => { printersApi.list().then(setPrinters).catch(() => setPrinters([])) }, [])
   useEffect(() => { loadFiles() }, [])
 
+  // Filament label colors. Read as a plain setting so the badge renders the
+  // colors configured in Settings → Other; the key matches the react-query key
+  // used there, which is why saving the colors updates this screen live.
+  // An unset key answers 404 and the library defaults apply.
+  const { data: materialColorsSetting } = useQuery({
+    queryKey: ['settings', FILAMENT_TYPE_COLORS_SETTING_KEY],
+    queryFn: () => settingsApi.get(FILAMENT_TYPE_COLORS_SETTING_KEY),
+    retry: false,
+  })
+  const materialColors = useMemo<MaterialColorMap>(
+    () => parseMaterialColors(materialColorsSetting?.value),
+    [materialColorsSetting],
+  )
+
   const allGCodeFiles = useMemo(() => [...files, ...stlFiles.flatMap(file => file.gcodes || [])], [files, stlFiles])
   const printProfileOptions = useMemo(() => Array.from(new Set(allGCodeFiles.map(f => f.metadata?.print_settings_id).filter(Boolean))).sort(), [allGCodeFiles])
   const filamentProfileOptions = useMemo(() => Array.from(new Set(allGCodeFiles.map(f => f.metadata?.filament_settings_id || f.filament_name).filter(Boolean))).sort(), [allGCodeFiles])
   const printerProfileOptions = useMemo(() => Array.from(new Set(allGCodeFiles.map(f => f.metadata?.printer_settings_id).filter(Boolean))).sort(), [allGCodeFiles])
   const nozzleOptions = useMemo(() => Array.from(new Set(allGCodeFiles.map(f => f.nozzle_diameter).filter((v): v is number => typeof v === 'number'))).sort((a, b) => a - b), [allGCodeFiles])
   const layerOptions = useMemo(() => Array.from(new Set(allGCodeFiles.map(f => f.layer_height).filter((v): v is number => typeof v === 'number'))).sort((a, b) => a - b), [allGCodeFiles])
+  // The filter is built from the canonical types plus whatever the library
+  // actually contains: normalizeMaterialType passes unknown types through
+  // unchanged, so a hardcoded list would silently exclude them.
+  const materialOptions = useMemo(() => {
+    const found = allGCodeFiles.map(f => normalizeMaterialTypeKey(f.material_type ?? '')).filter(Boolean)
+    return Array.from(new Set([...CANONICAL_MATERIAL_TYPES, ...found])).sort()
+  }, [allGCodeFiles])
 
   const activeFilters = [material, printProfile, filamentProfile, printerProfile, nozzle, layer, timeBucket, usage, tagFilter].filter(Boolean).length
 
@@ -477,7 +505,7 @@ export default function GCodeFiles() {
         {showFilters && (
           <div className="mt-2 pt-2 border-t border-surface-800">
             <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-9 gap-2">
-              <Field label="Material"><select value={material} onChange={e => setMaterial(e.target.value)} className="input text-xs py-1"><option value="">Any</option>{MATERIAL_OPTIONS.map(m => <option key={m} value={m}>{m.toUpperCase()}</option>)}</select></Field>
+              <Field label="Material"><select value={material} onChange={e => setMaterial(e.target.value)} className="input text-xs py-1"><option value="">Any</option>{materialOptions.map(m => <option key={m} value={m}>{m.toUpperCase()}</option>)}</select></Field>
               <Field label="Perfil de Impressão"><select value={printProfile} onChange={e => setPrintProfile(e.target.value)} className="input text-xs py-1"><option value="">Any</option>{printProfileOptions.map(p => <option key={p} value={p}>{p}</option>)}</select></Field>
               <Field label="Perfil de Filamento"><select value={filamentProfile} onChange={e => setFilamentProfile(e.target.value)} className="input text-xs py-1"><option value="">Any</option>{filamentProfileOptions.map(p => <option key={p} value={p}>{p}</option>)}</select></Field>
               <Field label="Perfil de Impressora"><select value={printerProfile} onChange={e => setPrinterProfile(e.target.value)} className="input text-xs py-1"><option value="">Any</option>{printerProfileOptions.map(p => <option key={p} value={p}>{p}</option>)}</select></Field>
@@ -497,7 +525,7 @@ export default function GCodeFiles() {
 
       {error && <div className="mb-4 rounded-lg border border-red-500/20 bg-red-500/10 text-red-400 px-4 py-3 text-sm">{error}</div>}
       {toast && <AppToast toast={toast} onClose={() => setToast(null)} />}
-      {viewingFile && <FileDetailsModal file={viewingFile} tags={tags} onCreateTag={createTag} onAddTag={addTagToFile} onRemoveTag={removeTagFromFile} onClose={() => setViewingFile(null)} />}
+      {viewingFile && <FileDetailsModal file={viewingFile} colors={materialColors} tags={tags} onCreateTag={createTag} onAddTag={addTagToFile} onRemoveTag={removeTagFromFile} onClose={() => setViewingFile(null)} />}
       {sendingFile && <SendToPrinterModal file={sendingFile} printers={printers} busy={busy === sendingFile.id} onClose={() => setSendingFile(null)} onSend={(printerId, remotePath, startPrint) => sendToPrinter(sendingFile, printerId, remotePath, startPrint)} />}
       {viewingSTL && <STLDetailsModal file={viewingSTL} tags={tags} onCreateTag={createTag} onAddTag={addTagToSTL} onRemoveTag={removeTagFromSTL} onClose={() => setViewingSTL(null)} onRetryThumbnail={() => retrySTLThumbnail(viewingSTL)} onSlice={() => setSlicingSTL(viewingSTL)} />}
       {slicingSTL && <SliceSTLModal file={slicingSTL} onClose={() => setSlicingSTL(null)} onDone={() => { setSlicingSTL(null); loadFiles() }} />}
@@ -518,7 +546,7 @@ export default function GCodeFiles() {
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
               {libraryItems.map(item => item.type === 'stl'
                 ? <STLFileCard key={`stl-${item.file.id}`} file={item.file} busy={busy === item.file.id} confirmDelete={confirmDelete === item.file.id} onRename={(name) => renameSTLFile(item.file, name)} onDelete={() => deleteSTLFile(item.file.id)} onDropGCode={(gcodeId) => setGCodeParent(gcodeId, item.file.id)} onUploadGCode={(gcodes) => uploadFiles(gcodes, 'gcode', item.file.id)} onViewGCode={setViewingFile} onRenameGCode={renameFile} onAddGCode={addToQueue} onSendGCode={setSendingFile} onUnlinkGCode={(gcodeId) => setGCodeParent(gcodeId, null)} onMakeDefaultGCode={makeDefaultGCode} onRetryThumbnail={() => retrySTLThumbnail(item.file)} onViewSTL={() => setViewingSTL(item.file)} onSlice={() => setSlicingSTL(item.file)} isGCodeMatch={(gcode) => hasActiveGCodeFilter && gcodeMatchesFilters(gcode)} />
-                : <FileCard key={`gcode-${item.file.id}`} file={item.file} busy={busy === item.file.id} confirmDelete={confirmDelete === item.file.id} onView={() => setViewingFile(item.file)} onRename={(name) => renameFile(item.file, name)} onAdd={() => addToQueue(item.file.id)} onSend={() => setSendingFile(item.file)} onDelete={() => deleteFile(item.file.id)} />)}
+                : <FileCard key={`gcode-${item.file.id}`} file={item.file} colors={materialColors} busy={busy === item.file.id} confirmDelete={confirmDelete === item.file.id} onView={() => setViewingFile(item.file)} onRename={(name) => renameFile(item.file, name)} onAdd={() => addToQueue(item.file.id)} onSend={() => setSendingFile(item.file)} onDelete={() => deleteFile(item.file.id)} />)}
             </div>
           ) : (
             <div className="card overflow-hidden">
@@ -528,9 +556,9 @@ export default function GCodeFiles() {
               {libraryItems.map(item => item.type === 'stl'
                 ? <div key={`stl-group-${item.file.id}`}>
                     <STLFileRow file={item.file} busy={busy === item.file.id} confirmDelete={confirmDelete === item.file.id} onView={() => setViewingSTL(item.file)} onRename={(name) => renameSTLFile(item.file, name)} onDelete={() => deleteSTLFile(item.file.id)} onRetryThumbnail={() => retrySTLThumbnail(item.file)} onDropGCode={(gcodeId) => setGCodeParent(gcodeId, item.file.id)} onSlice={() => setSlicingSTL(item.file)} />
-                    {(item.file.gcodes || []).map(gcode => <FileRow key={`linked-gcode-${gcode.id}`} file={gcode} busy={busy === gcode.id} confirmDelete={confirmDelete === gcode.id} indented matched={hasActiveGCodeFilter && gcodeMatchesFilters(gcode)} parentName={item.file.display_name} onView={() => setViewingFile(gcode)} onRename={(name) => renameFile(gcode, name)} onAdd={() => addToQueue(gcode.id)} onSend={() => setSendingFile(gcode)} onDelete={() => deleteFile(gcode.id)} />)}
+                    {(item.file.gcodes || []).map(gcode => <FileRow key={`linked-gcode-${gcode.id}`} file={gcode} colors={materialColors} busy={busy === gcode.id} confirmDelete={confirmDelete === gcode.id} indented matched={hasActiveGCodeFilter && gcodeMatchesFilters(gcode)} parentName={item.file.display_name} onView={() => setViewingFile(gcode)} onRename={(name) => renameFile(gcode, name)} onAdd={() => addToQueue(gcode.id)} onSend={() => setSendingFile(gcode)} onDelete={() => deleteFile(gcode.id)} />)}
                   </div>
-                : <FileRow key={`gcode-${item.file.id}`} file={item.file} busy={busy === item.file.id} confirmDelete={confirmDelete === item.file.id} matched={hasActiveGCodeFilter} onView={() => setViewingFile(item.file)} onRename={(name) => renameFile(item.file, name)} onAdd={() => addToQueue(item.file.id)} onSend={() => setSendingFile(item.file)} onDelete={() => deleteFile(item.file.id)} />)}
+                : <FileRow key={`gcode-${item.file.id}`} file={item.file} colors={materialColors} busy={busy === item.file.id} confirmDelete={confirmDelete === item.file.id} matched={hasActiveGCodeFilter} onView={() => setViewingFile(item.file)} onRename={(name) => renameFile(item.file, name)} onAdd={() => addToQueue(item.file.id)} onSend={() => setSendingFile(item.file)} onDelete={() => deleteFile(item.file.id)} />)}
             </div>
           )}
         </div>
@@ -899,7 +927,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   return <label className="block"><span className="text-[10px] uppercase tracking-wide text-surface-500 mb-1 block">{label}</span>{children}</label>
 }
 
-function FileCard({ file, busy, confirmDelete, onView, onRename, onAdd, onSend, onDelete }: { file: GCodeLibraryFile; busy: boolean; confirmDelete: boolean; onView: () => void; onRename: (name: string) => void; onAdd: () => void; onSend: () => void; onDelete: () => void }) {
+function FileCard({ file, colors, busy, confirmDelete, onView, onRename, onAdd, onSend, onDelete }: { file: GCodeLibraryFile; colors: MaterialColorMap; busy: boolean; confirmDelete: boolean; onView: () => void; onRename: (name: string) => void; onAdd: () => void; onSend: () => void; onDelete: () => void }) {
   const [editingName, setEditingName] = useState(false)
   const [name, setName] = useState(file.display_name)
   const saveName = () => {
@@ -919,7 +947,7 @@ function FileCard({ file, busy, confirmDelete, onView, onRename, onAdd, onSend, 
             <button type="button" onClick={() => setEditingName(true)} className="font-medium text-surface-100 truncate text-left hover:text-accent-300" title={file.display_name}>{file.display_name}</button>
           )}
           <div className="mb-1 inline-flex rounded-full border border-accent-500/30 bg-accent-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-accent-300">G-code</div>
-          <div className="text-xs text-surface-500 mt-1">{file.material_type?.toUpperCase() || 'Material unknown'}</div>
+          <div className="mt-1"><MaterialBadge material={file.material_type} colors={colors} /></div>
           {file.filament_name && <div className="text-xs text-surface-400 truncate">Filamento: {file.filament_name}</div>}
           <div className="text-xs text-surface-500">{file.print_count} successful prints</div>
           {!file.parent_stl_id && <TagChips tags={file.tags} />}
@@ -978,7 +1006,7 @@ function STLFileRow({ file, busy, confirmDelete, onView, onRename, onDelete, onR
   )
 }
 
-function FileRow({ file, busy, confirmDelete, indented = false, matched = false, parentName, onView, onRename, onAdd, onSend, onDelete }: { file: GCodeLibraryFile; busy: boolean; confirmDelete: boolean; indented?: boolean; matched?: boolean; parentName?: string; onView: () => void; onRename: (name: string) => void; onAdd: () => void; onSend: () => void; onDelete: () => void }) {
+function FileRow({ file, colors, busy, confirmDelete, indented = false, matched = false, parentName, onView, onRename, onAdd, onSend, onDelete }: { file: GCodeLibraryFile; colors: MaterialColorMap; busy: boolean; confirmDelete: boolean; indented?: boolean; matched?: boolean; parentName?: string; onView: () => void; onRename: (name: string) => void; onAdd: () => void; onSend: () => void; onDelete: () => void }) {
   const [editingName, setEditingName] = useState(false)
   const [name, setName] = useState(file.display_name)
   const saveName = () => {
@@ -998,8 +1026,8 @@ function FileRow({ file, busy, confirmDelete, indented = false, matched = false,
       <div className="text-sm text-accent-300 font-medium">G-code</div>
       <div className="text-sm text-surface-300 truncate" title={parentName || 'Root'}>{parentName ? `Inside ${parentName}` : 'Root file'}</div>
       <div className="min-w-0 text-sm text-surface-300">
-        <div>{file.material_type?.toUpperCase() || '—'}</div>
-        <div className="text-xs text-surface-500 truncate">{file.metadata?.print_settings_id || 'No profile'}</div>
+        <MaterialBadge material={file.material_type} colors={colors} />
+        <div className="text-xs text-surface-500 truncate mt-0.5">{file.metadata?.print_settings_id || 'No profile'}</div>
       </div>
       <div className="min-w-0 text-sm text-surface-300">
         <div>{file.estimated_seconds ? formatDuration(file.estimated_seconds) : 'No ETA'}</div>
@@ -1016,7 +1044,7 @@ function FileRow({ file, busy, confirmDelete, indented = false, matched = false,
   )
 }
 
-function FileDetailsModal({ file, tags, onCreateTag, onAddTag, onRemoveTag, onClose }: { file: GCodeLibraryFile; tags: Tag[]; onCreateTag: (name: string, color?: string) => void; onAddTag: (fileId: string, tagId: string) => void; onRemoveTag: (fileId: string, tagId: string) => void; onClose: () => void }) {
+function FileDetailsModal({ file, colors, tags, onCreateTag, onAddTag, onRemoveTag, onClose }: { file: GCodeLibraryFile; colors: MaterialColorMap; tags: Tag[]; onCreateTag: (name: string, color?: string) => void; onAddTag: (fileId: string, tagId: string) => void; onRemoveTag: (fileId: string, tagId: string) => void; onClose: () => void }) {
   const isRoot = !file.parent_stl_id
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
@@ -1033,7 +1061,7 @@ function FileDetailsModal({ file, tags, onCreateTag, onAddTag, onRemoveTag, onCl
               <label className="block"><span className="text-xs text-surface-500 mb-1 block">Perfil de Impressora</span><input value={file.metadata?.printer_settings_id || 'Não encontrado'} disabled className="input opacity-70" /></label>
               <label className="block"><span className="text-xs text-surface-500 mb-1 block">Perfil de Filamento</span><input value={file.metadata?.filament_settings_id || file.filament_name || 'Não encontrado'} disabled className="input opacity-70" /></label>
               <label className="block"><span className="text-xs text-surface-500 mb-1 block">Impressora</span><input value={file.metadata?.printer_model || 'Não encontrado'} disabled className="input opacity-70" /></label>
-             <label className="block"><span className="text-xs text-surface-500 mb-1 block">Material</span><input value={(file.material_type || '').toUpperCase()} disabled className="input opacity-70" /></label>
+             <label className="block"><span className="text-xs text-surface-500 mb-1 block">Material</span><div className="input opacity-70 flex items-center"><MaterialBadge material={file.material_type} colors={colors} /></div></label>
              <div className="text-xs text-surface-500">Filament grams<div className="text-surface-100 text-base mt-0.5">{file.filament_grams ? Math.round(file.filament_grams) : '—'}</div></div>
              <div className="text-xs text-surface-500">Estimated seconds<div className="text-surface-100 text-base mt-0.5">{file.estimated_seconds ? formatDuration(file.estimated_seconds) : '—'}</div></div>
              <div className="text-xs text-surface-500">Layer height<div className="text-surface-100 text-base mt-0.5">{file.layer_height || '—'}</div></div>

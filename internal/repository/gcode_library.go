@@ -93,7 +93,7 @@ func (r *GCodeLibraryRepository) List(ctx context.Context, opts GCodeLibraryList
 	offset := (opts.Page - 1) * opts.PageSize
 	args = append(args, limit, offset)
 	rows, err := r.db.QueryContext(ctx, `
-		SELECT g.id, g.file_id, g.display_name, f.original_name, g.material_type, g.material_color, COALESCE(g.filament_name, ''), g.filament_grams, g.estimated_seconds,
+		SELECT g.id, g.file_id, g.display_name, f.original_name, COALESCE(g.material_type, ''), COALESCE(g.material_color, ''), COALESCE(g.filament_name, ''), g.filament_grams, g.estimated_seconds,
 		       g.layer_height, g.nozzle_diameter, g.bed_temp, g.nozzle_temp, g.thumbnail_file_id, g.parent_stl_id, g.default_for_stl, g.metadata_json,
 		       g.print_count, g.created_at, g.updated_at
 		FROM gcode_files g
@@ -151,7 +151,7 @@ func (r *GCodeLibraryRepository) GetByID(ctx context.Context, id uuid.UUID) (*mo
 	var f model.GCodeLibraryFile
 	var md sql.NullString
 	err := scanRow(r.db.QueryRowContext(ctx, `
-		SELECT g.id, g.file_id, g.display_name, f.original_name, g.material_type, g.material_color, COALESCE(g.filament_name, ''), g.filament_grams, g.estimated_seconds,
+		SELECT g.id, g.file_id, g.display_name, f.original_name, COALESCE(g.material_type, ''), COALESCE(g.material_color, ''), COALESCE(g.filament_name, ''), g.filament_grams, g.estimated_seconds,
 		       g.layer_height, g.nozzle_diameter, g.bed_temp, g.nozzle_temp, g.thumbnail_file_id, g.parent_stl_id, g.default_for_stl, g.metadata_json, g.print_count, g.created_at, g.updated_at
 		FROM gcode_files g JOIN files f ON f.id = g.file_id WHERE g.id = ?
 	`, id), &f.ID, &f.FileID, &f.DisplayName, &f.FileName, &f.MaterialType, &f.MaterialColor, &f.FilamentName, &f.FilamentGrams, &f.EstimatedSeconds,
