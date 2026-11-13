@@ -1,7 +1,9 @@
 # syntax=docker/dockerfile:1.7
 
 ARG NODE_VERSION=20
-ARG GO_VERSION=1.24
+# Go 1.26.11+ é obrigatório: corrige GO-2026-6859 (net/http MaxBytesReader race)
+# e GO-2026-6809 (crypto/x509) na stdlib. Não baixar sem checar advisories.
+ARG GO_VERSION=1.26.11
 ARG ALPINE_VERSION=3.20
 
 FROM node:${NODE_VERSION}-alpine AS frontend

@@ -55,7 +55,7 @@ export default function DocsHome() {
 
       <h2>Prerequisites</h2>
       <ul>
-        <li>A machine with Docker, or Go 1.24 and Node.js 20 to build from source</li>
+        <li>A machine with Docker, or Go 1.26.11+ and Node.js 20 to build from source</li>
         <li>One or more 3D printers (Bambu Lab, OctoPrint, Klipper, or manual logging)</li>
         <li>Marketplace accounts (Etsy, Shopify, or Squarespace) if you want order sync</li>
       </ul>

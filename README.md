@@ -47,7 +47,7 @@ Projects (product catalog)
 
 | Layer | Technology |
 |-------|-----------|
-| Backend | Go 1.24, Chi router |
+| Backend | Go 1.26.11+ (mínimo), Chi router |
 | Frontend | React 19, TypeScript, Tailwind CSS 4, TanStack Query v5 |
 | Database | SQLite (embedded, WAL mode) |
 | Real-time | WebSocket |
@@ -58,7 +58,7 @@ Projects (product catalog)
 
 ### Prerequisites
 
-- Go 1.24+
+- Go 1.26.11+ (mínimo; `go.mod` exige 1.26.11 — se seu Go for mais velho, rode com `GOTOOLCHAIN=auto`)
 - Node.js 20+
 
 ### 1. Install Dependencies

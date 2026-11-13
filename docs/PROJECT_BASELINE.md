@@ -14,7 +14,7 @@ This document defines the current operational baseline for PicoFarm. Use it befo
 
 | Layer | Current implementation |
 | --- | --- |
-| Backend | Go module `github.com/Brook-sys/picofarm`, Go `1.24.0` in `go.mod` |
+| Backend | Go module `github.com/Brook-sys/picofarm`, Go `1.26.11` in `go.mod` (mínimo: stdlib corrigida para GO-2026-6859/GO-2026-6809) |
 | HTTP API | `go-chi/chi` router in `internal/api` |
 | Database | SQLite via `github.com/glebarez/go-sqlite`, with the schema embedded in the binary (`internal/database/schema.sql`) applied on startup, plus idempotent in-Go compatibility migrations for older databases |
 | Frontend | React 19, TypeScript 5.9, Vite 7, Tailwind CSS 4 |

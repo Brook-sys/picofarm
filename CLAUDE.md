@@ -4,7 +4,7 @@ A print farm management platform for makers — product catalogs, multi-channel 
 
 ## Tech Stack
 
-- **Backend:** Go 1.24, Chi router, SQLite via `glebarez/go-sqlite` (WAL mode), `log/slog` (JSON to stdout)
+- **Backend:** Go 1.26.11+ (mínimo p/ stdlib corrigida), Chi router, SQLite via `glebarez/go-sqlite` (WAL mode), `log/slog` (JSON to stdout)
 - **Frontend:** React 19, TypeScript 5.9, Vite 7, Tailwind CSS 4, TanStack Query v5
 - **Delivery:** self-hosted/local web app. The backend binary serves the API and the built frontend from `web/dist` on the same port; there is no desktop shell
 - **Integrations:** Etsy (OAuth + PKCE, webhooks), Squarespace, Shopify, Mercado Livre, Shopee (see `docs/SALES_CHANNELS.md`), Bambu Lab (MQTT + cloud), OctoPrint, Moonraker/Klipper
