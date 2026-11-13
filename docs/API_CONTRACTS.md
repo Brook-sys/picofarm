@@ -204,6 +204,22 @@ Representative routes:
 - `POST /api/printers/{id}/speed|fan|led|skip-object|jog|temperature|plate-cleared`
 - `POST /api/printers/{id}/ams/load|unload|refresh|backup`
 - `GET /api/printers/{id}/analytics`
+
+Automatic reconnect is background behavior with no route of its own:
+
+- The server keeps offline printers retrying in the background. A pass runs every 5s and only
+  books in-memory state; the per-printer retry rate decays from 5s to a 5 minute ceiling with ±20%
+  jitter, and a successful reconnect resets it.
+- `POST /api/printers/{id}/reconnect` is the manual path. It performs one attempt on demand and is
+  not subject to that backoff, but it does not interrupt an attempt already running for the same
+  printer.
+- Printers in maintenance mode, `manual` printers, and connection types the manager cannot build a
+  client for (`chitu` today) are never retried: they would fail on every attempt and only fill the
+  log.
+- A printer reporting `printing`, `paused` or `idle` is left alone; only `offline`, `error` and
+  "no recorded state" are retried.
+- After `DisconnectAll` during shutdown, `Connect` refuses new connections instead of resurrecting a
+  printer while the process is going away.
 - `GET /api/printers/{id}/job-stats`
 
 Primary response types:

@@ -20,20 +20,22 @@ import (
 )
 
 type PrinterService struct {
-	repo              *repository.PrinterRepository
-	settingsRepo      *repository.SettingsRepository
-	printJobRepo      *repository.PrintJobRepository
-	queueRepo         *repository.QueueItemRepository
-	saleRepo          *repository.SaleRepository
-	macroRepo         *repository.PrinterMacroRepository
-	manager           *printer.Manager
-	hub               *realtime.Hub
-	discovery         *printer.Discovery
-	bambuCloudRepo    *repository.BambuCloudRepository
-	bambuCloud        *bambu.CloudClient
-	reconnectMu       sync.Mutex
-	reconnecting      map[uuid.UUID]time.Time
-	autoReconnectOnce sync.Once
+	repo             *repository.PrinterRepository
+	settingsRepo     *repository.SettingsRepository
+	printJobRepo     *repository.PrintJobRepository
+	queueRepo        *repository.QueueItemRepository
+	saleRepo         *repository.SaleRepository
+	macroRepo        *repository.PrinterMacroRepository
+	manager          *printer.Manager
+	hub              *realtime.Hub
+	discovery        *printer.Discovery
+	bambuCloudRepo   *repository.BambuCloudRepository
+	bambuCloud       *bambu.CloudClient
+	reconnectMu      sync.Mutex
+	reconnecting     map[uuid.UUID]time.Time
+	reconnectBackoff map[uuid.UUID]reconnectBackoff
+	autoReconnectMu  sync.Mutex
+	autoReconnectOn  bool
 }
 
 // Create creates a new printer.
@@ -222,22 +224,25 @@ func (s *PrinterService) ReconnectAsync(ctx context.Context, id uuid.UUID) error
 	return nil
 }
 
+// ReconnectOfflinePrinters is one pass of the automatic reconnect: every
+// printer that is offline past its own backoff deadline gets a single attempt.
+// It is deliberately cheap — one repository list plus in-memory bookkeeping —
+// so it can run every few seconds on a farm with dozens of printers. The
+// retry rate decays instead of hammering a printer that is simply switched off.
+// See printer_autoreconnect.go for the schedule.
 func (s *PrinterService) ReconnectOfflinePrinters(ctx context.Context) {
 	printers, err := s.repo.List(ctx)
 	if err != nil {
 		slog.Warn("failed to list printers for auto reconnect", "error", err)
 		return
 	}
+	now := time.Now()
 	for i := range printers {
 		p := &printers[i]
-		if p.ConnectionType == model.ConnectionTypeManual || p.MaintenanceMode {
+		if !s.printerNeedsAutoReconnect(p, now) {
 			continue
 		}
-		state, err := s.manager.GetState(p.ID)
-		if err == nil && state.Status != model.PrinterStatusOffline && state.Status != model.PrinterStatusError {
-			continue
-		}
-		_ = s.ReconnectAsync(ctx, p.ID)
+		s.startAutoReconnect(ctx, p)
 	}
 }
 
@@ -625,27 +630,24 @@ func (s *PrinterService) DiscoverPrinters(ctx context.Context) ([]printer.Discov
 	return discovered, nil
 }
 
+// StartAutoReconnect starts the background loop that brings offline printers
+// back. Safe to call more than once: only the first call starts a goroutine.
+// The goroutine stops when ctx is cancelled, so it is tied to the process
+// lifetime rather than leaking past shutdown.
+func (s *PrinterService) StartAutoReconnect(ctx context.Context) {
+	s.autoReconnectMu.Lock()
+	defer s.autoReconnectMu.Unlock()
+	if s.autoReconnectOn {
+		return
+	}
+	s.autoReconnectOn = true
+	go s.autoReconnectLoop(ctx)
+}
+
 // ConnectAllPrinters loads all printers from the database and connects
 // non-manual printers. Called at startup to restore connections.
 // For bambu_cloud printers, credentials are refreshed from the stored
 // cloud auth so that token updates from later logins are picked up.
-func (s *PrinterService) StartAutoReconnect(ctx context.Context) {
-	s.autoReconnectOnce.Do(func() {
-		go func() {
-			ticker := time.NewTicker(5 * time.Second)
-			defer ticker.Stop()
-			for {
-				select {
-				case <-ctx.Done():
-					return
-				case <-ticker.C:
-					s.ReconnectOfflinePrinters(ctx)
-				}
-			}
-		}()
-	})
-}
-
 func (s *PrinterService) ConnectAllPrinters(ctx context.Context) {
 	printers, err := s.repo.List(ctx)
 	if err != nil {

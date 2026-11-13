@@ -72,6 +72,33 @@ type Manager struct {
 	broadcaster             model.Broadcaster
 	statusCallbacks         []StatusChangeCallback
 	macroAutomationCallback func(uuid.UUID)
+	// closed is set by DisconnectAll during graceful shutdown. Connect refuses
+	// to open new connections afterwards, so a reconnect goroutine that lost the
+	// race with shutdown cannot resurrect a printer.
+	closed bool
+
+	// printerLocks serializes Connect/Disconnect on the same printer. It is
+	// deliberately separate from mu: those calls block on the network for as
+	// long as the client's own timeout, and holding mu for that long would stall
+	// every status read and every other printer's connection attempt.
+	printerLocksMu sync.Mutex
+	printerLocks   map[uuid.UUID]*sync.Mutex
+}
+
+// SupportsConnectionType reports whether the manager knows how to build a
+// client for this connection type. Callers that retry connections in the
+// background (auto reconnect) use it to skip printers that could never
+// succeed instead of retrying forever.
+func SupportsConnectionType(t model.ConnectionType) bool {
+	switch t {
+	case model.ConnectionTypeOctoPrint,
+		model.ConnectionTypeBambuLAN,
+		model.ConnectionTypeBambuCloud,
+		model.ConnectionTypeMoonraker:
+		return true
+	default:
+		return false
+	}
 }
 
 // NewManager creates a new printer manager.
@@ -80,6 +107,7 @@ func NewManager() *Manager {
 		clients:         make(map[uuid.UUID]Client),
 		states:          make(map[uuid.UUID]*model.PrinterState),
 		statusCallbacks: []StatusChangeCallback{},
+		printerLocks:    make(map[uuid.UUID]*sync.Mutex),
 	}
 }
 
@@ -131,46 +159,131 @@ func attachCapabilities(state *model.PrinterState, client Client) *model.Printer
 	return state
 }
 
+// lockPrinter serializes operations on a single printer and returns the unlock
+// function. A new mutex is created on first use and kept forever: the map only
+// grows with the number of printers ever connected, and deleting an entry while
+// another goroutine holds it would silently allow two operations to overlap.
+func (m *Manager) lockPrinter(id uuid.UUID) func() {
+	m.printerLocksMu.Lock()
+	if m.printerLocks == nil {
+		m.printerLocks = make(map[uuid.UUID]*sync.Mutex)
+	}
+	lock, ok := m.printerLocks[id]
+	if !ok {
+		lock = &sync.Mutex{}
+		m.printerLocks[id] = lock
+	}
+	m.printerLocksMu.Unlock()
+
+	lock.Lock()
+	return lock.Unlock
+}
+
+// setOffline records a printer as offline without touching clients.
+func (m *Manager) setOffline(id uuid.UUID) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.states[id] = &model.PrinterState{
+		PrinterID: id,
+		Status:    model.PrinterStatusOffline,
+		UpdatedAt: time.Now(),
+	}
+}
+
+// setState stores a state and broadcasts it.
+func (m *Manager) setState(id uuid.UUID, state *model.PrinterState) {
+	m.mu.Lock()
+	m.states[id] = state
+	m.mu.Unlock()
+	m.broadcast(model.EventPrinterStateUpdated, state)
+}
+
+// storeClient installs a client for a printer, closing a previous one instead
+// of leaking it. Callers must not hold mu. It reports whether the client was
+// installed, which is false when the manager is shutting down.
+func (m *Manager) storeClient(id uuid.UUID, client Client) bool {
+	m.mu.Lock()
+	if m.closed {
+		m.mu.Unlock()
+		// The connection is already open, so dropping the client without
+		// closing it would leak it exactly during shutdown.
+		slog.Info("manager is shutting down, closing printer connection", "printer_id", id)
+		_ = client.Disconnect()
+		return false
+	}
+	replaced := m.clients[id]
+	m.clients[id] = client
+	m.mu.Unlock()
+
+	if replaced != nil && replaced != client {
+		// Two Connect calls for the same printer (a retry racing a manual
+		// reconnect) would otherwise leave the first connection open forever.
+		if err := replaced.Disconnect(); err != nil {
+			slog.Warn("failed to close replaced printer connection", "printer_id", id, "error", err)
+		}
+	}
+	return true
+}
+
+// buildClient creates the client for a printer. No network I/O happens here.
+func buildClient(p *model.Printer) (Client, error) {
+	switch p.ConnectionType {
+	case model.ConnectionTypeOctoPrint:
+		return NewOctoPrintClient(p.ID, p.ConnectionURI, p.APIKey), nil
+	case model.ConnectionTypeBambuLAN:
+		return NewBambuClient(p.ID, p.ConnectionURI, p.APIKey, p.SerialNumber), nil
+	case model.ConnectionTypeBambuCloud:
+		// For cloud printers: ConnectionURI = MQTT username, APIKey = auth token
+		return NewBambuCloudClient(p.ID, p.SerialNumber, p.ConnectionURI, p.APIKey), nil
+	case model.ConnectionTypeMoonraker:
+		return NewMoonrakerClient(p.ID, p.ConnectionURI), nil
+	default:
+		return nil, fmt.Errorf("unsupported connection type: %s", p.ConnectionType)
+	}
+}
+
 // Connect establishes connection to a printer.
 // Skips connection if printer is in maintenance mode.
+//
+// mu is never held across network I/O. Connect, GetStatus and Disconnect can
+// block for the client's whole timeout, and the previous code held mu for that
+// long: with several offline printers, one slow printer froze status reads and
+// every other connection attempt for seconds to minutes.
 func (m *Manager) Connect(p *model.Printer) error {
+	if p == nil {
+		return fmt.Errorf("printer is required")
+	}
 	if p.MaintenanceMode {
-		m.mu.Lock()
-		m.states[p.ID] = &model.PrinterState{
-			PrinterID: p.ID,
-			Status:    model.PrinterStatusOffline,
-			UpdatedAt: time.Now(),
-		}
-		m.mu.Unlock()
+		m.setOffline(p.ID)
 		slog.Info("skipping connect for printer in maintenance mode", "printer_id", p.ID)
 		return nil
 	}
 
-	m.mu.Lock()
-	defer m.mu.Unlock()
+	// Only one connection attempt per printer at a time, and never a global
+	// serialization point.
+	unlock := m.lockPrinter(p.ID)
+	defer unlock()
 
-	// Create appropriate client based on connection type
-	var client Client
-	switch p.ConnectionType {
-	case model.ConnectionTypeOctoPrint:
-		client = NewOctoPrintClient(p.ID, p.ConnectionURI, p.APIKey)
-	case model.ConnectionTypeBambuLAN:
-		client = NewBambuClient(p.ID, p.ConnectionURI, p.APIKey, p.SerialNumber)
-	case model.ConnectionTypeBambuCloud:
-		// For cloud printers: ConnectionURI = MQTT username, APIKey = auth token
-		client = NewBambuCloudClient(p.ID, p.SerialNumber, p.ConnectionURI, p.APIKey)
-	case model.ConnectionTypeMoonraker:
-		client = NewMoonrakerClient(p.ID, p.ConnectionURI)
-	case model.ConnectionTypeManual:
-		// No client for manual printers
-		m.states[p.ID] = &model.PrinterState{
-			PrinterID: p.ID,
-			Status:    model.PrinterStatusOffline,
-			UpdatedAt: time.Now(),
-		}
+	m.mu.RLock()
+	closed := m.closed
+	m.mu.RUnlock()
+	if closed {
+		return fmt.Errorf("printer manager is shutting down")
+	}
+
+	if p.ConnectionType == model.ConnectionTypeManual {
+		// No client for manual printers.
+		m.setOffline(p.ID)
 		return nil
-	default:
-		return fmt.Errorf("unsupported connection type: %s", p.ConnectionType)
+	}
+
+	client, err := buildClient(p)
+	if err != nil {
+		// Unsupported connection types (e.g. chitu) never reach a client, so
+		// they must not keep a stale state around either.
+		slog.Error("cannot build printer client", "printer_id", p.ID, "type", p.ConnectionType, "error", err)
+		m.setOffline(p.ID)
+		return err
 	}
 
 	// Set up status callback
@@ -206,25 +319,21 @@ func (m *Manager) Connect(p *model.Printer) error {
 		})
 	}
 
-	// Connect
+	// Connect (network, no manager lock held)
 	if err := client.Connect(); err != nil {
 		slog.Error("failed to connect to printer", "printer_id", p.ID, "error", err)
-		m.states[p.ID] = &model.PrinterState{
-			PrinterID: p.ID,
-			Status:    model.PrinterStatusOffline,
-			UpdatedAt: time.Now(),
-		}
+		m.setOffline(p.ID)
 		return err
 	}
 
-	m.clients[p.ID] = client
+	if !m.storeClient(p.ID, client) {
+		return fmt.Errorf("printer manager is shutting down")
+	}
 
-	// Get initial status
-	if state, err := client.GetStatus(); err == nil {
+	// Get initial status (network, no manager lock held)
+	if state, err := client.GetStatus(); err == nil && state != nil {
 		state = attachCapabilities(state, client)
-		m.states[p.ID] = state
-		// Broadcast initial state
-		m.broadcast(model.EventPrinterStateUpdated, state)
+		m.setState(p.ID, state)
 	}
 
 	slog.Info("connected to printer", "printer_id", p.ID, "type", p.ConnectionType)
@@ -239,14 +348,19 @@ func (m *Manager) Connect(p *model.Printer) error {
 
 // Disconnect closes connection to a printer.
 func (m *Manager) Disconnect(id uuid.UUID) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
+	unlock := m.lockPrinter(id)
+	defer unlock()
 
-	if client, ok := m.clients[id]; ok {
-		client.Disconnect() //nolint:errcheck // best-effort cleanup
-		delete(m.clients, id)
-	}
+	m.mu.Lock()
+	client, ok := m.clients[id]
+	delete(m.clients, id)
 	delete(m.states, id)
+	m.mu.Unlock()
+
+	if ok {
+		// Best effort, and outside mu: a client can block while closing.
+		client.Disconnect() //nolint:errcheck // best-effort cleanup
+	}
 
 	// Broadcast printer disconnected event
 	m.broadcast(model.EventPrinterDisconnected, map[string]interface{}{
@@ -255,19 +369,31 @@ func (m *Manager) Disconnect(id uuid.UUID) {
 }
 
 // DisconnectAll closes all printer connections. Used during graceful shutdown.
+// Connections close in parallel because each one can take as long as the
+// client's own close timeout.
 func (m *Manager) DisconnectAll() {
 	m.mu.Lock()
-	defer m.mu.Unlock()
+	clients := m.clients
+	m.clients = make(map[uuid.UUID]Client)
+	m.states = make(map[uuid.UUID]*model.PrinterState)
+	m.closed = true
+	m.mu.Unlock()
 
-	for id, client := range m.clients {
-		slog.Info("disconnecting printer", "printer_id", id)
-		client.Disconnect() //nolint:errcheck // best-effort shutdown cleanup
-		delete(m.clients, id)
+	if len(clients) == 0 {
+		slog.Info("all printers disconnected")
+		return
 	}
-	// Clear all states
-	for id := range m.states {
-		delete(m.states, id)
+
+	var wg sync.WaitGroup
+	for id, client := range clients {
+		wg.Add(1)
+		go func(id uuid.UUID, client Client) {
+			defer wg.Done()
+			slog.Info("disconnecting printer", "printer_id", id)
+			client.Disconnect() //nolint:errcheck // best-effort shutdown cleanup
+		}(id, client)
 	}
+	wg.Wait()
 	slog.Info("all printers disconnected")
 }
 
