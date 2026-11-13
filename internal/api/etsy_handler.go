@@ -468,7 +468,7 @@ func (h *EtsyHandler) HandleWebhook(w http.ResponseWriter, r *http.Request) {
 
 	// Verify the Etsy signature. When a secret is configured this fails closed:
 	// a missing or invalid signature is rejected instead of silently accepted.
-	// With no secret configured the previous permissive behaviour is kept, but
+	// With no secret configured the previous permissive behavior is kept, but
 	// it is warned about once so the gap stays visible in the logs.
 	signature := r.Header.Get("X-Etsy-Signature")
 	secret := h.resolveWebhookSecret(r.Context())

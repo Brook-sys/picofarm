@@ -205,7 +205,7 @@ scoped to jobs completed in the last 90 days. It reports `total_jobs` and
 that had both a start event and a `Printing` marker.
 
 A failure in any of the underlying repository queries returns `500`, not a zeroed metric.
-The previous behaviour degraded `revenue_cents` to `0` and `failure_breakdown` to an empty
+The previous behavior degraded `revenue_cents` to `0` and `failure_breakdown` to an empty
 map on error, which made an unavailable database indistinguishable from a printer with no
 history.
 
