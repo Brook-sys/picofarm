@@ -164,8 +164,57 @@ make build
               rejected with <code>401</code>
             </td>
           </tr>
+          <tr>
+            <td><code>SLICER_CONNECTION_URL</code></td>
+            <td>unset</td>
+            <td>
+              Address of the orca-slicer-api container used by the slicer
+              screens. Overrides the URL stored in the database, so a compose
+              deployment can pin the container address;{" "}
+              <code>GET /api/slicer/config</code> reports which source won in{" "}
+              <code>connection_url_source</code>
+            </td>
+          </tr>
         </tbody>
       </table>
+
+      <h2>Running the slicer alongside</h2>
+      <p>
+        Slicing needs a second container, the orca-slicer-api. Put both
+        services in the same compose project and they can talk to each other
+        over the internal container network, addressed by service name &mdash;
+        no port published on the host.
+      </p>
+
+      <pre><code>{`services:
+  picofarm:
+    image: ghcr.io/brook-sys/picofarm:latest
+    ports:
+      - "8084:8084"
+    environment:
+      SLICER_CONNECTION_URL: "http://orca-slicer-api:3000"
+    volumes:
+      - picofarm-data:/data
+
+  orca-slicer-api:
+    image: ghcr.io/brook-sys/orca-slicer-api:latest
+    volumes:
+      - slicer-data:/app/data
+    environment:
+      GENERATE_IMAGE: true
+    # No "ports:" here: PicoFarm reaches the slicer by service name.`}</code></pre>
+
+      <div className="docs-callout">
+        <strong>Keep the slicer port closed by default.</strong> The
+        orca-slicer-api has no authentication of its own and answers CORS with{" "}
+        <code>Access-Control-Allow-Origin: *</code> for{" "}
+        <code>GET, POST, DELETE</code>. Publishing it (for example{" "}
+        <code>3000:3000</code>) lets any device on the network list,
+        overwrite and delete profiles and start slices. Publishing it is an
+        explicit choice for direct access from another device &mdash; removing
+        the <code>ports:</code> block later does not break PicoFarm, because the
+        internal service name keeps working.
+      </div>
 
       <div className="docs-callout">
         <strong>Tip:</strong> LAN-connected printers are discovered from the

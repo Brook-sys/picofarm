@@ -136,6 +136,10 @@ Most keys in `settings` are free-form key/value blobs. Two keys are validated by
   for large models.
 - No config caching: the URL is read from the environment and the settings repository on every
   request. That is deliberate — caching would make a directly edited setting stale until restart.
+- The slicer itself is unauthenticated and answers CORS with `Access-Control-Allow-Origin: *`
+  for `GET, POST, DELETE, OPTIONS`. `API_TOKEN` guards `/api/*` only and does not protect the
+  slicer port, so keep the slicer port unpublished in compose and address it by service name.
+  See "Neighbor service exposure (orca-slicer-api)" in `docs/SECURITY_MODEL.md`.
 
 ## High-value domain contracts
 

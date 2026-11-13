@@ -107,6 +107,7 @@ Backup/restore work should verify:
 - [x] Authentication/authorization model documented and implemented or clearly delegated to a trusted reverse proxy.
 - [x] Sensitive printer/file/backup endpoints inventoried and risk-classified.
 - [x] Sensitive printer/file/backup endpoints protected by auth middleware or a documented trusted reverse proxy boundary.
+- [x] Slicer port left unpublished unless an operator explicitly asks for LAN access.
 - [ ] Webhook signature verification documented and tested for each provider.
 - [ ] Secrets loaded from environment/config, not stored in source or logs.
 - [ ] Backup/restore tested in an isolated temporary environment.
@@ -128,6 +129,29 @@ When set, all routes under `/api/*` (except `/api/public/*`) will require this t
 - `X-API-Token: your-secure-token-here`
 
 This is a baseline mechanism. It is strongly recommended to use a robust reverse proxy (e.g. Tailscale, Cloudflare Access, Authelia, Nginx Basic Auth) for broad internet exposure.
+
+## Neighbor service exposure (orca-slicer-api)
+
+The slicer is a separate container that PicoFarm only proxies. It carries **no authentication of
+its own** and answers CORS with `Access-Control-Allow-Origin: *` for `GET, POST, DELETE,
+OPTIONS`. Anything that can reach its port can list, overwrite and **delete** profiles and start
+slices; a browser page served from any origin can drive it too.
+
+Both containers normally live in the same compose project. In that layout:
+
+- pin `SLICER_CONNECTION_URL` to the compose service name (e.g.
+  `http://orca-slicer-api:3000`) so PicoFarm reaches the slicer over the internal container
+  network — no published port and no hairpin NAT through the host;
+- **do not publish the slicer port by default**. Publishing it puts an unauthenticated,
+  `CORS: *` read/write/delete surface on the LAN for the whole time the stack is up;
+- publishing the port is an explicit operator choice for direct access from another device
+  (testing, other tooling). Treat every host that can reach it as a slicer operator: profile
+  deletion and arbitrary slicing are both possible. Deleting the slicer service's `ports:`
+  block closes the exposure again without affecting PicoFarm, because the internal network
+  name keeps working.
+
+The app's own `API_TOKEN` does **not** protect the slicer: the token guards `/api/*`, while
+the slicer port speaks its own protocol with no token in it.
 
 ## Agent rules
 

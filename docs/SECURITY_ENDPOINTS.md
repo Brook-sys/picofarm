@@ -179,6 +179,25 @@ Sales-channel routes are designed in `docs/SALES_CHANNELS.md`. Any new generic `
 | `POST /api/integrations/shopify/products/{productId}/link` | Integration/write | Links external product. |
 | `DELETE /api/integrations/shopify/products/{productId}/link` | Integration/write | Unlinks external product. |
 
+## Slicer proxy endpoints
+
+`/api/slicer/*` proxies an external orca-slicer-api container. The proxy is the only intended
+path to the slicer: the slicer service itself has no authentication and answers CORS with
+`Access-Control-Allow-Origin: *` for `GET, POST, DELETE, OPTIONS`, so anything that can reach
+its port can list, overwrite and delete profiles and start slices. `API_TOKEN` guards `/api/*`
+only and does not protect the slicer port. Keep the slicer port unpublished in compose and
+address it by service name (`SLICER_CONNECTION_URL`); see "Neighbor service exposure
+(orca-slicer-api)" in `docs/SECURITY_MODEL.md`.
+
+| Routes | Class | Notes |
+| --- | --- | --- |
+| `GET/PUT /api/slicer/config` | Settings | Repoints the slicer address. Respond with the effective URL and `connection_url_source`, never with the request body echoed back. |
+| `GET /api/slicer/health`, `GET /api/slicer/status` | Integration/read | Diagnoses the neighbor container. |
+| `GET /api/slicer/profiles/{category}`, `GET /api/slicer/profiles/{category}/{name}` | Integration/read | Reads slicer profiles. |
+| `POST /api/slicer/profiles/import-url`, `POST /api/slicer/profiles/upload-json`, `POST /api/slicer/profiles/{category}/{name}/update-from-source` | Integration/write | Overwrites slicer profiles. Treat a successful write as destructive of the previous profile content. |
+| `POST /api/slicer/profiles/default` | Settings | Chooses the default profile per category. |
+| `POST /api/slicer/resolve-profiles`, `POST /api/slicer/preview`, `POST /api/slicer/slice-stl` | Integration/write, file operation | Triggers real slicing work in the neighbor container and returns generated files. Long deadlines apply; do not add caching that would mask a changed profile. |
+
 ## Route policy checklist
 
 When adding or changing a route:
