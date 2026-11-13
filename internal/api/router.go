@@ -402,6 +402,8 @@ func NewRouterWithOptions(services *service.Services, hub *realtime.Hub, opts Ro
 				r.Get("/profiles/{category}/{name}", slicerHandler.GetProfileJSON)
 				r.Post("/profiles/import-url", slicerHandler.ImportProfile)
 				r.Post("/profiles/upload-json", slicerHandler.UploadProfileJSON)
+				r.Post("/profiles/export", slicerHandler.ExportProfiles)
+				r.Post("/profiles/import", slicerHandler.ImportProfiles)
 				r.Post("/profiles/default", slicerHandler.SetDefaultProfile)
 				r.Post("/profiles/{category}/{name}/update-from-source", slicerHandler.UpdateProfileFromSource)
 				r.Post("/resolve-profiles", slicerHandler.ResolveProfiles)

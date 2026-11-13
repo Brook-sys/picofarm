@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 
@@ -62,6 +63,54 @@ type SlicerUploadProfileRequest struct {
 	Category string `json:"category"`
 	Name     string `json:"name"`
 	JSON     string `json:"json"`
+}
+
+// SlicerProfileBundle is the export artifact: every profile of the selected
+// categories, each with its raw JSON kept as text so a restore can push the
+// exact same bytes back instead of a re-serialization that drifted on the way
+// out. The slicer has no export endpoint of its own, so the bundle is composed
+// from the profile list plus one read per profile.
+type SlicerProfileBundle struct {
+	Version       int                   `json:"version"`
+	ExportedAt    string                `json:"exported_at"`
+	Source        string                `json:"source,omitempty"`
+	SlicerVersion string                `json:"slicer_version,omitempty"`
+	Profiles      []SlicerBundleProfile `json:"profiles"`
+}
+
+type SlicerBundleProfile struct {
+	Category string `json:"category"`
+	Name     string `json:"name"`
+	JSON     string `json:"json"`
+}
+
+type SlicerExportRequest struct {
+	// Empty means every category. Anything else must name a real category:
+	// silently exporting nothing looked like an empty slicer.
+	Categories []string `json:"categories"`
+}
+
+type SlicerImportBundleRequest struct {
+	Profiles []SlicerBundleProfile `json:"profiles"`
+	// Overwrite decides what happens to a name the slicer already has. Without
+	// it the restore skips those instead of destroying working profiles.
+	Overwrite bool `json:"overwrite"`
+}
+
+type SlicerImportedProfile struct {
+	Category string `json:"category"`
+	Name     string `json:"name"`
+	Status   string `json:"status"`
+	Message  string `json:"message,omitempty"`
+}
+
+// SlicerImportBundleResult reports every profile individually because a partial
+// restore is the normal case: one bad file must not hide the ones that worked.
+type SlicerImportBundleResult struct {
+	Restored int                     `json:"restored"`
+	Skipped  int                     `json:"skipped"`
+	Failed   int                     `json:"failed"`
+	Profiles []SlicerImportedProfile `json:"profiles"`
 }
 
 type SlicerSliceRequest struct {
@@ -347,6 +396,119 @@ func (s *SlicerService) UploadProfileJSON(ctx context.Context, req SlicerUploadP
 	return result, nil
 }
 
+// ExportProfiles composes a backup bundle out of the profile list plus one read
+// per profile, because the slicer exposes no export endpoint. A failure anywhere
+// aborts the whole export: a bundle that silently misses a profile reads as a
+// complete backup and gets treated as one during a restore.
+func (s *SlicerService) ExportProfiles(ctx context.Context, req SlicerExportRequest) (*SlicerProfileBundle, error) {
+	categories, err := resolveSlicerCategories(req.Categories)
+	if err != nil {
+		return nil, err
+	}
+	bundle := &SlicerProfileBundle{
+		Version:    slicerProfileBundleVersion,
+		ExportedAt: time.Now().UTC().Format(time.RFC3339),
+		Profiles:   []SlicerBundleProfile{},
+	}
+	if urlValue, _, err := s.effectiveConnectionURL(ctx); err == nil {
+		bundle.Source = urlValue
+	}
+	// Best effort: knowing which Orca build produced the profiles matters when
+	// restoring into a different one, but a slicer that refuses /health must not
+	// cost the operator their backup.
+	if health, err := s.Health(ctx); err == nil {
+		if version, ok := health["orcaVersion"].(string); ok {
+			bundle.SlicerVersion = version
+		}
+	}
+	for _, category := range categories {
+		profiles, err := s.ListProfiles(ctx, category)
+		if err != nil {
+			return nil, err
+		}
+		for _, profile := range profiles {
+			name, _ := profile["name"].(string)
+			name = strings.TrimSpace(name)
+			if name == "" {
+				continue
+			}
+			raw, err := s.GetProfileJSON(ctx, category, name)
+			if err != nil {
+				return nil, fmt.Errorf("read %s profile %q: %w", category, name, err)
+			}
+			bundle.Profiles = append(bundle.Profiles, SlicerBundleProfile{
+				Category: category,
+				Name:     name,
+				JSON:     string(raw),
+			})
+		}
+	}
+	return bundle, nil
+}
+
+// ImportProfiles restores a bundle. The bundle itself is validated before
+// anything is uploaded, so a malformed file leaves the slicer untouched; the
+// per-profile uploads that follow may still fail individually and are reported
+// in the result rather than thrown away.
+func (s *SlicerService) ImportProfiles(ctx context.Context, req SlicerImportBundleRequest) (*SlicerImportBundleResult, error) {
+	profiles, err := validateSlicerBundle(req.Profiles)
+	if err != nil {
+		return nil, err
+	}
+
+	existing := map[string]bool{}
+	if !req.Overwrite {
+		for _, category := range slicerProfileCategories {
+			listed, err := s.ListProfiles(ctx, category)
+			if err != nil {
+				return nil, err
+			}
+			for _, profile := range listed {
+				if name, ok := profile["name"].(string); ok && strings.TrimSpace(name) != "" {
+					existing[category+"/"+strings.TrimSpace(name)] = true
+				}
+			}
+		}
+	}
+
+	result := &SlicerImportBundleResult{Profiles: make([]SlicerImportedProfile, 0, len(profiles))}
+	for _, profile := range profiles {
+		if !req.Overwrite && existing[profile.Category+"/"+profile.Name] {
+			result.Skipped++
+			result.Profiles = append(result.Profiles, SlicerImportedProfile{
+				Category: profile.Category,
+				Name:     profile.Name,
+				Status:   "skipped",
+				Message:  "already present on the slicer; restore with overwrite to replace it",
+			})
+			continue
+		}
+		// The bundle entry and the upload request carry the same three fields, so
+		// the conversion keeps them from drifting apart field by field.
+		uploaded, err := s.UploadProfileJSON(ctx, SlicerUploadProfileRequest(profile))
+		if err != nil {
+			result.Failed++
+			result.Profiles = append(result.Profiles, SlicerImportedProfile{
+				Category: profile.Category,
+				Name:     profile.Name,
+				Status:   "failed",
+				Message:  err.Error(),
+			})
+			continue
+		}
+		result.Restored++
+		entry := SlicerImportedProfile{Category: profile.Category, Name: profile.Name, Status: "restored"}
+		// The stored name can differ from the bundle name (the slicer keeps a
+		// sanitized form), and a restore that lands somewhere else than asked is
+		// worth saying out loud.
+		if stored, ok := uploaded["storedName"].(string); ok && stored != "" && stored != profile.Name {
+			entry.Message = "stored as " + stored
+		}
+		result.Profiles = append(result.Profiles, entry)
+	}
+	return result, nil
+}
+
 func (s *SlicerService) UpdateProfileFromSource(ctx context.Context, category, name string) (map[string]any, error) {
 	category = normalizeSlicerCategory(category)
 	body, err := s.doWithKind(ctx, slicerCallProfile, http.MethodPost, "/profiles/"+category+"/"+url.PathEscape(name)+"/update-from-source", nil, "")
@@ -607,6 +769,70 @@ func normalizeSlicerCategory(category string) string {
 	default:
 		return category
 	}
+}
+
+// slicerProfileBundleVersion is bumped when the bundle shape changes in a way an
+// older reader would misread.
+const slicerProfileBundleVersion = 1
+
+var slicerProfileCategories = []string{"printers", "presets", "filaments"}
+
+// resolveSlicerCategories turns a request into concrete categories, defaulting
+// to all of them. An unknown name is an error rather than a silent no-op: an
+// export that returns nothing looks identical to an empty slicer.
+func resolveSlicerCategories(categories []string) ([]string, error) {
+	if len(categories) == 0 {
+		return append([]string(nil), slicerProfileCategories...), nil
+	}
+	resolved := make([]string, 0, len(categories))
+	seen := make(map[string]bool, len(categories))
+	for _, raw := range categories {
+		category := normalizeSlicerCategory(strings.TrimSpace(raw))
+		if !slices.Contains(slicerProfileCategories, category) {
+			return nil, fmt.Errorf("unknown profile category %q", strings.TrimSpace(raw))
+		}
+		if seen[category] {
+			continue
+		}
+		seen[category] = true
+		resolved = append(resolved, category)
+	}
+	return resolved, nil
+}
+
+// validateSlicerBundle checks the whole bundle before a single upload happens.
+// A file that only half parses must not leave the slicer holding two profiles
+// while the operator believes the restore ran.
+func validateSlicerBundle(profiles []SlicerBundleProfile) ([]SlicerBundleProfile, error) {
+	if len(profiles) == 0 {
+		return nil, fmt.Errorf("bundle contains no profiles")
+	}
+	resolved := make([]SlicerBundleProfile, 0, len(profiles))
+	seen := make(map[string]bool, len(profiles))
+	for i, profile := range profiles {
+		category := normalizeSlicerCategory(strings.TrimSpace(profile.Category))
+		if !slices.Contains(slicerProfileCategories, category) {
+			return nil, fmt.Errorf("profile %d: unknown category %q", i, strings.TrimSpace(profile.Category))
+		}
+		name := strings.TrimSpace(profile.Name)
+		if name == "" {
+			return nil, fmt.Errorf("profile %d: name is required", i)
+		}
+		if strings.TrimSpace(profile.JSON) == "" {
+			return nil, fmt.Errorf("profile %q: json is required", name)
+		}
+		var raw map[string]any
+		if err := json.Unmarshal([]byte(profile.JSON), &raw); err != nil {
+			return nil, fmt.Errorf("profile %q: invalid JSON profile", name)
+		}
+		key := category + "/" + name
+		if seen[key] {
+			return nil, fmt.Errorf("profile %q appears more than once in the bundle", key)
+		}
+		seen[key] = true
+		resolved = append(resolved, SlicerBundleProfile{Category: category, Name: name, JSON: profile.JSON})
+	}
+	return resolved, nil
 }
 
 func addFormField(writer *multipart.Writer, key string, value string) {

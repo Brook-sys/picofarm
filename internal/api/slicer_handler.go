@@ -1,12 +1,19 @@
 package api
 
 import (
+	"bytes"
 	"encoding/json"
+	"io"
 	"net/http"
 
 	"github.com/Brook-sys/picofarm/internal/service"
 	"github.com/go-chi/chi/v5"
 )
+
+// slicerBundleBodyLimit caps a profile bundle request. Profiles are a few
+// kilobytes each, so this is generous while still refusing an absurd body
+// before it is buffered in memory.
+const slicerBundleBodyLimit = 8 << 20
 
 type SlicerHandler struct {
 	service *service.SlicerService
@@ -113,6 +120,51 @@ func (h *SlicerHandler) UploadProfileJSON(w http.ResponseWriter, r *http.Request
 		return
 	}
 	result, err := h.service.UploadProfileJSON(r.Context(), req)
+	if err != nil {
+		respondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	respondJSON(w, http.StatusOK, result)
+}
+
+// ExportProfiles answers a JSON bundle of every selected profile. An empty body
+// is allowed and means "all categories", so a plain POST from a script or curl
+// gets a usable backup.
+func (h *SlicerHandler) ExportProfiles(w http.ResponseWriter, r *http.Request) {
+	var req service.SlicerExportRequest
+	if body, err := io.ReadAll(io.LimitReader(r.Body, slicerBundleBodyLimit)); err == nil && len(bytes.TrimSpace(body)) > 0 {
+		if err := json.Unmarshal(body, &req); err != nil {
+			respondError(w, http.StatusBadRequest, "invalid request body")
+			return
+		}
+	}
+	bundle, err := h.service.ExportProfiles(r.Context(), req)
+	if err != nil {
+		respondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	respondJSON(w, http.StatusOK, bundle)
+}
+
+// ImportProfiles restores a bundle. A malformed bundle is rejected before
+// anything is uploaded; per-profile upload failures come back in the result with
+// 200, because the restore did run and the caller needs the details.
+func (h *SlicerHandler) ImportProfiles(w http.ResponseWriter, r *http.Request) {
+	body, err := io.ReadAll(io.LimitReader(r.Body, slicerBundleBodyLimit))
+	if err != nil {
+		respondError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if len(bytes.TrimSpace(body)) == 0 {
+		respondError(w, http.StatusBadRequest, "request body is required")
+		return
+	}
+	var req service.SlicerImportBundleRequest
+	if err := json.Unmarshal(body, &req); err != nil {
+		respondError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	result, err := h.service.ImportProfiles(r.Context(), req)
 	if err != nil {
 		respondError(w, http.StatusBadRequest, err.Error())
 		return

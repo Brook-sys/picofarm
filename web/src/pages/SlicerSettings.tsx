@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
-import { Plus, Globe, CheckCircle, XCircle, RefreshCw, Server, ExternalLink, DownloadCloud, Upload, Pencil } from 'lucide-react'
-import { slicerApi } from '../api/client'
+import { Plus, Globe, CheckCircle, XCircle, RefreshCw, Server, ExternalLink, DownloadCloud, Upload, Pencil, Save } from 'lucide-react'
+import { slicerApi, type SlicerProfileBundle } from '../api/client'
 
 type ProfileCategory = 'printers' | 'presets' | 'filaments'
 type AddModalState = { category: ProfileCategory; mode: 'url' | 'json'; name: string; url: string; json: string; overwrite: boolean; status: 'idle' | 'importing'; message: string } | null
 type EditModalState = { category: ProfileCategory; name: string; json: string; originalJson: string; status: 'loading' | 'idle' | 'saving' | 'saved' | 'error'; message: string } | null
+type RestoreState = { bundle: SlicerProfileBundle; overwrite: boolean; status: 'idle' | 'restoring'; message: string } | null
 
 const CATEGORIES: Array<{ key: ProfileCategory; title: string; description: string }> = [
   { key: 'printers', title: 'Printers', description: 'Orca printer machine profiles' },
@@ -25,6 +26,7 @@ export default function SlicerSettings() {
   const [success, setSuccess] = useState('')
   const [addModal, setAddModal] = useState<AddModalState>(null)
   const [editModal, setEditModal] = useState<EditModalState>(null)
+  const [restoreModal, setRestoreModal] = useState<RestoreState>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -245,6 +247,84 @@ export default function SlicerSettings() {
 
   const isHealthy = health?.status === 'healthy'
 
+  // The slicer exposes no export endpoint of its own, so the backend composes
+  // the bundle from the profile list plus one read per profile. The file is the
+  // only thing that can rebuild the slicer profiles if its volume is lost.
+  const exportProfiles = async () => {
+    setBusy('export')
+    setError('')
+    setSuccess('')
+    try {
+      const bundle = await slicerApi.exportProfiles()
+      const stamp = new Date().toISOString().slice(0, 16).replace(/[-:T]/g, '')
+      const blob = new Blob([JSON.stringify(bundle, null, 2)], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `picofarm-slicer-profiles-${stamp}.json`
+      link.click()
+      URL.revokeObjectURL(url)
+      setSuccess(`Exported ${bundle.profiles.length} profile(s)${bundle.slicer_version ? ` from Orca ${bundle.slicer_version}` : ''}. Keep this file safe: it is the only backup of your slicer profiles.`)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to export profiles')
+    } finally {
+      setBusy('')
+    }
+  }
+
+  // Reading and checking the file here means a broken bundle never costs a round
+  // trip, and the operator sees what will happen before anything is uploaded.
+  const selectRestoreFile = async (fileList?: FileList | null) => {
+    const file = fileList?.[0]
+    if (!file) return
+    setBusy('restore')
+    setError('')
+    setSuccess('')
+    try {
+      const parsed = JSON.parse(await file.text()) as Partial<SlicerProfileBundle>
+      if (!parsed || !Array.isArray(parsed.profiles) || parsed.profiles.length === 0) {
+        throw new Error('This file is not a PicoFarm slicer profile bundle')
+      }
+      for (const profile of parsed.profiles) {
+        if (!profile || typeof profile.category !== 'string' || typeof profile.name !== 'string' || typeof profile.json !== 'string') {
+          throw new Error('The bundle contains an invalid profile entry')
+        }
+        JSON.parse(profile.json)
+      }
+      setRestoreModal({ bundle: parsed as SlicerProfileBundle, overwrite: false, status: 'idle', message: '' })
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to read the bundle file')
+    } finally {
+      setBusy('')
+    }
+  }
+
+  const runRestore = async () => {
+    if (!restoreModal) return
+    setRestoreModal({ ...restoreModal, status: 'restoring', message: 'Restoring...' })
+    setError('')
+    setSuccess('')
+    try {
+      const result = await slicerApi.importProfiles({
+        profiles: restoreModal.bundle.profiles.map(profile => ({ category: profile.category, name: profile.name, json: profile.json })),
+        overwrite: restoreModal.overwrite,
+      })
+      await loadProfiles(false)
+      setRestoreModal(null)
+      const summary = `Restored ${result.restored} profile(s), skipped ${result.skipped}, failed ${result.failed}.`
+      const failures = result.profiles.filter(profile => profile.status === 'failed')
+      if (result.failed > 0) {
+        setError(`${summary} ${failures.map(profile => `${profile.category}/${profile.name}: ${profile.message || 'failed'}`).join('; ')}`)
+      } else {
+        setSuccess(summary)
+      }
+    } catch (err) {
+      setRestoreModal(current => current ? { ...current, status: 'idle', message: err instanceof Error ? err.message : 'Restore failed' } : current)
+    } finally {
+      setBusy('')
+    }
+  }
+
   return (
     <div className="p-4 sm:p-6 lg:p-8 max-w-6xl mx-auto">
       <div className="mb-8 flex items-start justify-between gap-4">
@@ -294,9 +374,34 @@ export default function SlicerSettings() {
         {CATEGORIES.map(category => <ProfileSection key={category.key} category={category.key} title={category.title} description={category.description} items={profiles[category.key]} onAdd={() => setAddModal({ category: category.key, mode: 'url', name: '', url: '', json: '', overwrite: true, status: 'idle', message: '' })} onUpload={files => uploadProfileFiles(category.key, files)} onEdit={name => editProfile(category.key, name)} onSetDefault={name => setDefaultProfile(category.key, name)} uploading={busy === `upload-${category.key}` || busy === `default-${category.key}`} />)}
       </div>
 
+      <div className="card p-5 mt-4">
+        <div className="flex items-start justify-between gap-3 mb-3">
+          <div>
+            <h3 className="font-semibold text-surface-100">Profile backup</h3>
+            <p className="text-xs text-surface-500 mt-1">
+              Downloads every profile of every category as one JSON file, and restores it after the slicer volume is lost or the container is recreated.
+              The bundle keeps the raw profile JSON, so restoring writes the same bytes back. Export before changing profiles in bulk.
+            </p>
+          </div>
+          <div className="flex gap-2 shrink-0">
+            <button onClick={exportProfiles} disabled={!!busy || !health} className="btn btn-primary text-xs py-1.5 px-3"><Save className="h-3.5 w-3.5 mr-1" /> Export backup</button>
+            <label className={busy === 'restore' ? 'btn btn-secondary text-xs py-1.5 px-3 opacity-60 pointer-events-none' : 'btn btn-secondary text-xs py-1.5 px-3 cursor-pointer'}>
+              <Upload className="h-3.5 w-3.5 mr-1" /> Restore backup
+              <input type="file" accept=".json,application/json" className="hidden" onChange={e => { selectRestoreFile(e.target.files); e.currentTarget.value = '' }} />
+            </label>
+          </div>
+        </div>
+        <p className="text-xs text-surface-500">
+          Restoring never overwrites a profile that already exists unless you ask it to: the slicer has no delete endpoint, so a skipped profile keeps
+          working while a replaced one is gone. Default profile selections are not part of the bundle — set those again after a restore.
+        </p>
+      </div>
+
       {editModal && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"><div className="card w-full max-w-4xl p-6"><div className="flex items-start justify-between gap-4 mb-4"><div><h2 className="text-xl font-semibold text-surface-100">Edit {editModal.name}</h2><p className="text-sm text-surface-500">{editModal.category} · JSON autosaves after you stop typing.</p></div><button onClick={() => setEditModal(null)} className="btn btn-secondary">Close</button></div>{editModal.message && <div className={editModal.status === 'error' ? 'mb-3 text-sm text-red-300' : 'mb-3 text-sm text-emerald-300'}>{editModal.message}</div>}{editModal.status === 'loading' ? <div className="py-12 text-center text-surface-500">Loading...</div> : <textarea value={editModal.json} onChange={e => setEditModal(current => current ? { ...current, json: e.target.value, status: 'idle', message: '' } : current)} className="input min-h-[60vh] font-mono text-xs" spellCheck={false} />}</div></div>}
 
       {addModal && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"><div className="card w-full max-w-lg p-6"><h2 className="text-xl font-semibold text-surface-100 mb-1">Import {addModal.category} profile</h2><p className="text-sm text-surface-500 mb-4">Import from a raw HTTPS URL or paste the Orca profile JSON directly.</p><div className="space-y-4"><div className="flex rounded-lg border border-surface-800 bg-surface-900/50 p-1"><button onClick={() => setAddModal({ ...addModal, mode: 'url' })} className={addModal.mode === 'url' ? 'btn btn-primary flex-1 text-xs' : 'btn btn-ghost flex-1 text-xs'}>URL</button><button onClick={() => setAddModal({ ...addModal, mode: 'json' })} className={addModal.mode === 'json' ? 'btn btn-primary flex-1 text-xs' : 'btn btn-ghost flex-1 text-xs'}>Raw JSON</button></div><label className="block"><span className="text-xs text-surface-500 mb-1 block">Profile name {addModal.mode === 'json' ? '(optional, uses JSON name)' : ''}</span><input value={addModal.name} onChange={e => setAddModal({ ...addModal, name: e.target.value })} className="input" placeholder="standard-020" autoFocus /></label>{addModal.mode === 'url' ? <><label className="block"><span className="text-xs text-surface-500 mb-1 block">Raw JSON URL</span><input value={addModal.url} onChange={e => setAddModal({ ...addModal, url: e.target.value })} className="input" placeholder="https://raw.githubusercontent.com/.../profile.json" /></label><label className="flex items-center gap-2 text-sm text-surface-300"><input type="checkbox" checked={addModal.overwrite} onChange={e => setAddModal({ ...addModal, overwrite: e.target.checked })} />Overwrite existing profile</label></> : <label className="block"><span className="text-xs text-surface-500 mb-1 block">Profile JSON</span><textarea value={addModal.json} onChange={e => setAddModal({ ...addModal, json: e.target.value })} className="input min-h-56 font-mono text-xs" placeholder='{ "layer_height": "0.20" }' /></label>}{addModal.message && <div className="text-xs text-red-400">{addModal.message}</div>}</div><div className="mt-6 flex justify-end gap-2"><button onClick={() => setAddModal(null)} className="btn btn-secondary">Cancel</button><button onClick={importProfile} disabled={(addModal.mode === 'url' && (!addModal.name.trim() || !addModal.url.trim())) || (addModal.mode === 'json' && !addModal.json.trim()) || addModal.status === 'importing'} className="btn btn-primary">Import</button></div></div></div>}
+
+      {restoreModal && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"><div className="card w-full max-w-lg p-6"><h2 className="text-xl font-semibold text-surface-100 mb-1">Restore slicer profiles</h2><p className="text-sm text-surface-500 mb-4">This uploads every profile in the bundle to the slicer. Nothing here can delete a profile, so the risk is replacing one you changed since the backup.</p><div className="space-y-2 text-sm text-surface-300"><div>Profiles in the bundle: <span className="text-surface-100 font-medium">{restoreModal.bundle.profiles.length}</span>{restoreModal.bundle.exported_at ? ` · exported ${restoreModal.bundle.exported_at}` : ''}{restoreModal.bundle.slicer_version ? ` · Orca ${restoreModal.bundle.slicer_version}` : ''}</div><div className="text-xs text-surface-500">{CATEGORIES.map(category => `${restoreModal.bundle.profiles.filter(profile => profile.category === category.key).length} ${category.title.toLowerCase()}`).join(' · ')}</div>{restoreModal.bundle.source ? <div className="text-xs text-surface-500 break-all">Original slicer: <span className="font-mono">{restoreModal.bundle.source}</span></div> : null}<label className="flex items-center gap-2 text-sm text-surface-300 pt-2"><input type="checkbox" checked={restoreModal.overwrite} onChange={e => setRestoreModal(current => current ? { ...current, overwrite: e.target.checked } : current)} />Overwrite profiles that already exist on this slicer</label></div>{restoreModal.message && <div className="mt-3 text-xs text-red-400">{restoreModal.message}</div>}<div className="mt-6 flex justify-end gap-2"><button onClick={() => setRestoreModal(null)} className="btn btn-secondary">Cancel</button><button onClick={runRestore} disabled={restoreModal.status === 'restoring'} className="btn btn-primary">{restoreModal.status === 'restoring' ? 'Restoring...' : 'Restore'}</button></div></div></div>}
     </div>
   )
 }

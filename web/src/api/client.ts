@@ -341,6 +341,21 @@ export interface DiscoveredPrinter {
 }
 
 // Printers API
+export type SlicerProfileBundle = {
+  version: number
+  exported_at: string
+  source?: string
+  slicer_version?: string
+  profiles: Array<{ category: string; name: string; json: string }>
+}
+
+export type SlicerImportResult = {
+  restored: number
+  skipped: number
+  failed: number
+  profiles: Array<{ category: string; name: string; status: string; message?: string }>
+}
+
 export const slicerApi = {
   getConfig: () => fetchApi<{ connection_url: string; connection_url_source?: string; default_profiles?: Record<string, string> }>('/slicer/config'),
   setConfig: (connectionUrl: string) => fetchApi<{ connection_url: string; connection_url_source?: string }>('/slicer/config', { method: 'PUT', body: JSON.stringify({ connection_url: connectionUrl }) }),
@@ -351,6 +366,10 @@ export const slicerApi = {
   importProfile: (data: { category: string; name: string; url: string; overwrite?: boolean }) => fetchApi<Record<string, unknown>>('/slicer/profiles/import-url', { method: 'POST', body: JSON.stringify(data) }),
   uploadProfileJSON: (data: { category: string; name: string; json: string }) => fetchApi<Record<string, unknown>>('/slicer/profiles/upload-json', { method: 'POST', body: JSON.stringify(data) }),
   setDefaultProfile: (data: { category: string; name: string }) => fetchApi<Record<string, unknown>>('/slicer/profiles/default', { method: 'POST', body: JSON.stringify(data) }),
+  // Backup bundle of slicer profiles. The raw JSON of each profile travels as
+  // text so a restore pushes the exact same bytes back.
+  exportProfiles: (categories?: Array<'printers' | 'presets' | 'filaments'>) => fetchApi<SlicerProfileBundle>('/slicer/profiles/export', { method: 'POST', body: JSON.stringify({ categories: categories ?? [] }) }),
+  importProfiles: (data: { profiles: Array<{ category: string; name: string; json: string }>; overwrite?: boolean }) => fetchApi<SlicerImportResult>('/slicer/profiles/import', { method: 'POST', body: JSON.stringify(data) }),
   updateProfile: (category: string, name: string) => fetchApi<Record<string, unknown>>(`/slicer/profiles/${category}/${encodeURIComponent(name)}/update-from-source`, { method: 'POST' }),
   resolveProfiles: (data: Record<string, unknown>) => fetchApi<Record<string, unknown>>('/slicer/resolve-profiles', { method: 'POST', body: JSON.stringify(data) }),
   preview: (data: Record<string, unknown>) => fetchApi<{ usesSupport: boolean; printTime: number; filamentUsedG: number; filamentUsedMm: number; thumbnail: string }>('/slicer/preview', { method: 'POST', body: JSON.stringify(data) }),

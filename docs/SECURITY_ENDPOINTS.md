@@ -195,6 +195,7 @@ address it by service name (`SLICER_CONNECTION_URL`); see "Neighbor service expo
 | `GET /api/slicer/health`, `GET /api/slicer/status` | Integration/read | Diagnoses the neighbor container. |
 | `GET /api/slicer/profiles/{category}`, `GET /api/slicer/profiles/{category}/{name}` | Integration/read | Reads slicer profiles. |
 | `POST /api/slicer/profiles/import-url`, `POST /api/slicer/profiles/upload-json`, `POST /api/slicer/profiles/{category}/{name}/update-from-source` | Integration/write | Overwrites slicer profiles. Treat a successful write as destructive of the previous profile content. |
+| `POST /api/slicer/profiles/export`, `POST /api/slicer/profiles/import` | Integration/write, file operation | Composes and restores a bundle of every profile. The bundle is the only recovery path for a recreated slicer: the slicer has no delete endpoint, so a restore that overwrites without being asked loses the previous content on the slicer side. Import validates the whole bundle before any upload; per-profile upload failures are reported with `200`. |
 | `POST /api/slicer/profiles/default` | Settings | Chooses the default profile per category. |
 | `POST /api/slicer/resolve-profiles`, `POST /api/slicer/preview`, `POST /api/slicer/slice-stl` | Integration/write, file operation | Triggers real slicing work in the neighbor container and returns generated files. Long deadlines apply; do not add caching that would mask a changed profile. |
 

@@ -116,7 +116,8 @@ Most keys in `settings` are free-form key/value blobs. Two keys are validated by
 
 `/api/slicer/*` proxies an external orca-slicer-api container. Representative routes: `GET/PUT
 /api/slicer/config`, `/health`, `/status`, `/profiles/{category}`, `/profiles/import-url`,
-`/profiles/upload-json`, `/profiles/default`, `/slice/resolve-profiles`, `/preview`, `/slice-stl`.
+`/profiles/upload-json`, `/profiles/export`, `/profiles/import`, `/profiles/default`,
+`/slice/resolve-profiles`, `/preview`, `/slice-stl`.
 
 - `GET /api/slicer/config` returns `connection_url`, `connection_url_source` (`env` or `settings`)
   and `default_profiles`. `connection_url_source` is empty when nothing is configured.
@@ -140,6 +141,22 @@ Most keys in `settings` are free-form key/value blobs. Two keys are validated by
   for `GET, POST, DELETE, OPTIONS`. `API_TOKEN` guards `/api/*` only and does not protect the
   slicer port, so keep the slicer port unpublished in compose and address it by service name.
   See "Neighbor service exposure (orca-slicer-api)" in `docs/SECURITY_MODEL.md`.
+- Profile backup is composed here, not by the slicer: the container exposes no export endpoint,
+  so `POST /api/slicer/profiles/export` lists every requested category and reads each profile
+  once. The bundle is `{version, exported_at, source?, slicer_version?, profiles: [{category,
+  name, json}]}`, where `json` is the raw profile text so a restore can push the same bytes back
+  instead of a re-serialization. An empty request body means every category; an unknown category
+  is a `400` rather than an empty bundle, which would read as an empty slicer. A profile that
+  cannot be read aborts the whole export, because a bundle that silently misses a profile gets
+  treated as a complete backup.
+- `POST /api/slicer/profiles/import` restores a bundle. The whole bundle is validated first
+  (category known, name and JSON present, JSON parseable, no duplicate `category/name`), so a
+  malformed file leaves the slicer untouched and answers `400`. The uploads that follow are
+  reported per profile: `{restored, skipped, failed, profiles: [{category, name, status,
+  message?}]}` with `status` in `restored`/`skipped`/`failed`, and the answer is `200` even when
+  some profiles fail, because the restore did run. Without `overwrite: true` a name the slicer
+  already has is skipped rather than replaced — the slicer has no delete endpoint, so a replaced
+  profile cannot be recovered from the slicer side.
 
 ## High-value domain contracts
 
