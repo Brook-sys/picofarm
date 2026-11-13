@@ -1,7 +1,12 @@
 package etsy
 
 import (
+	"context"
+	"errors"
+	"net/http"
+	"net/http/httptest"
 	"net/url"
+	"strings"
 	"testing"
 )
 
@@ -403,4 +408,59 @@ func TestAPIListing_Fields(t *testing.T) {
 // Helper function
 func boolPtr(b bool) *bool {
 	return &b
+}
+
+func TestExchangeCode_parsesEtsyOAuthError(t *testing.T) {
+	// Etsy answers 400 with a JSON body that names the actual problem. Serving
+	// the real shape lets the API layer forward it to the operator instead of a
+	// generic "token exchange failed: ...".
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v3/public/oauth/token" {
+			t.Errorf("unexpected path: %s", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte(`{"error":"invalid_grant","error_description":"authorization code is invalid"}`))
+	}))
+	defer srv.Close()
+
+	client := NewClient("test-client-id", "http://localhost:8084/api/integrations/etsy/callback")
+	client.tokenURL = srv.URL + "/v3/public/oauth/token"
+
+	_, err := client.ExchangeCode(context.Background(), "bad-code", "verifier")
+	var oauthErr *EtsyOAuthError
+	if !errors.As(err, &oauthErr) {
+		t.Fatalf("expected *EtsyOAuthError, got %v", err)
+	}
+	if oauthErr.Code != "invalid_grant" {
+		t.Errorf("expected code invalid_grant, got %q", oauthErr.Code)
+	}
+	if oauthErr.Description != "authorization code is invalid" {
+		t.Errorf("expected Etsy's description, got %q", oauthErr.Description)
+	}
+
+	message := oauthErr.Error()
+	if !strings.Contains(message, "invalid_grant") || !strings.Contains(message, "authorization code is invalid") {
+		t.Errorf("expected both parts in the message, got %q", message)
+	}
+}
+
+func TestExchangeCode_nonJSONErrorKeepsResponseBody(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadGateway)
+		_, _ = w.Write([]byte("upstream says nope"))
+	}))
+	defer srv.Close()
+
+	client := NewClient("test-client-id", "http://localhost:8084/api/integrations/etsy/callback")
+	client.tokenURL = srv.URL + "/v3/public/oauth/token"
+
+	_, err := client.ExchangeCode(context.Background(), "code", "verifier")
+	var oauthErr *EtsyOAuthError
+	if errors.As(err, &oauthErr) {
+		t.Fatalf("expected a generic error for a non-JSON body, got %v", oauthErr)
+	}
+	if !strings.Contains(err.Error(), "upstream says nope") {
+		t.Errorf("expected the raw body to be preserved, got %v", err)
+	}
 }

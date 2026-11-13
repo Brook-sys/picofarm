@@ -36,7 +36,16 @@ Backend defaults are defined from `cmd/server/main.go` and database helpers:
 | `SENTRY_DSN` | unset | Optional error reporting |
 | `ETSY_CLIENT_ID` | unset | Optional Etsy integration |
 | `ETSY_WEBHOOK_SECRET` | unset | Optional Etsy webhook signing secret. When set, events with a missing or invalid `X-Etsy-Signature` are rejected with `401` instead of accepted |
-| `ETSY_REDIRECT_URI` | `http://localhost:8084/api/integrations/etsy/callback` in `Makefile` | Matches the backend default port; override it when the app is reachable on another host/port |
+| `ETSY_REDIRECT_URI` | `http://localhost:8084/api/integrations/etsy/callback` | Same single default the backend uses (`etsy.DefaultRedirectURI`). The value must also be registered as a Callback URL on the Etsy app, or Etsy refuses the authorization with `The requested redirect URL is not permitted.`; override it for any host, port, or reverse-proxy path difference |
+
+### Etsy connection checklist
+
+The redirect URI is the only piece of the Etsy OAuth flow that lives outside this repository. In order to connect a shop:
+
+1. Register the exact URI (scheme, host, port, and path) of your deployment as a **Callback URL** on the app in the Etsy Developer Portal. The default is `http://localhost:8084/api/integrations/etsy/callback`; anything reachable through a proxy or another port must be registered too.
+2. Set the Client ID (Keystring) either through `ETSY_CLIENT_ID` or in **Settings → Integrations → Etsy**. When it is configured but wrong, the form can be reopened with *Edit credentials* — the keystring and the redirect URI are both editable after configuration.
+3. Start the connection and authorize on Etsy. If Etsy refuses, the Settings page now shows its own `error_description`, which names the URI that was rejected.
+4. When stored settings exist and `ETSY_CLIENT_ID` is empty, they take precedence over the environment at startup; a redirect URI persisted by an older build (port 8080) is rewritten automatically on boot and logged as `repaired legacy Etsy redirect URI`.
 
 Local helper script defaults from `AGENTS.md` and `scripts/dev.sh`:
 

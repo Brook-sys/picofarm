@@ -6,10 +6,13 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strconv"
+	"strings"
 	"sync/atomic"
 
 	"github.com/Brook-sys/picofarm/internal/model"
@@ -69,6 +72,12 @@ func (h *EtsyHandler) Configure(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.service.Configure(r.Context(), req.ClientID, req.RedirectURI); err != nil {
+		if errors.Is(err, service.ErrInvalidRedirectURI) {
+			// Operator mistake: a 400 tells the UI which value is wrong instead of
+			// a 500 that looks like a server problem.
+			respondError(w, http.StatusBadRequest, err.Error())
+			return
+		}
 		respondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -93,11 +102,38 @@ func (h *EtsyHandler) StartAuth(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, http.StatusOK, map[string]string{"url": authURL})
 }
 
+// Etsy redirects the browser back to this callback with either an error query
+// (the operator denied access, or Etsy rejected the redirect URI) or the
+// authorization code. When Etsy refuses the redirect URI it answers with an
+// error_description that names the actual problem — "The requested redirect URL
+// is not permitted." — so it is forwarded to the settings page instead of being
+// dropped. The original code kept the description in the log only and showed the
+// operator a bare "invalid_request", which is what made this bug so hard to
+// diagnose.
+const etsyCallbackReasonLimit = 200
+
+// sanitizeCallbackReason keeps an internal error usable in a redirect URL:
+// single line and bounded, so a huge response body cannot end up in the
+// browser history or in the server's access log.
+func sanitizeCallbackReason(reason string) string {
+	replacer := strings.NewReplacer("\n", " ", "\r", " ", "\t", " ")
+	reason = replacer.Replace(reason)
+	reason = strings.TrimSpace(reason)
+	if len(reason) > etsyCallbackReasonLimit {
+		reason = reason[:etsyCallbackReasonLimit] + "..."
+	}
+	return reason
+}
+
+func redirectEtsyCallback(w http.ResponseWriter, r *http.Request, params url.Values) {
+	http.Redirect(w, r, "/settings?"+params.Encode(), http.StatusTemporaryRedirect)
+}
+
 // Callback handles the OAuth callback from Etsy.
 // GET /api/integrations/etsy/callback
 func (h *EtsyHandler) Callback(w http.ResponseWriter, r *http.Request) {
 	if !h.service.IsConfigured() {
-		http.Redirect(w, r, "/settings?etsy=error&message=not_configured", http.StatusTemporaryRedirect)
+		redirectEtsyCallback(w, r, url.Values{"etsy": {"error"}, "message": {"not_configured"}})
 		return
 	}
 
@@ -105,7 +141,11 @@ func (h *EtsyHandler) Callback(w http.ResponseWriter, r *http.Request) {
 	if errParam := r.URL.Query().Get("error"); errParam != "" {
 		errDesc := r.URL.Query().Get("error_description")
 		slog.Warn("Etsy OAuth error", "error", errParam, "description", errDesc)
-		http.Redirect(w, r, "/settings?etsy=error&message="+errParam, http.StatusTemporaryRedirect)
+		params := url.Values{"etsy": {"error"}, "message": {errParam}}
+		if errDesc != "" {
+			params.Set("description", errDesc)
+		}
+		redirectEtsyCallback(w, r, params)
 		return
 	}
 
@@ -114,19 +154,28 @@ func (h *EtsyHandler) Callback(w http.ResponseWriter, r *http.Request) {
 
 	if state == "" || code == "" {
 		slog.Warn("Etsy OAuth callback missing state or code")
-		http.Redirect(w, r, "/settings?etsy=error&message=missing_params", http.StatusTemporaryRedirect)
+		redirectEtsyCallback(w, r, url.Values{"etsy": {"error"}, "message": {"missing_params"}})
 		return
 	}
 
 	_, err := h.service.HandleCallback(r.Context(), state, code)
 	if err != nil {
 		slog.Error("failed to handle Etsy OAuth callback", "error", err)
-		http.Redirect(w, r, "/settings?etsy=error&message=callback_failed", http.StatusTemporaryRedirect)
+		// Forward the underlying reason (URL-encoded) alongside the stable code
+		// so the operator sees "redirect URI changed ..." or Etsy's own
+		// "invalid_grant: ..." instead of an unexplained callback_failed.
+		// The reason is capped to one line and 200 characters by
+		// sanitizeCallbackReason; no credential is ever included.
+		redirectEtsyCallback(w, r, url.Values{
+			"etsy":    {"error"},
+			"message": {"callback_failed"},
+			"reason":  {sanitizeCallbackReason(err.Error())},
+		})
 		return
 	}
 
 	// Redirect to settings page with success indicator
-	http.Redirect(w, r, "/settings?etsy=connected", http.StatusTemporaryRedirect)
+	redirectEtsyCallback(w, r, url.Values{"etsy": {"connected"}})
 }
 
 // GetStatus returns the current Etsy integration status.
@@ -141,8 +190,9 @@ func (h *EtsyHandler) GetStatus(w http.ResponseWriter, r *http.Request) {
 
 	if integration == nil {
 		respondJSON(w, http.StatusOK, map[string]interface{}{
-			"connected":  false,
-			"configured": h.service.IsConfigured(),
+			"connected":    false,
+			"configured":   h.service.IsConfigured(),
+			"redirect_uri": h.service.RedirectURI(),
 		})
 		return
 	}
@@ -150,6 +200,7 @@ func (h *EtsyHandler) GetStatus(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, http.StatusOK, map[string]interface{}{
 		"connected":        true,
 		"configured":       h.service.IsConfigured(),
+		"redirect_uri":     h.service.RedirectURI(),
 		"shop_id":          integration.ShopID,
 		"shop_name":        integration.ShopName,
 		"token_expires_at": integration.TokenExpiresAt,

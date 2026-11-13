@@ -53,6 +53,11 @@ export default function Settings() {
   // Etsy Client ID configuration
   const [etsyClientId, setEtsyClientId] = useState('')
   const [configuringEtsy, setConfiguringEtsy] = useState(false)
+  // Editable on an already-configured integration: before this existed, a wrong
+  // keystring or redirect URI could only be fixed by hand-editing the database,
+  // because the form was only rendered when !configured.
+  const [etsyRedirectUri, setEtsyRedirectUri] = useState('')
+  const [showEtsyCredentials, setShowEtsyCredentials] = useState(false)
 
   // Thingiverse API token
   const [thingiverseToken, setThingiverseToken] = useState('')
@@ -76,9 +81,23 @@ export default function Settings() {
       setSearchParams(searchParams, { replace: true })
     } else if (etsyParam === 'error') {
       const message = searchParams.get('message') || 'Connection failed'
-      setError(`Etsy connection error: ${message}`)
+      const description = searchParams.get('description')
+      // Forwarded by the backend since the Etsy fix: Etsy answers a rejected
+      // redirect URI with error_description, and internal failures carry a
+      // bounded reason. Both used to be dropped, leaving only a bare code.
+      const reason = searchParams.get('reason')
+      let detail = message
+      if (description) {
+        detail = `${message} — ${description}`
+      }
+      if (reason) {
+        detail = `${detail} (${reason})`
+      }
+      setError(`Etsy connection error: ${detail}`)
       searchParams.delete('etsy')
       searchParams.delete('message')
+      searchParams.delete('description')
+      searchParams.delete('reason')
       setSearchParams(searchParams, { replace: true })
     }
   }, [searchParams, setSearchParams])
@@ -98,6 +117,11 @@ export default function Settings() {
       setLoading(true)
       const status = await etsyApi.getStatus()
       setEtsyStatus(status)
+      // Keep the form in sync with what the backend actually sends to Etsy, so
+      // an edit starts from the real value instead of an empty field.
+      if (status.redirect_uri) {
+        setEtsyRedirectUri(status.redirect_uri)
+      }
     } catch (err) {
       console.error('Failed to load Etsy status:', err)
       setError('Failed to load Etsy integration status')
@@ -314,11 +338,25 @@ export default function Settings() {
     setConfiguringEtsy(true)
     setError(null)
     try {
-      await etsyApi.configure({ client_id: etsyClientId })
+      const wasConfigured = etsyStatus?.configured === true
+      await etsyApi.configure({
+        client_id: etsyClientId,
+        // Omitted when blank so the backend applies its own default (port 8084).
+        ...(etsyRedirectUri.trim() ? { redirect_uri: etsyRedirectUri.trim() } : {}),
+      })
       const status = await etsyApi.getStatus()
       setEtsyStatus(status)
-      if (status.configured) {
+      if (status.redirect_uri) {
+        setEtsyRedirectUri(status.redirect_uri)
+      }
+      setShowEtsyCredentials(false)
+      if (status.configured && !wasConfigured) {
+        // First-time setup: continue straight into the OAuth flow.
         handleConnectEtsy()
+      } else if (status.configured) {
+        // Reconfigured: an existing token stays valid, and the operator can now
+        // retry the connection with the corrected redirect URI.
+        setSuccessMessage('Etsy credentials updated')
       }
     } catch (err) {
       console.error('Failed to configure Etsy:', err)
@@ -705,120 +743,196 @@ export default function Settings() {
             <div className="flex items-center justify-center py-8">
               <RefreshCw className="h-6 w-6 text-surface-400 animate-spin" />
             </div>
-          ) : !etsyStatus?.configured ? (
-            <div className="bg-surface-800/50 rounded-lg p-4">
-              <p className="text-surface-300 mb-3">
-                Connect your Etsy shop to sync orders and listings.
-              </p>
-              <div className="space-y-3">
-                <div>
-                  <label className="block text-sm text-surface-400 mb-1">Etsy Client ID</label>
-                  <input
-                    type="text"
-                    value={etsyClientId}
-                    onChange={e => setEtsyClientId(e.target.value)}
-                    placeholder="Paste your Etsy app's Client ID (Keystring)"
-                    className="input w-full"
-                  />
-                  <p className="text-xs text-surface-500 mt-1">
-                    Get this from the <a href="https://www.etsy.com/developers/your-apps" target="_blank" rel="noopener noreferrer" className="text-accent-400 hover:underline">Etsy Developer Portal</a>
-                  </p>
-                </div>
-                <button
-                  onClick={handleConfigureEtsy}
-                  disabled={!etsyClientId.trim() || configuringEtsy}
-                  className="btn btn-primary"
-                >
-                  {configuringEtsy ? 'Saving...' : 'Save & Connect'}
-                </button>
-              </div>
-            </div>
-          ) : etsyStatus.connected ? (
-            <div className="space-y-4">
-              {/* Connected Shop Info */}
-              <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-4">
-                <div className="flex items-center gap-2 mb-2">
-                  <CheckCircle2 className="h-4 w-4 text-green-400" />
-                  <span className="text-green-300 font-medium">Connected</span>
-                </div>
-                <div className="grid grid-cols-2 gap-4 text-sm">
-                  <div>
-                    <p className="text-surface-400">Shop Name</p>
-                    <p className="text-surface-100 font-medium">{etsyStatus.shop_name}</p>
-                  </div>
-                  <div>
-                    <p className="text-surface-400">Shop ID</p>
-                    <p className="text-surface-100 font-medium">{etsyStatus.shop_id}</p>
-                  </div>
-                  <div>
-                    <p className="text-surface-400">Last Synced</p>
-                    <p className="text-surface-100">{formatDate(etsyStatus.last_sync_at)}</p>
-                  </div>
-                  <div>
-                    <p className="text-surface-400">Connected Since</p>
-                    <p className="text-surface-100">{formatDate(etsyStatus.created_at)}</p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Token Expiry Warning */}
-              {isTokenExpiringSoon() && (
-                <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-3 flex items-center gap-2">
-                  <AlertCircle className="h-4 w-4 text-yellow-400" />
-                  <span className="text-sm text-yellow-300">
-                    Token expires soon. It will be automatically refreshed on next API call.
-                  </span>
-                </div>
-              )}
-
-              {/* Scopes */}
-              <div>
-                <p className="text-sm text-surface-400 mb-2">Permissions</p>
-                <div className="flex flex-wrap gap-2">
-                  {etsyStatus.scopes?.map((scope) => (
-                    <span
-                      key={scope}
-                      className="text-xs bg-surface-700 text-surface-300 px-2 py-1 rounded"
-                    >
-                      {scope}
-                    </span>
-                  ))}
-                </div>
-              </div>
-
-              {/* Disconnect Button */}
-              <button
-                onClick={handleDisconnectEtsy}
-                disabled={disconnecting}
-                className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg transition-colors disabled:opacity-50"
-              >
-                {disconnecting ? (
-                  <RefreshCw className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Unplug className="h-4 w-4" />
-                )}
-                Disconnect Shop
-              </button>
-            </div>
           ) : (
             <div className="space-y-4">
-              <p className="text-surface-300">
-                Connect your Etsy shop to automatically import orders and sync inventory.
-              </p>
-              <button
-                onClick={handleConnectEtsy}
-                disabled={connecting}
-                className="flex items-center gap-2 px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white font-medium rounded-lg transition-colors disabled:opacity-50"
-              >
-                {connecting ? (
-                  <RefreshCw className="h-4 w-4 animate-spin" />
-                ) : (
-                  <ExternalLink className="h-4 w-4" />
-                )}
-                Connect to Etsy
-              </button>
-            </div>
-           )}
+              {/* The credentials form is no longer reachable only on a fresh
+                  install: a keystring or redirect URI that is wrong must be
+                  replaceable, otherwise Etsy stays stuck at "configured but not
+                  connected" until someone edits the database. */}
+              {showEtsyCredentials || !etsyStatus?.configured ? (
+                <div className="bg-surface-800/50 rounded-lg p-4">
+                  <p className="text-surface-300 mb-3">
+                    Connect your Etsy shop to sync orders and listings.
+                  </p>
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-sm text-surface-400 mb-1">Etsy Client ID</label>
+                      <input
+                        type="text"
+                        value={etsyClientId}
+                        onChange={e => setEtsyClientId(e.target.value)}
+                        placeholder="Paste your Etsy app's Client ID (Keystring)"
+                        className="input w-full"
+                      />
+                      <p className="text-xs text-surface-500 mt-1">
+                        Get this from the <a href="https://www.etsy.com/developers/your-apps" target="_blank" rel="noopener noreferrer" className="text-accent-400 hover:underline">Etsy Developer Portal</a>
+                      </p>
+                    </div>
+                    <div>
+                      <label className="block text-sm text-surface-400 mb-1">Redirect URI</label>
+                      <input
+                        type="text"
+                        value={etsyRedirectUri}
+                        onChange={e => setEtsyRedirectUri(e.target.value)}
+                        placeholder="http://localhost:8084/api/integrations/etsy/callback"
+                        className="input w-full font-mono text-sm"
+                      />
+                      <p className="text-xs text-surface-500 mt-1">
+                        Must be registered as a Callback URL on your app in the <a href="https://www.etsy.com/developers/your-apps" target="_blank" rel="noopener noreferrer" className="text-accent-400 hover:underline">Etsy Developer Portal</a>.
+                        Etsy rejects an unregistered value with "The requested redirect URL is not permitted.".
+                        It must also be reachable in your browser when Etsy sends it back. Leave it empty to use the default.
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={handleConfigureEtsy}
+                        disabled={!etsyClientId.trim() || configuringEtsy}
+                        className="btn btn-primary"
+                      >
+                        {configuringEtsy ? 'Saving...' : 'Save & Connect'}
+                      </button>
+                      {etsyStatus?.configured && (
+                        <button
+                          onClick={() => setShowEtsyCredentials(false)}
+                          className="btn btn-ghost"
+                        >
+                          Cancel
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ) : etsyStatus.connected ? (
+                <div className="space-y-4">
+                  {/* Connected Shop Info */}
+                  <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <CheckCircle2 className="h-4 w-4 text-green-400" />
+                      <span className="text-green-300 font-medium">Connected</span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4 text-sm">
+                      <div>
+                        <p className="text-surface-400">Shop Name</p>
+                        <p className="text-surface-100 font-medium">{etsyStatus.shop_name}</p>
+                      </div>
+                      <div>
+                        <p className="text-surface-400">Shop ID</p>
+                        <p className="text-surface-100 font-medium">{etsyStatus.shop_id}</p>
+                      </div>
+                      <div>
+                        <p className="text-surface-400">Last Synced</p>
+                        <p className="text-surface-100">{formatDate(etsyStatus.last_sync_at)}</p>
+                      </div>
+                      <div>
+                        <p className="text-surface-400">Connected Since</p>
+                        <p className="text-surface-100">{formatDate(etsyStatus.created_at)}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Registered Redirect URI */}
+                  <div className="bg-surface-800/50 rounded-lg p-3">
+                    <p className="text-sm text-surface-400 mb-1">Redirect URI</p>
+                    <p className="text-xs text-surface-200 font-mono break-all">
+                      {etsyStatus.redirect_uri || 'not set'}
+                    </p>
+                    <p className="text-xs text-surface-500 mt-1">
+                      Etsy only accepts addresses registered on your app. A different address means every reconnect fails.
+                    </p>
+                  </div>
+
+                  {/* Token Expiry Warning */}
+                  {isTokenExpiringSoon() && (
+                    <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-3 flex items-center gap-2">
+                      <AlertCircle className="h-4 w-4 text-yellow-400" />
+                      <span className="text-sm text-yellow-300">
+                        Token expires soon. It will be automatically refreshed on next API call.
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Scopes */}
+                  <div>
+                    <p className="text-sm text-surface-400 mb-2">Permissions</p>
+                    <div className="flex flex-wrap gap-2">
+                      {etsyStatus.scopes?.map((scope) => (
+                        <span
+                          key={scope}
+                          className="text-xs bg-surface-700 text-surface-300 px-2 py-1 rounded"
+                        >
+                          {scope}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={() => {
+                        setEtsyClientId('')
+                        setShowEtsyCredentials(true)
+                      }}
+                      className="px-4 py-2 text-sm font-medium text-surface-300 hover:text-surface-100 hover:bg-surface-700 rounded-lg transition-colors"
+                    >
+                      Edit credentials
+                    </button>
+                    <button
+                      onClick={handleDisconnectEtsy}
+                      disabled={disconnecting}
+                      className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg transition-colors disabled:opacity-50"
+                    >
+                      {disconnecting ? (
+                        <RefreshCw className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Unplug className="h-4 w-4" />
+                      )}
+                      Disconnect Shop
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <p className="text-surface-300">
+                    Connect your Etsy shop to automatically import orders and sync inventory.
+                  </p>
+                  <div className="bg-surface-800/50 rounded-lg p-3">
+                    <p className="text-sm text-surface-400 mb-1">Redirect URI</p>
+                    <p className="text-xs text-surface-200 font-mono break-all">
+                      {etsyStatus.redirect_uri || 'not set'}
+                    </p>
+                    <p className="text-xs text-surface-500 mt-1">
+                      {etsyStatus.redirect_uri
+                        ? 'This is the address Etsy is told to return to. It must be registered as a Callback URL on your app.'
+                        : 'Using the built-in default. It must be registered as a Callback URL on your app in the Etsy Developer Portal.'}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={handleConnectEtsy}
+                      disabled={connecting}
+                      className="flex items-center gap-2 px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white font-medium rounded-lg transition-colors disabled:opacity-50"
+                    >
+                      {connecting ? (
+                        <RefreshCw className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <ExternalLink className="h-4 w-4" />
+                      )}
+                      Connect to Etsy
+                    </button>
+                    <button
+                      onClick={() => {
+                        setEtsyClientId('')
+                        setShowEtsyCredentials(true)
+                      }}
+                      className="px-4 py-2 text-sm font-medium text-surface-300 hover:text-surface-100 hover:bg-surface-700 rounded-lg transition-colors"
+                    >
+                      Edit credentials
+                    </button>
+                  </div>
+                </div>
+               )}
+              </div>
+          )}
          </div>
          )}
 

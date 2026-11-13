@@ -3,8 +3,11 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
+	"net/url"
+	"strings"
 	"time"
 
 	"github.com/Brook-sys/picofarm/internal/etsy"
@@ -26,6 +29,15 @@ type EtsyService struct {
 
 // EtsyWebhookSecretKey is the settings key that stores the Etsy webhook signing secret.
 const EtsyWebhookSecretKey = "etsy_webhook_secret"
+
+// EtsyRedirectURIKey is the settings key that stores the OAuth redirect URI.
+const EtsyRedirectURIKey = "etsy_redirect_uri"
+
+// ErrInvalidRedirectURI is returned when the operator supplies a redirect URI
+// that cannot be used in an OAuth request. Rejecting it here gives a 400 in the
+// API and a message in the UI, instead of a rejected authorization later, with
+// no context about which value was wrong.
+var ErrInvalidRedirectURI = errors.New("redirect URI must be an absolute http(s) URL")
 
 // NewEtsyService creates a new EtsyService.
 func NewEtsyService(repo *repository.EtsyRepository, clientID, redirectURI string, settingsSvc *SettingsService) *EtsyService {
@@ -74,12 +86,26 @@ func (s *EtsyService) GetWebhookSecret(ctx context.Context) (string, error) {
 }
 
 // Configure sets the Etsy client ID at runtime and persists it to settings.
+// An empty redirect URI falls back to etsy.DefaultRedirectURI (port 8084, the
+// documented default port) instead of the port 8080 value older builds used.
+// Configure is intentionally callable again on an already configured
+// integration: it is the only way for the operator to fix a keystring or a
+// redirect URI after the fact.
 func (s *EtsyService) Configure(ctx context.Context, clientID, redirectURI string) error {
 	if clientID == "" {
 		return fmt.Errorf("client_id is required")
 	}
 	if redirectURI == "" {
-		redirectURI = "http://localhost:8080/api/integrations/etsy/callback"
+		redirectURI = etsy.DefaultRedirectURI
+	}
+	if err := validateEtsyRedirectURI(redirectURI); err != nil {
+		return err
+	}
+	if redirectURI == etsy.LegacyRedirectURI {
+		// Keep it working, but make the operator see that this value is exactly
+		// what older builds shipped by mistake.
+		slog.Warn("Etsy redirect URI matches the legacy default; only use this if it is registered in the Etsy developer console",
+			"redirect_uri", redirectURI)
 	}
 	s.client = etsy.NewClient(clientID, redirectURI)
 
@@ -87,11 +113,73 @@ func (s *EtsyService) Configure(ctx context.Context, clientID, redirectURI strin
 		if err := s.settingsSvc.Set(ctx, "etsy_client_id", clientID); err != nil {
 			return fmt.Errorf("saving client ID: %w", err)
 		}
-		if err := s.settingsSvc.Set(ctx, "etsy_redirect_uri", redirectURI); err != nil {
+		if err := s.settingsSvc.Set(ctx, EtsyRedirectURIKey, redirectURI); err != nil {
 			return fmt.Errorf("saving redirect URI: %w", err)
 		}
 	}
 	return nil
+}
+
+// validateEtsyRedirectURI rejects values that would make the OAuth request
+// fail or be impossible to read in logs.
+func validateEtsyRedirectURI(redirectURI string) error {
+	trimmed := strings.TrimSpace(redirectURI)
+	if trimmed != redirectURI {
+		return fmt.Errorf("%w: has surrounding whitespace", ErrInvalidRedirectURI)
+	}
+	parsed, err := url.Parse(redirectURI)
+	if err != nil {
+		return fmt.Errorf("%w: %v", ErrInvalidRedirectURI, err)
+	}
+	if parsed.Scheme != "http" && parsed.Scheme != "https" {
+		return fmt.Errorf("%w: scheme must be http or https, got %q", ErrInvalidRedirectURI, parsed.Scheme)
+	}
+	if parsed.Host == "" {
+		return fmt.Errorf("%w: host is missing", ErrInvalidRedirectURI)
+	}
+	return nil
+}
+
+// RepairLegacyRedirectURI rewrites a redirect URI persisted by an older build
+// of PicoFarm. Those builds defaulted to port 8080, so a connection configured
+// through the UI permanently failed with "The requested redirect URL is not
+// permitted." and the only fix was editing the database by hand.
+//
+// The value can no longer be corrected from the UI alone when Etsy is already
+// "configured", so this repair runs on startup before the client is built.
+// Safe to call on every boot and a no-op when nothing is persisted or the
+// operator set a value deliberately.
+func (s *EtsyService) RepairLegacyRedirectURI(ctx context.Context) error {
+	if s == nil || s.settingsSvc == nil {
+		return nil
+	}
+	setting, err := s.settingsSvc.Get(ctx, EtsyRedirectURIKey)
+	if err != nil {
+		return fmt.Errorf("reading Etsy redirect URI: %w", err)
+	}
+	if setting == nil || setting.Value == "" {
+		// Nothing persisted: the startup default applies.
+		return nil
+	}
+	if setting.Value != etsy.LegacyRedirectURI {
+		return nil
+	}
+	if err := s.settingsSvc.Set(ctx, EtsyRedirectURIKey, etsy.DefaultRedirectURI); err != nil {
+		return fmt.Errorf("rewriting legacy Etsy redirect URI: %w", err)
+	}
+	slog.Info("repaired legacy Etsy redirect URI persisted by an older build",
+		"from", etsy.LegacyRedirectURI, "to", etsy.DefaultRedirectURI)
+	return nil
+}
+
+// RedirectURI returns the OAuth redirect URI currently configured, or an empty
+// string when Etsy is not configured. Exposed so the API can tell the operator
+// exactly which value has to be registered in the Etsy developer console.
+func (s *EtsyService) RedirectURI() string {
+	if s == nil || s.client == nil {
+		return ""
+	}
+	return s.client.RedirectURI()
 }
 
 // IsConfigured returns true if Etsy OAuth is configured.
@@ -127,7 +215,11 @@ func (s *EtsyService) StartOAuth(ctx context.Context) (string, error) {
 	oauthState := &model.EtsyOAuthState{
 		State:        state,
 		CodeVerifier: codeVerifier,
-		RedirectURI:  "", // Not needed for Etsy
+		// Recorded so the callback can tell whether the operator reconfigured
+		// the redirect URI in the middle of the flow. Etsy requires the exact
+		// same value in the token exchange, so a change surfaces as an opaque
+		// error unless we detect it here.
+		RedirectURI: s.client.RedirectURI(),
 	}
 	if err := s.repo.SaveOAuthState(ctx, oauthState); err != nil {
 		return "", fmt.Errorf("saving OAuth state: %w", err)
@@ -161,7 +253,21 @@ func (s *EtsyService) HandleCallback(ctx context.Context, state, code string) (*
 		return nil, fmt.Errorf("OAuth state expired")
 	}
 
-	// Exchange code for tokens
+	// The authorization code can only be exchanged with the same redirect URI
+	// that produced it. If the operator reconfigured the app in between, the
+	// exchange fails with an opaque Etsy error; fail fast with a message that
+	// names both values instead.
+	//
+	// States created by older builds carry an empty RedirectURI, so the check
+	// only applies to states that recorded one.
+	if oauthState.RedirectURI != "" && oauthState.RedirectURI != s.client.RedirectURI() {
+		s.repo.DeleteOAuthState(ctx, state)
+		return nil, fmt.Errorf("redirect URI changed after the authorization started (was %s, now %s): reconfigure the Etsy redirect URI and start the connection again",
+			oauthState.RedirectURI, s.client.RedirectURI())
+	}
+
+	// Exchange code for tokens. %w keeps the structured Etsy error in the chain
+	// so the API layer can forward Etsy's own description to the operator.
 	tokenResp, err := s.client.ExchangeCode(ctx, code, oauthState.CodeVerifier)
 	if err != nil {
 		s.repo.DeleteOAuthState(ctx, state)

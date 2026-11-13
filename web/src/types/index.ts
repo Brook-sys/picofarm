@@ -871,6 +871,7 @@ export interface Sale {
 export interface EtsyIntegration {
   connected: boolean
   configured: boolean
+  redirect_uri?: string
   shop_id?: number
   shop_name?: string
   token_expires_at?: string

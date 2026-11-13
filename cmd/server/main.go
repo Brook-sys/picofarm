@@ -9,15 +9,16 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/getsentry/sentry-go"
 	"github.com/Brook-sys/picofarm/internal/api"
 	"github.com/Brook-sys/picofarm/internal/database"
+	"github.com/Brook-sys/picofarm/internal/etsy"
 	"github.com/Brook-sys/picofarm/internal/printer"
 	"github.com/Brook-sys/picofarm/internal/realtime"
 	"github.com/Brook-sys/picofarm/internal/repository"
 	"github.com/Brook-sys/picofarm/internal/service"
 	"github.com/Brook-sys/picofarm/internal/storage"
 	"github.com/Brook-sys/picofarm/internal/version"
+	"github.com/getsentry/sentry-go"
 	"github.com/joho/godotenv"
 )
 
@@ -52,7 +53,10 @@ func main() {
 
 	// Etsy OAuth configuration (optional)
 	etsyClientID := os.Getenv("ETSY_CLIENT_ID")
-	etsyRedirectURI := getEnv("ETSY_REDIRECT_URI", "http://localhost:8084/api/integrations/etsy/callback")
+	// Same single source of truth the service uses (etsy.DefaultRedirectURI):
+	// two hardcoded defaults drifted apart in the past and the service shipped
+	// port 8080, which is not the port this app listens on.
+	etsyRedirectURI := getEnv("ETSY_REDIRECT_URI", etsy.DefaultRedirectURI)
 	// Etsy webhook signing secret (optional). When set, webhook events without a
 	// valid X-Etsy-Signature are rejected with 401 instead of accepted.
 	etsyWebhookSecret := os.Getenv("ETSY_WEBHOOK_SECRET")
@@ -121,14 +125,21 @@ func main() {
 	} else {
 		// Try loading Etsy config from database settings
 		if setting, err := services.Settings.Get(context.Background(), "etsy_client_id"); err == nil && setting != nil && setting.Value != "" {
+			// Older builds persisted the wrong default redirect URI (port
+			// 8080). Rewrite it before the client is built, otherwise the
+			// authorization keeps failing with "The requested redirect URL is
+			// not permitted." and nothing in the UI can correct it.
+			if err := services.Etsy.RepairLegacyRedirectURI(context.Background()); err != nil {
+				slog.Warn("failed to repair legacy Etsy redirect URI", "error", err)
+			}
 			redirectURI := etsyRedirectURI
-			if uriSetting, err := services.Settings.Get(context.Background(), "etsy_redirect_uri"); err == nil && uriSetting != nil && uriSetting.Value != "" {
+			if uriSetting, err := services.Settings.Get(context.Background(), service.EtsyRedirectURIKey); err == nil && uriSetting != nil && uriSetting.Value != "" {
 				redirectURI = uriSetting.Value
 			}
 			if err := services.Etsy.Configure(context.Background(), setting.Value, redirectURI); err != nil {
 				slog.Warn("failed to load Etsy config from database", "error", err)
 			} else {
-				slog.Info("Etsy integration enabled from stored config", "redirect_uri", redirectURI)
+				slog.Info("Etsy integration enabled from stored config", "redirect_uri", services.Etsy.RedirectURI())
 			}
 		}
 	}
