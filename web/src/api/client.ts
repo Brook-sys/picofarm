@@ -342,8 +342,8 @@ export interface DiscoveredPrinter {
 
 // Printers API
 export const slicerApi = {
-  getConfig: () => fetchApi<{ connection_url: string; default_profiles?: Record<string, string> }>('/slicer/config'),
-  setConfig: (connectionUrl: string) => fetchApi<{ connection_url: string }>('/slicer/config', { method: 'PUT', body: JSON.stringify({ connection_url: connectionUrl }) }),
+  getConfig: () => fetchApi<{ connection_url: string; connection_url_source?: string; default_profiles?: Record<string, string> }>('/slicer/config'),
+  setConfig: (connectionUrl: string) => fetchApi<{ connection_url: string; connection_url_source?: string }>('/slicer/config', { method: 'PUT', body: JSON.stringify({ connection_url: connectionUrl }) }),
   health: () => fetchApi<Record<string, unknown>>('/slicer/health'),
   status: () => fetchApi<Record<string, unknown>>('/slicer/status'),
   profiles: (category: 'printers' | 'presets' | 'filaments') => fetchApi<Array<Record<string, unknown>>>(`/slicer/profiles/${category}`),

@@ -14,6 +14,9 @@ const CATEGORIES: Array<{ key: ProfileCategory; title: string; description: stri
 
 export default function SlicerSettings() {
   const [connectionUrl, setConnectionUrl] = useState('')
+  // Where the effective URL came from: "env" means SLICER_CONNECTION_URL is set
+  // on the server and the field below cannot change what the backend talks to.
+  const [connectionUrlSource, setConnectionUrlSource] = useState('')
   const [health, setHealth] = useState<Record<string, unknown> | null>(null)
   const [status, setStatus] = useState<Record<string, unknown> | null>(null)
   const [profiles, setProfiles] = useState<Record<ProfileCategory, Array<Record<string, unknown>>>>({ printers: [], presets: [], filaments: [] })
@@ -33,6 +36,7 @@ export default function SlicerSettings() {
         const cfg = await slicerApi.getConfig()
         if (cancelled) return
         setConnectionUrl(cfg.connection_url || '')
+        setConnectionUrlSource(cfg.connection_url_source || '')
         if (!cfg.connection_url) return
 
         const [healthRes, statusRes, printers, presets, filaments] = await Promise.all([
@@ -90,6 +94,7 @@ export default function SlicerSettings() {
     try {
       const cfg = await slicerApi.setConfig(connectionUrl)
       setConnectionUrl(cfg.connection_url || '')
+      setConnectionUrlSource(cfg.connection_url_source || '')
       await checkConnection()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save slicer URL')
@@ -268,6 +273,12 @@ export default function SlicerSettings() {
             <button onClick={checkConnection} disabled={!connectionUrl || !!busy} className="btn btn-secondary">Check</button>
           </div>
         </div>
+        {connectionUrlSource === 'env' && (
+          <div className="mt-4 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-200">
+            The server is using <span className="font-mono">SLICER_CONNECTION_URL</span>, so it overrides anything saved here.
+            Saving still stores this URL for when that variable is removed, but it will not change which slicer is used until then.
+          </div>
+        )}
         <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
           <HealthBadge label="API" ok={!!health} value={isHealthy ? 'Healthy' : health ? 'Unhealthy' : 'Not checked'} />
           <HealthBadge label="Orca configured" ok={health?.orcaSlicerConfigured === true} value={String(health?.orcaSlicerConfigured ?? '—')} />

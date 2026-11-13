@@ -31,11 +31,14 @@ func (h *SlicerHandler) SetConfig(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
-	if err := h.service.SetConfig(r.Context(), cfg); err != nil {
+	// The handler answers with the effective configuration, not the request,
+	// because the environment can override the value that was just stored.
+	effective, err := h.service.SetConfig(r.Context(), cfg)
+	if err != nil {
 		respondError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	respondJSON(w, http.StatusOK, cfg)
+	respondJSON(w, http.StatusOK, effective)
 }
 
 func (h *SlicerHandler) Health(w http.ResponseWriter, r *http.Request) {

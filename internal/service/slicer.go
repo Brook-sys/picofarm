@@ -9,6 +9,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/url"
+	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -26,12 +27,19 @@ type SlicerService struct {
 	files    *repository.FileRepository
 	gcodes   *GCodeLibraryService
 	storage  storage.Storage
-	client   *http.Client
+	// Three clients instead of one, because the operations they serve need
+	// wildly different deadlines (see the timeouts below). A single 60 minute
+	// client meant that a slicer that never answered /health kept the UI
+	// waiting for an hour.
+	quickClient   *http.Client
+	profileClient *http.Client
+	sliceClient   *http.Client
 }
 
 type SlicerConfig struct {
-	ConnectionURL   string            `json:"connection_url"`
-	DefaultProfiles map[string]string `json:"default_profiles"`
+	ConnectionURL       string            `json:"connection_url"`
+	ConnectionURLSource string            `json:"connection_url_source"`
+	DefaultProfiles     map[string]string `json:"default_profiles"`
 }
 
 type SlicerDefaultProfileRequest struct {
@@ -104,19 +112,52 @@ type SlicerPreviewResult struct {
 
 var slicerProfileNameInvalidChars = regexp.MustCompile(`[^a-zA-Z0-9_-]+`)
 
+// Slicer endpoints have very different response times, so each class of call
+// gets its own deadline:
+//
+//   - quick: health, slice status, listing a profile category, reading one
+//     profile, resolving profile names. The UI calls these on page load and
+//     while filling in the slice form; a slicer that is down must fail in
+//     seconds, not hold the request for an hour.
+//   - profile: writing profiles, including importing one from a remote URL,
+//     which is a download the slicer performs on our behalf.
+//   - slice: slicing a large STL really can take tens of minutes, so the
+//     deadline stays generous.
+const (
+	slicerTimeoutQuick   = 5 * time.Second
+	slicerTimeoutProfile = 60 * time.Second
+	slicerTimeoutSlice   = 60 * time.Minute
+)
+
+// SlicerConnectionURLEnv points at the orca-slicer-api container. It overrides
+// the stored setting so a deployment can pin the address (docker-compose,
+// systemd, Kubernetes env) without depending on whatever an earlier version
+// wrote into the database.
+const SlicerConnectionURLEnv = "SLICER_CONNECTION_URL"
+
 func NewSlicerService(settings *SettingsService, repos *repository.Repositories, store storage.Storage, gcodes *GCodeLibraryService) *SlicerService {
-	return &SlicerService{settings: settings, stls: repos.STLLibrary, files: repos.Files, gcodes: gcodes, storage: store, client: &http.Client{Timeout: 60 * time.Minute}}
+	return &SlicerService{
+		settings:      settings,
+		stls:          repos.STLLibrary,
+		files:         repos.Files,
+		gcodes:        gcodes,
+		storage:       store,
+		quickClient:   &http.Client{Timeout: slicerTimeoutQuick},
+		profileClient: &http.Client{Timeout: slicerTimeoutProfile},
+		sliceClient:   &http.Client{Timeout: slicerTimeoutSlice},
+	}
 }
 
+// GetConfig returns the slicer configuration the UI needs, including the
+// effective connection URL and which source won.
 func (s *SlicerService) GetConfig(ctx context.Context) (SlicerConfig, error) {
-	setting, err := s.settings.Get(ctx, "slicer_connection_url")
+	cfg := SlicerConfig{DefaultProfiles: map[string]string{}}
+	urlValue, source, err := s.effectiveConnectionURL(ctx)
 	if err != nil {
 		return SlicerConfig{}, err
 	}
-	cfg := SlicerConfig{DefaultProfiles: map[string]string{}}
-	if setting != nil {
-		cfg.ConnectionURL = setting.Value
-	}
+	cfg.ConnectionURL = urlValue
+	cfg.ConnectionURLSource = source
 	for _, category := range []string{"printers", "presets", "filaments"} {
 		defaultSetting, err := s.settings.Get(ctx, slicerDefaultProfileKey(category))
 		if err == nil && defaultSetting != nil {
@@ -126,15 +167,50 @@ func (s *SlicerService) GetConfig(ctx context.Context) (SlicerConfig, error) {
 	return cfg, nil
 }
 
-func (s *SlicerService) SetConfig(ctx context.Context, cfg SlicerConfig) error {
+// effectiveConnectionURL resolves the connection URL: the environment wins over
+// the stored setting, which in turn wins over nothing. The second return value
+// names the source so the UI can explain why an edit appears to have no effect.
+func (s *SlicerService) effectiveConnectionURL(ctx context.Context) (string, string, error) {
+	if fromEnv := strings.TrimRight(strings.TrimSpace(os.Getenv(SlicerConnectionURLEnv)), "/"); fromEnv != "" {
+		// A malformed env value is an operator error worth reporting instead of
+		// silently falling back to a stale setting.
+		parsed, err := url.Parse(fromEnv)
+		if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+			return "", "", fmt.Errorf("%s is not a valid slicer connection URL: %q", SlicerConnectionURLEnv, fromEnv)
+		}
+		return fromEnv, "env", nil
+	}
+	setting, err := s.settings.Get(ctx, "slicer_connection_url")
+	if err != nil {
+		return "", "", err
+	}
+	if setting == nil {
+		return "", "", nil
+	}
+	return strings.TrimRight(strings.TrimSpace(setting.Value), "/"), "settings", nil
+}
+
+// SetConfig stores the slicer configuration and returns the configuration that
+// is now in effect. It returns the effective URL rather than the stored one
+// because those differ whenever the environment overrides the setting; echoing
+// the request back would tell the operator their edit took effect when it did
+// not.
+//
+// The connection URL is stored even when the environment currently overrides
+// it, so removing the env var brings the stored value back instead of an empty
+// configuration.
+func (s *SlicerService) SetConfig(ctx context.Context, cfg SlicerConfig) (SlicerConfig, error) {
 	cfg.ConnectionURL = strings.TrimRight(strings.TrimSpace(cfg.ConnectionURL), "/")
 	if cfg.ConnectionURL != "" {
 		parsed, err := url.Parse(cfg.ConnectionURL)
 		if err != nil || parsed.Scheme == "" || parsed.Host == "" {
-			return fmt.Errorf("invalid slicer connection URL")
+			return SlicerConfig{}, fmt.Errorf("invalid slicer connection URL")
 		}
 	}
-	return s.settings.Set(ctx, "slicer_connection_url", cfg.ConnectionURL)
+	if err := s.settings.Set(ctx, "slicer_connection_url", cfg.ConnectionURL); err != nil {
+		return SlicerConfig{}, err
+	}
+	return s.GetConfig(ctx)
 }
 
 func (s *SlicerService) Health(ctx context.Context) (SlicerHealth, error) {
@@ -215,7 +291,7 @@ func (s *SlicerService) GetProfileJSON(ctx context.Context, category, name strin
 func (s *SlicerService) ImportProfile(ctx context.Context, req SlicerImportRequest) (map[string]any, error) {
 	category := normalizeSlicerCategory(req.Category)
 	payload, _ := json.Marshal(map[string]any{"name": req.Name, "url": req.URL, "overwrite": req.Overwrite})
-	body, err := s.do(ctx, http.MethodPost, "/profiles/"+category+"/import-url", bytes.NewReader(payload), "application/json")
+	body, err := s.doWithKind(ctx, slicerCallProfile, http.MethodPost, "/profiles/"+category+"/import-url", bytes.NewReader(payload), "application/json")
 	if err != nil {
 		return nil, err
 	}
@@ -253,7 +329,7 @@ func (s *SlicerService) UploadProfileJSON(ctx context.Context, req SlicerUploadP
 		return nil, err
 	}
 	writer.Close()
-	resp, err := s.doRaw(ctx, http.MethodPost, "/profiles/"+category+"/upload", body, writer.FormDataContentType())
+	resp, err := s.doRawWithKind(ctx, slicerCallProfile, http.MethodPost, "/profiles/"+category+"/upload", body, writer.FormDataContentType())
 	if err != nil {
 		return nil, err
 	}
@@ -273,7 +349,7 @@ func (s *SlicerService) UploadProfileJSON(ctx context.Context, req SlicerUploadP
 
 func (s *SlicerService) UpdateProfileFromSource(ctx context.Context, category, name string) (map[string]any, error) {
 	category = normalizeSlicerCategory(category)
-	body, err := s.do(ctx, http.MethodPost, "/profiles/"+category+"/"+url.PathEscape(name)+"/update-from-source", nil, "")
+	body, err := s.doWithKind(ctx, slicerCallProfile, http.MethodPost, "/profiles/"+category+"/"+url.PathEscape(name)+"/update-from-source", nil, "")
 	if err != nil {
 		return nil, err
 	}
@@ -351,7 +427,7 @@ func (s *SlicerService) SliceSTL(ctx context.Context, req SlicerSliceRequest) (*
 	}
 	writer.Close()
 
-	resp, err := s.doRaw(ctx, http.MethodPost, "/slice", body, writer.FormDataContentType())
+	resp, err := s.doRawWithKind(ctx, slicerCallSlice, http.MethodPost, "/slice", body, writer.FormDataContentType())
 	if err != nil {
 		return nil, err
 	}
@@ -430,7 +506,7 @@ func (s *SlicerService) PreviewSTL(ctx context.Context, req SlicerPreviewRequest
 	}
 	writer.Close()
 
-	resp, err := s.doRaw(ctx, http.MethodPost, "/slice/preview", body, writer.FormDataContentType())
+	resp, err := s.doRawWithKind(ctx, slicerCallSlice, http.MethodPost, "/slice/preview", body, writer.FormDataContentType())
 	if err != nil {
 		return nil, err
 	}
@@ -446,8 +522,26 @@ func (s *SlicerService) PreviewSTL(ctx context.Context, req SlicerPreviewRequest
 	return &result, nil
 }
 
+// slicerCallKind selects the HTTP deadline for a call. Slicing is slow by
+// nature; everything else must fail fast or the UI hangs.
+type slicerCallKind int
+
+const (
+	slicerCallQuick slicerCallKind = iota
+	slicerCallProfile
+	slicerCallSlice
+)
+
+// do performs a call with the quick deadline. Anything that the UI waits on
+// while it loads or while the operator fills in the slice form goes through
+// here.
 func (s *SlicerService) do(ctx context.Context, method, path string, body io.Reader, contentType string) ([]byte, error) {
-	resp, err := s.doRaw(ctx, method, path, body, contentType)
+	return s.doWithKind(ctx, slicerCallQuick, method, path, body, contentType)
+}
+
+// doWithKind is the short-deadline path used by the profile and health calls.
+func (s *SlicerService) doWithKind(ctx context.Context, kind slicerCallKind, method, path string, body io.Reader, contentType string) ([]byte, error) {
+	resp, err := s.doRawWithKind(ctx, kind, method, path, body, contentType)
 	if err != nil {
 		return nil, err
 	}
@@ -459,22 +553,32 @@ func (s *SlicerService) do(ctx context.Context, method, path string, body io.Rea
 	return respBody, nil
 }
 
-func (s *SlicerService) doRaw(ctx context.Context, method, path string, body io.Reader, contentType string) (*http.Response, error) {
-	cfg, err := s.GetConfig(ctx)
+func (s *SlicerService) doRawWithKind(ctx context.Context, kind slicerCallKind, method, path string, body io.Reader, contentType string) (*http.Response, error) {
+	// Only the connection URL is read here. Reading the whole config meant three
+	// extra settings lookups per call (one per default profile) that nothing on
+	// the request path uses.
+	baseURL, _, err := s.effectiveConnectionURL(ctx)
 	if err != nil {
 		return nil, err
 	}
-	if cfg.ConnectionURL == "" {
+	if baseURL == "" {
 		return nil, fmt.Errorf("slicer connection URL is not configured")
 	}
-	req, err := http.NewRequestWithContext(ctx, method, strings.TrimRight(cfg.ConnectionURL, "/")+path, body)
+	req, err := http.NewRequestWithContext(ctx, method, baseURL+path, body)
 	if err != nil {
 		return nil, err
 	}
 	if contentType != "" {
 		req.Header.Set("Content-Type", contentType)
 	}
-	return s.client.Do(req)
+	switch kind {
+	case slicerCallProfile:
+		return s.profileClient.Do(req)
+	case slicerCallSlice:
+		return s.sliceClient.Do(req)
+	default:
+		return s.quickClient.Do(req)
+	}
 }
 
 func slicerDefaultProfileKey(category string) string {

@@ -112,6 +112,31 @@ Most keys in `settings` are free-form key/value blobs. Two keys are validated by
   `web/src/lib/materialColors.ts`, and a material that is neither configured nor known renders a
   neutral label. `gcode_files.material_color` is not consulted: the parser never populates it.
 
+## Slicer integration
+
+`/api/slicer/*` proxies an external orca-slicer-api container. Representative routes: `GET/PUT
+/api/slicer/config`, `/health`, `/status`, `/profiles/{category}`, `/profiles/import-url`,
+`/profiles/upload-json`, `/profiles/default`, `/slice/resolve-profiles`, `/preview`, `/slice-stl`.
+
+- `GET /api/slicer/config` returns `connection_url`, `connection_url_source` (`env` or `settings`)
+  and `default_profiles`. `connection_url_source` is empty when nothing is configured.
+- The connection URL is resolved per request as: `SLICER_CONNECTION_URL` (trimmed of surrounding
+  whitespace and trailing slashes), then the `slicer_connection_url` setting, then nothing. The
+  environment wins so a deployment can pin the container address without depending on whatever an
+  earlier version stored in the database.
+- A malformed `SLICER_CONNECTION_URL` is reported as an error instead of silently falling back to
+  the stored value, which would point at the wrong slicer while looking healthy.
+- `PUT /api/slicer/config` stores `connection_url` even while the environment overrides it, so
+  removing the variable brings the stored value back. It responds with the **effective**
+  configuration, not the request body: the two differ whenever the environment is set.
+- Per-operation deadlines replace the single 60 minute client, because a slicer that never
+  answers `/health` used to hold the request (and the browser tab) for an hour. `/health`,
+  `/status`, profile listing, profile read, `/slice/resolve-profiles` and profile writes fail in
+  5s/60s respectively; `/slice-stl` and `/preview` keep 60 minutes, which is a real requirement
+  for large models.
+- No config caching: the URL is read from the environment and the settings repository on every
+  request. That is deliberate — caching would make a directly edited setting stale until restart.
+
 ## High-value domain contracts
 
 ### Projects and production
