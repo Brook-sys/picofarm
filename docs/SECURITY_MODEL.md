@@ -130,6 +130,17 @@ When set, all routes under `/api/*` (except `/api/public/*`) will require this t
 
 This is a baseline mechanism. It is strongly recommended to use a robust reverse proxy (e.g. Tailscale, Cloudflare Access, Authelia, Nginx Basic Auth) for broad internet exposure.
 
+### What `API_TOKEN` does not cover
+
+- `/ws` is registered outside the `/api` group, so `ApiTokenAuth` never sees it. The realtime
+  endpoint accepts any origin (`OriginPatterns: ["*"]`) with no token, so enabling `API_TOKEN`
+  protects the JSON API while leaving the event stream readable by any client that can reach the
+  port. The frontend connects to `/ws` without a token today.
+- The slicer neighbor service is a separate concern: `API_TOKEN` guards `/api/*` only (see
+  "Neighbor service exposure (orca-slicer-api)").
+- With `API_TOKEN` unset, `ApiTokenAuth` passes every request through, so the whole `/api` surface
+  depends on the network boundary in front of it.
+
 ## Neighbor service exposure (orca-slicer-api)
 
 The slicer is a separate container that PicoFarm only proxies. It carries **no authentication of
