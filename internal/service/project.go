@@ -26,6 +26,7 @@ type ProjectService struct {
 	saleRepo     *repository.SaleRepository
 	partRepo     *repository.PartRepository
 	supplyRepo   *repository.ProjectSupplyRepository
+	printJobs    *PrintJobService
 	repos        *repository.Repositories
 	printerMgr   *printer.Manager
 	hub          *realtime.Hub
@@ -367,6 +368,10 @@ func (s *ProjectService) StartProduction(ctx context.Context, projectID uuid.UUI
 				WithError("UPLOAD_FAILED", err.Error()).
 				WithActor(model.ActorSystem, "start_production")
 			s.printJobRepo.AppendEvent(ctx, failEvent)
+			// The job is terminal now: archive it like any other failure.
+			if s.printJobs != nil {
+				s.printJobs.ArchiveJob(ctx, job.ID)
+			}
 
 			result.FailedJobs = append(result.FailedJobs, StartJobFailure{
 				JobID:  job.ID,

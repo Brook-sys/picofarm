@@ -22,11 +22,15 @@ type PrintJobService struct {
 	materialRepo   *repository.MaterialRepository
 	projectRepo    *repository.ProjectRepository
 	queueRepo      *repository.QueueItemRepository
+	archiveRepo    *repository.PrintArchiveRepository
 	printerMgr     *printer.Manager
 	hub            *realtime.Hub
 	storage        storage.Storage
 	onJobCompleted func(ctx context.Context, job *model.PrintJob)
 }
+
+// archiveBackfillTimeout bounds the startup backfill of historical jobs.
+const archiveBackfillTimeout = 2 * time.Minute
 
 // SetOnJobCompleted sets a callback invoked when a print job completes successfully.
 func (s *PrintJobService) SetOnJobCompleted(fn func(ctx context.Context, job *model.PrintJob)) {
@@ -150,6 +154,8 @@ func (s *PrintJobService) Start(ctx context.Context, id uuid.UUID) error {
 			WithError("UPLOAD_FAILED", err.Error()).
 			WithActor(model.ActorSystem, "print_service")
 		s.repo.AppendEvent(ctx, failEvent)
+		// The job is terminal now: keep it in the archive like any other failure.
+		s.ArchiveJob(ctx, job.ID)
 		return fmt.Errorf("failed to start print: %w", err)
 	}
 
@@ -575,6 +581,8 @@ func (s *PrintJobService) Cancel(ctx context.Context, id uuid.UUID) error {
 	job.FailureCategory = &failureCategory
 	s.repo.Update(ctx, job) //nolint:errcheck // best-effort cancellation update
 
+	s.ArchiveJob(ctx, job.ID)
+
 	s.hub.Broadcast(realtime.Event{
 		Type: "job_cancelled",
 		Data: job,
@@ -722,6 +730,9 @@ func (s *PrintJobService) RecordOutcome(ctx context.Context, id uuid.UUID, outco
 		return fmt.Errorf("failed to update job: %w", err)
 	}
 
+	// Archive the finished job (success or failure) for the print history.
+	s.ArchiveJob(ctx, job.ID)
+
 	// Broadcast the completed event
 	wsEventType := "job_completed"
 	if !outcome.Success {
@@ -849,6 +860,8 @@ func (s *PrintJobService) RecordFailure(ctx context.Context, id uuid.UUID, categ
 	job.FailureCategory = &category
 	s.repo.Update(ctx, job) //nolint:errcheck // best-effort failure update
 
+	s.ArchiveJob(ctx, job.ID)
+
 	s.hub.Broadcast(realtime.Event{
 		Type: "job_failed",
 		Data: job,
@@ -862,6 +875,44 @@ func (s *PrintJobService) RecordFailure(ctx context.Context, id uuid.UUID, categ
 func (s *PrintJobService) Init() {
 	s.printerMgr.OnStatusChange(s.handlePrinterStatusChange)
 	slog.Info("PrintJobService: registered for printer status changes")
+	go s.backfillArchives()
+}
+
+// backfillArchives archives jobs that reached a terminal status before the
+// automatic archiving existed, so the print history is complete. It runs in the
+// background (startup must not wait on it) and is idempotent at every step: the
+// query only returns jobs without an archive, and the insert is guarded by the
+// unique index on job_id. Whatever is left over is retried on the next boot.
+func (s *PrintJobService) backfillArchives() {
+	if s.archiveRepo == nil {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), archiveBackfillTimeout)
+	defer cancel()
+
+	jobIDs, err := s.repo.ListUnarchivedTerminalJobIDs(ctx)
+	if err != nil {
+		slog.Error("print archive backfill: failed to list jobs", "error", err)
+		return
+	}
+	if len(jobIDs) == 0 {
+		return
+	}
+	slog.Info("print archive backfill: archiving historical jobs", "jobs", len(jobIDs))
+
+	archived := 0
+	for _, jobID := range jobIDs {
+		if ctx.Err() != nil {
+			// Timeout or shutdown: the remaining jobs are picked up next boot.
+			slog.Warn("print archive backfill: interrupted", "archived", archived, "remaining", len(jobIDs)-archived)
+			return
+		}
+		if s.archiveJob(ctx, jobID) {
+			archived++
+		}
+	}
+	slog.Info("print archive backfill: finished", "archived", archived)
 }
 
 // handlePrinterStatusChange is called when any printer's status changes.
@@ -1034,6 +1085,72 @@ func (s *PrintJobService) MarkAsScrap(ctx context.Context, id uuid.UUID, req *Sc
 	})
 
 	return nil
+}
+
+// ArchiveJob snapshots a finished job into the print archive so every terminal
+// print stays queryable on the Archives page. It is idempotent (one archive per
+// job) and best-effort: a failure here is logged and never fails the transition
+// that triggered it. Other services that can terminate a job (project
+// production start) archive through this same entry point.
+func (s *PrintJobService) ArchiveJob(ctx context.Context, jobID uuid.UUID) {
+	s.archiveJob(ctx, jobID)
+}
+
+// archiveJob does the work of ArchiveJob and reports whether a row was written,
+// so callers that loop (the startup backfill) can count what they did.
+func (s *PrintJobService) archiveJob(ctx context.Context, jobID uuid.UUID) bool {
+	if s.archiveRepo == nil {
+		return false
+	}
+	job, err := s.repo.GetByID(ctx, jobID)
+	if err != nil {
+		slog.Error("failed to load job for archiving", "job_id", jobID, "error", err)
+		return false
+	}
+	if job == nil || !job.Status.IsTerminal() {
+		return false
+	}
+	archived, err := s.archiveRepo.CreateIfAbsent(ctx, archiveFromJob(job))
+	if err != nil {
+		slog.Error("failed to archive print job", "job_id", jobID, "status", job.Status, "error", err)
+		return false
+	}
+	if archived {
+		slog.Info("print job archived", "job_id", jobID, "status", job.Status)
+		return true
+	}
+	slog.Debug("print job already archived", "job_id", jobID, "status", job.Status)
+	return false
+}
+
+// archiveFromJob maps a terminal job to its immutable archive snapshot.
+func archiveFromJob(job *model.PrintJob) *model.PrintArchive {
+	archive := &model.PrintArchive{
+		JobID:     &job.ID,
+		PrinterID: job.PrinterID,
+		Status:    string(job.Status),
+		StartTime: job.StartedAt,
+		EndTime:   job.CompletedAt,
+		Notes:     job.Notes,
+		Tags:      []string{"auto"},
+	}
+	switch {
+	case job.ActualSeconds != nil:
+		archive.DurationSeconds = *job.ActualSeconds
+	case job.StartedAt != nil && job.CompletedAt != nil:
+		// Paths that never record a duration (cancel, upload failure) still get
+		// a wall-clock span between start and end.
+		if seconds := int(job.CompletedAt.Sub(*job.StartedAt).Seconds()); seconds > 0 {
+			archive.DurationSeconds = seconds
+		}
+	}
+	if job.MaterialUsedGrams != nil {
+		archive.FilamentUsedGrams = *job.MaterialUsedGrams
+	}
+	if job.CostCents != nil {
+		archive.CostCents = *job.CostCents
+	}
+	return archive
 }
 
 // UpdatePriority updates a job's priority in the queue.

@@ -87,7 +87,7 @@ func NewServices(repos *repository.Repositories, store storage.Storage, printerM
 		Printers:        &PrinterService{repo: repos.Printers, settingsRepo: repos.Settings, printJobRepo: repos.PrintJobs, queueRepo: repos.QueueItems, saleRepo: repos.Sales, macroRepo: repos.PrinterMacros, manager: printerMgr, hub: hub, discovery: printer.NewDiscovery(), bambuCloudRepo: repos.BambuCloud, bambuCloud: bambuCloudClient, reconnecting: make(map[uuid.UUID]time.Time)},
 		Materials:       &MaterialService{repo: repos.Materials},
 		Spools:          &SpoolService{repo: repos.Spools},
-		PrintJobs:       &PrintJobService{repo: repos.PrintJobs, printerRepo: repos.Printers, designRepo: repos.Designs, spoolRepo: repos.Spools, materialRepo: repos.Materials, projectRepo: repos.Projects, queueRepo: repos.QueueItems, printerMgr: printerMgr, hub: hub, storage: store},
+		PrintJobs:       &PrintJobService{repo: repos.PrintJobs, printerRepo: repos.Printers, designRepo: repos.Designs, spoolRepo: repos.Spools, materialRepo: repos.Materials, projectRepo: repos.Projects, queueRepo: repos.QueueItems, archiveRepo: repos.PrintArchives, printerMgr: printerMgr, hub: hub, storage: store},
 		Files:           &FileService{repo: repos.Files, storage: store},
 		Expenses:        &ExpenseService{repo: repos.Expenses, materialRepo: repos.Materials, spoolRepo: repos.Spools, fileRepo: repos.Files, settingsRepo: repos.Settings, repos: repos, storage: store},
 		Sales:           &SaleService{repo: repos.Sales, taskRepo: repos.Tasks, settings: settingsService},
@@ -100,6 +100,9 @@ func NewServices(repos *repository.Repositories, store storage.Storage, printerM
 	}
 	// Wire cross-service dependencies
 	services.Stats.projectService = services.Projects
+	// Production start can also terminate a job (upload failure); it archives
+	// through PrintJobService so there is a single archiving code path.
+	services.Projects.printJobs = services.PrintJobs
 
 	// Initialize Squarespace
 	services.Squarespace = NewSquarespaceService(repos.Squarespace)

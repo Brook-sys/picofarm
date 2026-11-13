@@ -28,6 +28,31 @@ func (r *PrintArchiveRepository) Create(ctx context.Context, a *model.PrintArchi
 	return err
 }
 
+// CreateIfAbsent inserts an archive unless the job already has one.
+// The unique index on job_id makes repeated calls for the same job a no-op,
+// which is what keeps the automatic archiving idempotent. Manual archives
+// carry a NULL job_id and are therefore never ignored. The bool reports
+// whether a row was actually written.
+func (r *PrintArchiveRepository) CreateIfAbsent(ctx context.Context, a *model.PrintArchive) (bool, error) {
+	if a.ID == uuid.Nil {
+		a.ID = uuid.New()
+	}
+	a.CreatedAt = time.Now()
+	a.UpdatedAt = a.CreatedAt
+	res, err := r.db.ExecContext(ctx, `
+		INSERT OR IGNORE INTO print_archives (id, job_id, printer_id, status, start_time, end_time, duration_seconds, filament_used_grams, cost_cents, thumbnail_file_id, notes, tags, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, a.ID, a.JobID, a.PrinterID, a.Status, a.StartTime, a.EndTime, a.DurationSeconds, a.FilamentUsedGrams, a.CostCents, a.ThumbnailFileID, a.Notes, marshalStringArray(a.Tags), a.CreatedAt, a.UpdatedAt)
+	if err != nil {
+		return false, err
+	}
+	rows, err := res.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	return rows > 0, nil
+}
+
 func (r *PrintArchiveRepository) List(ctx context.Context, printerID *uuid.UUID, status string) ([]model.PrintArchive, error) {
 	query := `SELECT id, job_id, printer_id, status, start_time, end_time, duration_seconds, filament_used_grams, cost_cents, thumbnail_file_id, notes, tags, created_at, updated_at FROM print_archives`
 	args := []interface{}{}
@@ -43,6 +68,7 @@ func (r *PrintArchiveRepository) List(ctx context.Context, printerID *uuid.UUID,
 		}
 		args = append(args, status)
 	}
+	query += ` ORDER BY created_at DESC`
 	rows, err := r.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err

@@ -561,6 +561,42 @@ func (r *PrintJobRepository) UpdatePriority(ctx context.Context, id uuid.UUID, p
 	return err
 }
 
+// ListUnarchivedTerminalJobIDs returns the jobs whose current status is terminal
+// and that have no archive yet. Used by the one-time archive backfill.
+//
+// The status comes from the event log, not from the denormalized
+// print_jobs.status column: Update rewrites that column with the in-memory
+// status it was given, so the column can lag behind the events (a job recorded
+// as completed can still read "printing" there). occurred_at is the primary
+// sort with created_at as tie-breaker, matching GetCurrentStatus.
+func (r *PrintJobRepository) ListUnarchivedTerminalJobIDs(ctx context.Context) ([]uuid.UUID, error) {
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT j.id FROM print_jobs j
+		WHERE (
+			SELECT e.status FROM job_events e
+			WHERE e.job_id = j.id AND e.status IS NOT NULL
+			ORDER BY e.occurred_at DESC, e.created_at DESC
+			LIMIT 1
+		) IN ('completed', 'failed', 'cancelled')
+		  AND NOT EXISTS (SELECT 1 FROM print_archives a WHERE a.job_id = j.id)
+		ORDER BY j.created_at ASC
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var ids []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
 func (r *PrintJobRepository) Delete(ctx context.Context, id uuid.UUID) error {
 	if _, err := r.db.ExecContext(ctx, `UPDATE print_jobs SET parent_job_id = NULL WHERE parent_job_id = ?`, id); err != nil {
 		return err

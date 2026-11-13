@@ -46,6 +46,42 @@ func TestSchemaHasDesignColumns(t *testing.T) {
 	}
 }
 
+// TestSchemaHasPrintArchiveColumns verifies the print_archives table matches
+// what the archive repository reads and writes. The table is produced by the
+// archiving feature, so a fresh database and an upgraded one must agree.
+func TestSchemaHasPrintArchiveColumns(t *testing.T) {
+	db := openTestDB(t)
+
+	expected := []string{
+		"id", "job_id", "printer_id", "status", "start_time", "end_time",
+		"duration_seconds", "filament_used_grams", "cost_cents",
+		"thumbnail_file_id", "notes", "tags", "created_at", "updated_at",
+	}
+
+	cols := tableColumns(t, db, "print_archives")
+	for _, want := range expected {
+		if !cols[want] {
+			t.Errorf("print_archives table missing column %q", want)
+		}
+	}
+}
+
+// TestSchemaPrintArchivesJobIdIsUnique verifies the one-archive-per-job
+// invariant the automatic archiving depends on. Without the unique index a
+// double transition (or a retried backfill) would duplicate history.
+func TestSchemaPrintArchivesJobIdIsUnique(t *testing.T) {
+	db := openTestDB(t)
+
+	var indexSQL string
+	err := db.QueryRow(`SELECT sql FROM sqlite_master WHERE type = 'index' AND tbl_name = 'print_archives' AND sql LIKE '%UNIQUE%job_id%'`).Scan(&indexSQL)
+	if err == sql.ErrNoRows {
+		t.Fatal("print_archives has no unique index on job_id")
+	}
+	if err != nil {
+		t.Fatalf("inspect indexes: %v", err)
+	}
+}
+
 // TestSchemaHasPartColumns verifies parts table columns.
 func TestSchemaHasPartColumns(t *testing.T) {
 	db := openTestDB(t)

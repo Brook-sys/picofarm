@@ -350,6 +350,33 @@ CREATE INDEX IF NOT EXISTS idx_print_jobs_project ON print_jobs(project_id);
 CREATE INDEX IF NOT EXISTS idx_print_jobs_task ON print_jobs(task_id);
 CREATE INDEX IF NOT EXISTS idx_print_jobs_material_spool ON print_jobs(material_spool_id);
 
+-- Print archives: immutable snapshots of finished jobs, written automatically
+-- when a job reaches a terminal status (completed/failed/cancelled).
+CREATE TABLE IF NOT EXISTS print_archives (
+    id TEXT PRIMARY KEY,
+    -- SET NULL (not CASCADE) so deleting a job never erases history.
+    job_id TEXT REFERENCES print_jobs(id) ON DELETE SET NULL,
+    printer_id TEXT REFERENCES printers(id) ON DELETE SET NULL,
+    status TEXT NOT NULL DEFAULT 'completed',
+    start_time TEXT,
+    end_time TEXT,
+    duration_seconds INTEGER NOT NULL DEFAULT 0,
+    filament_used_grams REAL NOT NULL DEFAULT 0,
+    cost_cents INTEGER NOT NULL DEFAULT 0,
+    thumbnail_file_id TEXT REFERENCES files(id),
+    notes TEXT DEFAULT '',
+    tags TEXT DEFAULT '[]',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- One archive per job. Manual archives carry a NULL job_id, which SQLite
+-- unique indexes do not constrain, so only auto-archives are deduplicated.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_print_archives_job_id ON print_archives(job_id);
+CREATE INDEX IF NOT EXISTS idx_print_archives_printer_id ON print_archives(printer_id);
+CREATE INDEX IF NOT EXISTS idx_print_archives_status ON print_archives(status);
+CREATE INDEX IF NOT EXISTS idx_print_archives_created_at ON print_archives(created_at);
+
 -- Queue items table (G-code based manual queue)
 CREATE TABLE IF NOT EXISTS queue_items (
     id TEXT PRIMARY KEY,

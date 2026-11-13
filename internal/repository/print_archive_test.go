@@ -9,11 +9,6 @@ import (
 
 func TestPrintArchiveRepository_CreateListFilters(t *testing.T) {
 	db := openTestDB(t)
-	_, _ = db.Exec(`CREATE TABLE IF NOT EXISTS print_archives (
-		id TEXT PRIMARY KEY, job_id TEXT, printer_id TEXT, status TEXT, start_time TEXT, end_time TEXT,
-		duration_seconds INTEGER, filament_used_grams REAL, cost_cents INTEGER, thumbnail_file_id TEXT,
-		notes TEXT, tags TEXT, created_at TEXT, updated_at TEXT
-	)`)
 	repo := &PrintArchiveRepository{db: db}
 
 	archive := &model.PrintArchive{Status: "completed", DurationSeconds: 120, FilamentUsedGrams: 12.5, CostCents: 42, Tags: []string{"test"}}
@@ -36,5 +31,77 @@ func TestPrintArchiveRepository_CreateListFilters(t *testing.T) {
 	failed, err := repo.List(context.Background(), nil, "failed")
 	if err != nil || len(failed) != 0 {
 		t.Fatalf("list failed: %v len=%d", err, len(failed))
+	}
+}
+
+// TestPrintArchiveRepository_CreateIfAbsentIsIdempotent pins the contract the
+// automatic archiving relies on: the same job twice, one row.
+func TestPrintArchiveRepository_CreateIfAbsentIsIdempotent(t *testing.T) {
+	db := openTestDB(t)
+	repo := &PrintArchiveRepository{db: db}
+	printJobRepo := &PrintJobRepository{db: db}
+	ctx := context.Background()
+
+	_, design := setupPrintJobTestData(t, db)
+	job := &model.PrintJob{DesignID: design.ID, Status: model.PrintJobStatusQueued}
+	if err := printJobRepo.Create(ctx, job); err != nil {
+		t.Fatalf("create job: %v", err)
+	}
+
+	first := &model.PrintArchive{JobID: &job.ID, Status: "failed", DurationSeconds: 30, Tags: []string{"auto"}}
+	inserted, err := repo.CreateIfAbsent(ctx, first)
+	if err != nil || !inserted {
+		t.Fatalf("first insert: inserted=%v err=%v", inserted, err)
+	}
+
+	second := &model.PrintArchive{JobID: &job.ID, Status: "failed", DurationSeconds: 999, Tags: []string{"auto"}}
+	inserted, err = repo.CreateIfAbsent(ctx, second)
+	if err != nil {
+		t.Fatalf("second insert: %v", err)
+	}
+	if inserted {
+		t.Error("second insert reported a new row; the unique index on job_id was ignored")
+	}
+
+	all, err := repo.List(ctx, nil, "")
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if len(all) != 1 {
+		t.Fatalf("archives = %d, want 1", len(all))
+	}
+	if all[0].DurationSeconds != 30 {
+		t.Errorf("duration = %d, want 30 (first snapshot kept)", all[0].DurationSeconds)
+	}
+}
+
+// TestPrintArchiveRepository_ManualArchiveHasNoJobLink covers the other side of
+// the contract: entries without a job (manual archives) are never deduplicated.
+func TestPrintArchiveRepository_ManualArchiveHasNoJobLink(t *testing.T) {
+	db := openTestDB(t)
+	repo := &PrintArchiveRepository{db: db}
+	ctx := context.Background()
+
+	for i := 0; i < 2; i++ {
+		inserted, err := repo.CreateIfAbsent(ctx, &model.PrintArchive{Status: "completed", DurationSeconds: 60})
+		if err != nil || !inserted {
+			t.Fatalf("insert %d: inserted=%v err=%v", i, inserted, err)
+		}
+	}
+
+	all, err := repo.List(ctx, nil, "")
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if len(all) != 2 {
+		t.Fatalf("archives = %d, want 2 manual entries", len(all))
+	}
+	for _, a := range all {
+		if a.JobID != nil {
+			t.Errorf("job_id = %v, want nil for a manual archive", a.JobID)
+		}
+		if len(a.Tags) != 0 {
+			t.Errorf("tags = %v, want empty (nil serialized as [])", a.Tags)
+		}
 	}
 }
