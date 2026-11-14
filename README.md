@@ -85,6 +85,7 @@ make build
 - [Architecture](docs/ARCHITECTURE.md) — code boundaries, storage, and migrations.
 - [API and data contracts](docs/API_CONTRACTS.md) — routes, JSON conventions, and frontend/backend synchronization.
 - [Regression matrix](docs/REGRESSION_MATRIX.md) — workflow checks and automation gaps.
+- [Improvements roadmap](docs/IMPROVEMENTS_ROADMAP.md) — prioritized proposals for corrections, frontend performance, and slicer features; not yet implemented.
 - [Security model](docs/SECURITY_MODEL.md) and [security policy](SECURITY.md).
 - [Documentation index](docs/README.md).
 
