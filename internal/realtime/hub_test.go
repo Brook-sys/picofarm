@@ -36,7 +36,11 @@ func dial(t *testing.T, srv *httptest.Server, host, origin string) (*websocket.C
 	if host != "" {
 		opts.Host = host
 	}
-	conn, _, err := websocket.Dial(ctx, srv.URL, opts)
+	conn, resp, err := websocket.Dial(ctx, srv.URL, opts)
+	// Dial owns the upgraded body (nil on success); only close a diagnostic body.
+	if resp != nil && resp.Body != nil {
+		resp.Body.Close()
+	}
 	return conn, err
 }
 
@@ -143,6 +147,10 @@ func TestHubAcceptsSharedTokenFromQuery(t *testing.T) {
 	header := http.Header{}
 	header.Set("Origin", "http://localhost:8084")
 	conn, resp, err := websocket.Dial(ctx, srv.URL+"?token=senha-global", &websocket.DialOptions{HTTPHeader: header})
+	// Dial owns the upgraded body (nil on success); only close a diagnostic body.
+	if resp != nil && resp.Body != nil {
+		resp.Body.Close()
+	}
 	if err != nil {
 		t.Fatalf("dial with shared token: %v", err)
 	}
@@ -186,6 +194,10 @@ func TestHubAcceptsScopedNamedToken(t *testing.T) {
 	header.Set("Origin", "http://localhost:8084")
 
 	allowed, resp, err := websocket.Dial(ctx, srv.URL+"?token=amplo", &websocket.DialOptions{HTTPHeader: header})
+	// Dial owns the upgraded body (nil on success); only close a diagnostic body.
+	if resp != nil && resp.Body != nil {
+		resp.Body.Close()
+	}
 	if err != nil {
 		t.Fatalf("full-scope named token: %v", err)
 	}
@@ -198,7 +210,11 @@ func TestHubAcceptsScopedNamedToken(t *testing.T) {
 	// The handshake itself succeeds; the socket is closed right after the
 	// upgrade, which is how a scope rejection surfaces from an already-upgraded
 	// connection. So the assertion is on the closed connection, not the dial.
-	denied, _, err := websocket.Dial(ctx, srv.URL+"?token=slicer", &websocket.DialOptions{HTTPHeader: header})
+	denied, resp, err := websocket.Dial(ctx, srv.URL+"?token=slicer", &websocket.DialOptions{HTTPHeader: header})
+	// Dial owns the upgraded body (nil on success); only close a diagnostic body.
+	if resp != nil && resp.Body != nil {
+		resp.Body.Close()
+	}
 	if err != nil {
 		return // rejected at the handshake: also correct
 	}
