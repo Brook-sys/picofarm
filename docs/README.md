@@ -4,6 +4,7 @@ This directory contains the operational documentation for PicoFarm. Prefer updat
 
 ## Start here
 
+- [Getting started](GETTING_STARTED.md) — prerequisites, source/Docker setup, configuration, persistent data, validation, and troubleshooting.
 - [Project baseline](PROJECT_BASELINE.md) — current stack, runtime defaults, validation commands, known warnings, and release/commit expectations.
 - [Architecture](ARCHITECTURE.md) — backend, frontend, database, realtime, integrations, and where to make common changes.
 - [API and data contracts](API_CONTRACTS.md) — HTTP/JSON conventions, route groups, shared enum values, and Go/TypeScript synchronization rules.

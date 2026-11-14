@@ -25,6 +25,7 @@ When an endpoint or JSON shape changes, update the backend model/handler, fronte
   - `VITE_API_URL` when set;
   - otherwise the browser window origin;
   - otherwise `http://localhost:8084` for non-browser fallback.
+- Development Vite listens on port 5174 and proxies `/api` and `/ws` to the backend on 8084 (`web/vite.config.ts`). `VITE_WS_URL` separately overrides the full WebSocket URL in `web/src/hooks/useWebSocket.ts`; `VITE_API_URL` does not configure realtime traffic. Both variables are resolved at frontend build time.
 - Browser CORS origins are configured by backend `ALLOWED_ORIGINS`; when unset, only local development origins are allowed.
 - All routes include baseline browser hardening headers from `internal/api/middleware.go`; clients should not depend on these headers for application-level auth.
 
@@ -37,7 +38,7 @@ When an endpoint or JSON shape changes, update the backend model/handler, fronte
 - Monetary integer fields ending in `_cents` are minor units with two decimal places, not decimal dollars. The configured display currency changes formatting only; it does not convert stored values.
 - Durations are seconds unless the field name says otherwise, for example `timeout_minutes`.
 - Most list endpoints return bare arrays. Aggregated endpoints may return objects with `items`, `summary`, `counts`, or similarly named fields.
-- Error responses should be JSON objects with at least `error: string`. The frontend fetch wrapper throws `new Error(error.error || HTTP_STATUS)` for non-2xx responses.
+- `respondError` returns `{ "error": "message" }`. `respondValidationError` can instead return `{ "errors": [{ "field": "name", "message": "is required" }] }` with `400` for `validation.ValidationError`. The frontend fetch wrapper currently reads only `error.error` and falls back to `HTTP <status>`, so field-level details are not surfaced by that wrapper. Do not assume every error response has an `error` key.
 - `204 No Content` maps to `undefined` in the frontend wrapper.
 
 ## Shared enum contract
@@ -100,8 +101,7 @@ Most keys in `settings` are free-form key/value blobs. Two keys are validated by
 `internal/service/settings_project_supply.go` before they are stored:
 
 - `currency_code` — see the section above.
-- `filament_type_colors` — `PUT /api/settings/filament_type_colors` accepts a JSON object mapping
-  filament type to hex color, for example `{"pla":"#22c55e","petg":"#3b82f6"}`. Keys are
+- `filament_type_colors` — `PUT /api/settings/filament_type_colors` accepts the standard settings wrapper with a JSON-encoded string value, for example `{"value":"{\"pla\":\"#22c55e\",\"petg\":\"#3b82f6\"}"}`. The decoded value maps filament type to hex color. Keys are
   normalized with the same rules the G-code parser applies to `material_type`
   (`internal/service/queue.go` `normalizeMaterialType`), so `"PLA-CF"` is stored as `"pla"`.
   Two entries that normalize to the same key with different colors are rejected, because the
@@ -250,7 +250,7 @@ Representative routes:
 - `POST /api/printers/{id}/speed|fan|led|skip-object|jog|temperature|plate-cleared`
 - `POST /api/printers/{id}/ams/load|unload|refresh|backup`
 - `GET /api/printers/{id}/analytics`
-- `POST /api/printers/discover`
+- `GET /api/printers/{id}/job-stats`
 
 Discovery is the one printer route whose cost depends on the network, not on the payload:
 
@@ -281,7 +281,6 @@ Automatic reconnect is background behavior with no route of its own:
   "no recorded state" are retried.
 - After `DisconnectAll` during shutdown, `Connect` refuses new connections instead of resurrecting a
   printer while the process is going away.
-- `GET /api/printers/{id}/job-stats`
 
 Primary response types:
 
@@ -497,15 +496,12 @@ Backups and settings are operationally sensitive; document validation in `docs/R
 - These routes live inside `/api`, so they require a credential exactly when the rest of the API
   does. Auth is enabled by `API_TOKEN` or `REQUIRE_API_TOKEN`; see `docs/SECURITY_MODEL.md`.
 
-## Contract drift found during this cycle
+## Contract parity notes and known gaps
 
-This cycle inspected the router, Go models, frontend client, and TypeScript types and corrected two concrete drift points:
-
-1. `ConnectionType` now includes backend value `chitu` in TypeScript.
-2. `Printer` now includes backend field `min_material_percent` in TypeScript.
-3. Stale frontend-only `projectsApi.markReadyToShip` and `projectsApi.ship` helpers were removed because there are no matching `/api/projects/{id}/ready-to-ship` or `/api/projects/{id}/ship` routes. Shipping is currently modeled on orders through `POST /api/orders/{id}/ship`.
-
-Known follow-up area: the frontend `PrintJobStatus` type still includes `sending`, which appears to be used as UI-only state in presentation utilities. If it should not be a backend contract value, split it into a backend `PrintJobStatus` and a UI display status in a later cleanup.
+- TypeScript `ConnectionType` includes the backend value `chitu`; this enum value does not imply that the printer manager implements a client for it.
+- TypeScript `Printer` includes the backend field `min_material_percent`.
+- Shipping is modeled on orders through `POST /api/orders/{id}/ship`; there are no `/api/projects/{id}/ready-to-ship` or `/api/projects/{id}/ship` routes.
+- The frontend `PrintJobStatus` type also includes `sending`, which is absent from the backend enum documented above. Treat it as a known parity gap, not a supported backend status; separate UI display state from the backend type before extending this contract.
 
 ## Change checklist
 

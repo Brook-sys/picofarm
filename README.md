@@ -1,292 +1,93 @@
 # PicoFarm
 
-**Print Farm Management + Order Fulfillment Platform**
+Self-hosted print farm management and order fulfillment for makers and small 3D printing businesses.
 
-A comprehensive platform for makers and small 3D print farms. Manage your product catalog, track orders from multiple sales channels, and coordinate print jobs across your printer fleet.
+PicoFarm brings a product catalog, customer orders, production tasks, print queues, and printer status into a browser-based application. A Go server provides the API and serves the production frontend; SQLite stores application data, while uploaded files remain on disk.
 
-Runs as a self-hosted/local web app. The product is browser-only: the legacy desktop/Wails build is gone, and the binary (`bin/server`) serves both the API and the built frontend from `web/dist`.
+## What it does
 
-## Documentation
+- **Catalog and production:** projects, parts, design versions, 3MF metadata, tasks, checklists, print jobs, and queues.
+- **Printer fleet:** OctoPrint, Bambu Lab LAN/cloud, Moonraker/Klipper, and manual printer records. Controls depend on the printer and protocol capabilities.
+- **Files and materials:** G-code/STL libraries, filament spools, supplies, and cost estimates.
+- **Sales and fulfillment:** manual orders, customers, quotes, shipping status, expenses, sales, and financial summaries.
+- **Integrations:** Etsy and Squarespace, plus partial Shopify support. Mercado Livre and Shopee descriptors are registered but are not live-connectable in the production registry; see [Sales channels](docs/SALES_CHANNELS.md) and [API contracts](docs/API_CONTRACTS.md).
+- **Operations:** realtime WebSocket updates, timelines, notifications, database backups, and an optional external slicer service.
 
-- [Project baseline](docs/PROJECT_BASELINE.md) — stack, runtime defaults, validation commands, known warnings, and commit/push policy.
-- [Architecture](docs/ARCHITECTURE.md) — backend/frontend/database layout and where to make common changes.
-- [Regression matrix](docs/REGRESSION_MATRIX.md) — critical workflows to manually verify or automate.
-- [Security model](docs/SECURITY_MODEL.md) — local/self-hosted assumptions, CORS, secrets, uploads, backups, and sensitive endpoints.
-- [Docs index](docs/README.md) — documentation maintenance policy for humans and agents.
+A **project** describes a product. An **order item** can generate a **task**, and a task groups the **print jobs** needed to fulfill it. Hardware actions can start real printers: begin with manual printers and test data.
 
-## Features
+## Quick start from source
 
-- **Product Catalog (Projects)**: Define your products with SKUs, pricing, printer constraints, and default settings. Track profitability per product.
-- **Order Management**: Unified order system with integrations for Etsy, Squarespace, and manual orders.
-- **Task-Based Workflow**: Tasks are work instances created when fulfilling orders. Each task tracks print jobs, progress, and completion.
-- **Multi-Printer Control**: Manage OctoPrint, Bambu Lab, and Klipper/Moonraker printers from one interface with automatic network discovery.
-- **Design Versioning**: Immutable design versions with 3MF file parsing (print time, weight, filament usage).
-- **Material & Cost Tracking**: Material catalog, spool inventory, per-product cost rollups, and profit margin calculations.
-- **Expense Tracking**: Log expenses with receipt OCR, categorize by type (filament, tools, advertising, subscriptions), and track profitability.
-- **Sales Analytics**: Track sales by channel, view revenue trends, and analyze profit-per-hour metrics.
-- **Real-Time Status**: Live printer status and job progress via WebSocket.
-- **Timeline View**: Gantt-style visualization of orders, tasks, and print jobs.
+Requirements: Git, Make, Go **1.26.11 or newer**, and a Vite-compatible Node.js version (**20.19+ on Node 20, or 22.12+**) with npm. Use a maintained Node.js release.
 
-## Data Model
-
-```
-Sales Channels (Etsy, Squarespace, Direct)
-    ↓
-Orders → Order Items
-    ↓
-Tasks (work instances) → Print Jobs
-    ↓
-Projects (product catalog)
-```
-
-- **Projects** = Your product catalog. Each project defines a product you sell (name, SKU, pricing, designs, printer requirements).
-- **Tasks** = Work instances created when processing orders. A task references a project and contains print jobs.
-- **Print Jobs** = Individual prints sent to printers. Track status, progress, material usage, and outcomes.
-
-## Tech Stack
-
-| Layer | Technology |
-|-------|-----------|
-| Backend | Go 1.26.11+ (mínimo), Chi router |
-| Frontend | React 19, TypeScript, Tailwind CSS 4, TanStack Query v5 |
-| Database | SQLite (embedded, WAL mode) |
-| Real-time | WebSocket |
-| Build | Vite 7 |
-| Deployment | Docker |
-
-## Quick Start
-
-### Prerequisites
-
-- Go 1.26.11+ (mínimo; `go.mod` exige 1.26.11 — se seu Go for mais velho, rode com `GOTOOLCHAIN=auto`)
-- Node.js 20+
-
-### 1. Install Dependencies
-
-```bash
-make deps
-```
-
-### 2. Run Development Servers
-
-```bash
-# Run backend and frontend together
+```sh
+git clone https://github.com/Brook-sys/picofarm.git
+cd picofarm
+go mod download
+(cd web && npm ci)
 make dev
-
-# Or run separately:
-make backend   # Go server on :8084
-make frontend  # Vite dev server on :5173
 ```
 
-### 3. Open the App
+Open **http://localhost:5174** (or the URL printed by Vite if that port is busy). The backend listens on **8084**; Vite proxies `/api` and `/ws` to it. No external integration is required to start.
 
-During development, point the browser at the Vite server on `http://localhost:5173` (it proxies `/api` to the backend). In a production build, the backend itself serves `web/dist` on the same port.
+For a production-style local build:
 
-The SQLite database is created automatically at `~/.picofarm/picofarm.db`, with the schema embedded in the binary applied on startup.
-
-## Project Structure
-
-```
-├── cmd/server/           # Go entry point (standalone server)
-├── internal/
-│   ├── api/              # HTTP handlers & router
-│   ├── service/          # Business logic
-│   ├── repository/       # Data access layer
-│   ├── model/            # Domain types
-│   ├── database/         # SQLite init & migrations
-│   ├── printer/          # Printer integrations (OctoPrint, Bambu, Moonraker)
-│   ├── realtime/         # WebSocket hub
-│   ├── storage/          # File storage
-│   ├── etsy/             # Etsy API client (OAuth + PKCE)
-│   ├── squarespace/      # Squarespace API client
-│   ├── bambu/            # Bambu Lab cloud integration
-│   ├── receipt/          # Receipt OCR parsing
-│   └── threemf/          # 3MF file format parsing
-├── web/                  # React frontend
-│   └── src/
-│       ├── api/          # API client
-│       ├── components/   # Shared React components
-│       ├── hooks/        # TanStack Query hooks
-│       ├── pages/        # Route pages
-│       ├── contexts/     # React contexts
-│       ├── types/        # TypeScript types
-│       └── lib/          # Utilities
-├── Makefile              # Build automation
-├── Dockerfile            # Multi-stage production build
-└── site/                 # Docs/marketing site (Next.js; Vercel deploy is disabled)
+```sh
+make build
+./bin/server
 ```
 
-## API Endpoints
+Open **http://localhost:8084**. Run from the repository root so the server can find `web/dist`. The binary does **not** embed frontend assets.
 
-### Projects (Product Catalog)
-- `GET /api/projects` - List all products
-- `POST /api/projects` - Create product
-- `GET /api/projects/{id}` - Get product details
-- `PATCH /api/projects/{id}` - Update product (name, SKU, pricing, etc.)
-- `DELETE /api/projects/{id}` - Delete product
-- `GET /api/projects/{id}/summary` - Product analytics (revenue, costs, profit)
-- `GET /api/projects/{id}/tasks` - List tasks for this product
+Read [Getting started](docs/GETTING_STARTED.md) for Docker, configuration, persistent data, troubleshooting, and safe first steps.
 
-### Tasks (Work Instances)
-- `GET /api/tasks` - List tasks (filterable by status, project, order)
-- `POST /api/tasks` - Create task manually
-- `GET /api/tasks/{id}` - Get task with jobs
-- `PATCH /api/tasks/{id}` - Update task
-- `PATCH /api/tasks/{id}/status` - Update task status
-- `DELETE /api/tasks/{id}` - Delete task
-- `POST /api/tasks/{id}/start` - Start task
-- `POST /api/tasks/{id}/complete` - Complete task
-- `POST /api/tasks/{id}/cancel` - Cancel task
-- `GET /api/tasks/{id}/progress` - Get task progress
+## Security and data
 
-### Orders
-- `GET /api/orders` - List orders (filterable by status, channel)
-- `POST /api/orders` - Create manual order
-- `GET /api/orders/{id}` - Get order with items and tasks
-- `PATCH /api/orders/{id}` - Update order
-- `POST /api/orders/{id}/items` - Add item to order
-- `POST /api/orders/{id}/items/{itemId}/process` - Create task from order item
-- `POST /api/orders/{id}/ship` - Mark order shipped
+PicoFarm defaults to local/trusted-network operation, **not hardened public hosting**. Authentication is optional; review the [security model](docs/SECURITY_MODEL.md) before allowing other devices to reach it. The development frontend binds to all interfaces, and the backend listens on the configured port on all interfaces; use firewall rules or an isolated development environment as appropriate. CORS is not access control for non-browser clients.
 
-### Parts & Designs
-- `GET /api/projects/{id}/parts` - List parts
-- `POST /api/projects/{id}/parts` - Create part
-- `GET /api/parts/{id}/designs` - List design versions
-- `POST /api/parts/{id}/designs` - Upload new design (multipart)
-- `GET /api/designs/{id}/download` - Download design file
+The default database is `~/.picofarm/picofarm.db`; uploads default to `./uploads`. Keep both, as well as any configured encryption key, when moving an installation. A database backup alone is not a complete file backup. Do not run `make clean` against valuable local uploads: that target deletes `uploads/`.
 
-### Printers
-- `GET /api/printers` - List printers
-- `POST /api/printers` - Register printer
-- `GET /api/printers/states` - Get all printer states
-- `GET /api/printers/{id}/state` - Get single printer state
-- `GET /api/printers/{id}/jobs` - Printer job history
-- `POST /api/printers/discover` - Network discovery
+## Stack and layout
 
-### Print Jobs
-- `POST /api/print-jobs` - Create job
-- `POST /api/print-jobs/{id}/start` - Send to printer
-- `POST /api/print-jobs/{id}/pause` - Pause print
-- `POST /api/print-jobs/{id}/resume` - Resume print
-- `POST /api/print-jobs/{id}/cancel` - Cancel print
-- `POST /api/print-jobs/{id}/outcome` - Record result
-- `POST /api/print-jobs/{id}/retry` - Retry failed job
+| Area | Implementation |
+| --- | --- |
+| Backend | Go, chi HTTP router |
+| Frontend | React 19, TypeScript 5.9, Vite 7, Tailwind CSS 4, TanStack Query |
+| Storage | SQLite with embedded schema and compatibility migrations; local file storage |
+| Realtime | WebSocket at `/ws` |
+| Packaging | Source build or multi-stage Docker image |
 
-### Materials & Spools
-- `GET /api/materials` - List materials
-- `POST /api/materials` - Create material
-- `GET /api/spools` - List spools
-- `POST /api/spools` - Create spool
+```text
+cmd/server/            Server entry point
+internal/api/          Routes, handlers, middleware
+internal/service/      Business workflows and integrations
+internal/repository/   SQLite data access
+internal/database/     Embedded schema and migrations
+internal/printer/      Printer protocol implementations
+internal/realtime/     WebSocket hub
+web/                   Application frontend
+site/                  Separate marketing/documentation site
+```
 
-### Expenses & Sales
-- `GET /api/expenses` - List expenses
-- `POST /api/expenses/receipt` - Upload receipt (OCR processing)
-- `PATCH /api/expenses/{id}` - Update/confirm expense
-- `GET /api/sales` - List sales
-- `POST /api/sales` - Record sale
+## Development and documentation
 
-### Analytics
-- `GET /api/stats/financial` - Revenue, costs, margins
-- `GET /api/stats/time-series` - Dashboard chart data
-- `GET /api/stats/expenses-by-category` - Cost breakdown
-- `GET /api/stats/sales-by-channel` - Revenue by channel
-- `GET /api/stats/sales-by-project` - Revenue by product
+Run these from the repository root:
 
-### Sales Channel Integrations
-- `GET /api/channels` - List connected channels
-- `GET /api/integrations/etsy/auth` - Start Etsy OAuth flow
-- `GET /api/integrations/etsy/status` - Etsy connection status
-- `POST /api/integrations/etsy/sync` - Sync Etsy orders
-- `GET /api/integrations/squarespace/status` - Squarespace connection status
-- `POST /api/integrations/squarespace/sync` - Sync Squarespace orders
-
-### Timeline
-- `GET /api/timeline` - Get timeline items (orders, tasks, jobs)
-- `GET /api/timeline/orders/{id}` - Order timeline detail
-- `GET /api/timeline/tasks/{id}` - Task timeline detail
-
-### WebSocket
-- `GET /ws` - Real-time events (printer status, job updates, order sync)
-
-## Printer Integration
-
-### Supported Platforms
-
-| Platform | Protocol | Features |
-|----------|----------|----------|
-| OctoPrint | REST API | Full control, file upload, status polling |
-| Bambu Lab | MQTT (LAN + Cloud) | Status streaming, device pairing, AMS support |
-| Moonraker/Klipper | REST API | Full control, timelapse, temperature |
-| Manual | None | Log jobs manually |
-
-### Adding a Printer
-
-1. Go to **Printers** page
-2. Click **Add Printer** or use **Discover** to scan your network
-3. Enter connection details:
-   - **OctoPrint**: `http://<ip>` + API key
-   - **Bambu Lab**: Printer IP + access code (or cloud pairing)
-   - **Moonraker**: `http://<ip>`
-   - **Manual**: No connection required
-
-## Expense Categories
-
-Track expenses by category for accurate cost analysis:
-
-- **Filament** - Creates spools in inventory
-- **Parts** - Replacement parts, hardware
-- **Tools** - Equipment, maintenance
-- **Shipping** - Packaging, postage
-- **Marketplace Fees** - Etsy fees, payment processing
-- **Subscriptions** - Software, services
-- **Advertising** - Ads, marketing
-- **Other** - Miscellaneous
-
-## Development
-
-### Build for Production
-
-```bash
+```sh
+make test
+(cd web && npm run lint)
 make build
 ```
 
-Produces:
-- `bin/server` - Standalone Go binary
-- `web/dist/` - Static frontend assets
+`make test` runs Go tests only. `make build` builds the backend and runs the frontend TypeScript project build plus Vite bundling. See [Contributing](CONTRIBUTING.md) for change and test expectations.
 
-### Run Tests
-
-```bash
-make test
-```
-
-### Docker
-
-```bash
-docker build -t picofarm .
-docker run -p 8084:8084 -v picofarm-data:/data picofarm
-```
-
-## Environment Variables
-
-Only the variables below are actually read by the code (`cmd/server/main.go`, `internal/api/router.go`, `internal/crypto`):
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `PORT` | `8084` | Backend HTTP server port |
-| `DATABASE_PATH` | `~/.picofarm/picofarm.db` | SQLite database file path |
-| `UPLOAD_DIR` | `./uploads` | File storage directory |
-| `STATIC_DIR` | `./web/dist` | Static frontend assets served by the backend |
-| `ALLOWED_ORIGINS` | unset | Comma-separated CORS origins; unset allows local development origins only. Also extends the WebSocket origin allowlist |
-| `API_TOKEN` | unset | When set, requests need `Authorization: Bearer <token>`. Note this also blocks the Etsy webhook unless the caller presents the token |
-| `REQUIRE_API_TOKEN` | unset | Accepts `1`/`true`/`yes`/`on`/`enabled`. Enables authentication even without `API_TOKEN`, so a deployment can rely on named tokens alone (Settings → API Tokens). See `docs/SECURITY_MODEL.md` |
-| `ENCRYPTION_KEY` | unset | Key used to encrypt integration settings at rest |
-| `ENVIRONMENT` | unset | When `production`, enables production-oriented behavior (Sentry, stricter CORS) |
-| `SENTRY_DSN` | unset | Optional error reporting |
-| `ETSY_CLIENT_ID` | unset | Etsy OAuth app ID |
-| `ETSY_REDIRECT_URI` | `http://localhost:8084/api/integrations/etsy/callback` (Makefile) | Etsy OAuth callback URL |
-| `ETSY_WEBHOOK_SECRET` | unset | Etsy webhook signing secret; when set, unsigned or badly signed webhook events get `401` |
+- [Getting started](docs/GETTING_STARTED.md) — install, run, configure, and preserve data.
+- [Project baseline](docs/PROJECT_BASELINE.md) — runtime defaults and validation gates.
+- [Architecture](docs/ARCHITECTURE.md) — code boundaries, storage, and migrations.
+- [API and data contracts](docs/API_CONTRACTS.md) — routes, JSON conventions, and frontend/backend synchronization.
+- [Regression matrix](docs/REGRESSION_MATRIX.md) — workflow checks and automation gaps.
+- [Security model](docs/SECURITY_MODEL.md) and [security policy](SECURITY.md).
+- [Documentation index](docs/README.md).
 
 ## License
 
-MIT
+[MIT](LICENSE).

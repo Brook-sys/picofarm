@@ -21,7 +21,9 @@ Repositories (`internal/repository`)
 SQLite (`internal/database`: embedded `schema.sql` + compatibility bootstrap)
 ```
 
-Runtime files such as uploads, generated thumbnails, backups, and downloaded/processed model files live outside the source tree during normal operation.
+Runtime storage is configurable, not automatically outside the checkout. The database defaults to `~/.picofarm/picofarm.db`, database backups live in a `backups` directory beside it, and file storage defaults to `./uploads` relative to the working directory. For persistent installations, configure explicit data paths outside build-cleanup locations. The Docker image uses `/data/picofarm.db` and `/data/uploads`.
+
+The production frontend is served from `STATIC_DIR` (default `./web/dist`) on disk, not embedded in the Go binary. Development uses Vite on port 5174 with `/api` and `/ws` proxies to the backend on 8084; see [Getting started](GETTING_STARTED.md).
 
 ## Backend layout
 
@@ -39,7 +41,7 @@ Runtime files such as uploads, generated thumbnails, backups, and downloaded/pro
 | `internal/bambu/` | Bambu-specific integration logic |
 | `internal/etsy/` | Etsy API/OAuth/webhook-facing logic |
 | `internal/squarespace/` | Squarespace API logic |
-| `internal/saleschannel/` | Target home for generic sales-channel provider contracts, registry, adapters, and canonical conversions |
+| `internal/saleschannel/` | Implemented provider-neutral contracts, registry, capability types, and redaction helpers; current service-backed adapters live in `internal/service/sales_channel_adapters.go` |
 | `internal/threemf/` | 3MF parsing and metadata extraction |
 | `internal/receipt/` | Receipt parsing/OCR-adjacent behavior |
 | `internal/validation/` | Shared validation helpers |
@@ -90,7 +92,7 @@ Recommended schema-change policy:
 
 External integrations should not be required for the normal test suite.
 
-Sales channels have a dedicated architecture guide in `docs/SALES_CHANNELS.md`. Use that document before adding or changing Etsy, Squarespace, Shopify, product/listing sync, external order processing, product links, or future marketplace/storefront providers. The target direction is a provider registry with capability-driven adapters and generic `/api/sales-channels/*` contracts while legacy `/api/integrations/{provider}` routes remain compatible during migration.
+Sales channels have a dedicated architecture guide in `docs/SALES_CHANNELS.md`. Use that document before adding or changing Etsy, Squarespace, Shopify, product/listing sync, external order processing, product links, or future marketplace/storefront providers. A provider registry with capability-driven adapters and generic `/api/sales-channels/*` descriptor/status, sync, read-model, order-processing, and product-link routes is implemented. Generic connection/OAuth routes remain planned; legacy `/api/integrations/{provider}` routes remain supported. Mercado Livre and Shopee are registered descriptors with fake-client-tested adapters, but the production registry does not wire their credentials/clients, so they are not live-connectable. See [API contracts](API_CONTRACTS.md#integrations) for current boundaries.
 
 | Integration | Area |
 | --- | --- |
