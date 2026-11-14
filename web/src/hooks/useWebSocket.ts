@@ -19,6 +19,17 @@ function getWsUrl(): string {
 }
 const WS_URL = getWsUrl()
 
+// The browser WebSocket API cannot send an Authorization header, so the token
+// the /api client already stores goes in the query string. It is read at
+// connect time, not at module load: the token may arrive later via the 401
+// prompt on the REST client.
+function wsUrlWithToken(): string {
+  if (typeof window === 'undefined') return WS_URL
+  const token = window.localStorage.getItem('API_TOKEN')
+  if (!token) return WS_URL
+  return `${WS_URL}${WS_URL.includes('?') ? '&' : '?'}token=${encodeURIComponent(token)}`
+}
+
 // Reconnection config
 const RECONNECT_INITIAL_DELAY = 1000
 const RECONNECT_MAX_DELAY = 30000
@@ -137,9 +148,11 @@ export function useWebSocket() {
     }
 
     setStatus('connecting')
-    console.log('[WebSocket] Connecting to', WS_URL)
+    const wsUrl = wsUrlWithToken()
+    // Never log the full URL: it carries the token as a query parameter.
+    console.log('[WebSocket] Connecting to', wsUrl.replace(/token=[^&]*/, 'token=***'))
 
-    const ws = new WebSocket(WS_URL)
+    const ws = new WebSocket(wsUrl)
 
     ws.onopen = () => {
       console.log('[WebSocket] Connected')

@@ -607,6 +607,22 @@ export const camerasApi = {
   delete: (id: string) => fetchApi<void>(`/cameras/${id}`, { method: 'DELETE' }),
 }
 
+// Named API tokens. The plaintext is returned only by create: there is no read
+// path that can show it again, so it must be persisted by the caller.
+export const apiTokensApi = {
+  status: () =>
+    fetchApi<import('../types').APITokenStatus>('/api-tokens/status'),
+
+  list: () =>
+    fetchApi<import('../types').APIToken[]>('/api-tokens'),
+
+  create: (data: { name: string; scopes?: string[] }) =>
+    fetchApi<import('../types').APITokenCreated>('/api-tokens', { method: 'POST', body: JSON.stringify(data) }),
+
+  revoke: (id: string) =>
+    fetchApi<void>(`/api-tokens/${id}`, { method: 'DELETE' }),
+}
+
 // Timelapses API
 export const timelapsesApi = {
   list: (printerId?: string) =>

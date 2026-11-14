@@ -1675,3 +1675,26 @@ export interface QuoteEvent {
   created_at: string
 }
 
+export interface APIToken {
+  id: string
+  name: string
+  /** First 8 chars of the plaintext. This is all the UI can ever show. */
+  prefix: string
+  scopes: string[]
+  created_at: string
+  last_used_at?: string
+  revoked_at?: string
+}
+
+/** Response of POST /api/api-tokens: the plaintext appears here, once. */
+export interface APITokenCreated {
+  token: string
+  api_token: APIToken
+}
+
+export interface APITokenStatus {
+  auth_enabled: boolean
+  global_token_configured: boolean
+  active_count: number
+  revoked_count: number
+}

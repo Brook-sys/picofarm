@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Store, ShoppingBag, ExternalLink, RefreshCw, Unplug, AlertCircle, CheckCircle2, Key, Eye, EyeOff, Save, Database, Download, Trash2, RotateCcw, Plus, Palette, Settings as SettingsIcon, Building, Globe } from 'lucide-react'
-import { etsyApi, squarespaceApi, settingsApi, backupsApi } from '../api/client'
+import { Store, ShoppingBag, ExternalLink, RefreshCw, Unplug, AlertCircle, CheckCircle2, Key, Eye, EyeOff, Save, Database, Download, Trash2, RotateCcw, Plus, Palette, Settings as SettingsIcon, Building, Globe, Copy, ShieldAlert } from 'lucide-react'
+import { etsyApi, squarespaceApi, settingsApi, backupsApi, apiTokensApi } from '../api/client'
 import { cn } from '../lib/utils'
 import { CURRENCY_OPTIONS, formatMoney, normalizeCurrencyCode } from '../lib/currency'
 import {
@@ -15,7 +15,7 @@ import {
   parseMaterialColors,
 } from '../lib/materialColors'
 import { MaterialBadge } from '../components/MaterialBadge'
-import type { EtsyIntegration, SquarespaceIntegration, BackupInfo, BackupConfig } from '../types'
+import type { EtsyIntegration, SquarespaceIntegration, BackupInfo, BackupConfig, APIToken } from '../types'
 
 function formatBytes(bytes: number): string {
   if (bytes === 0) return '0 B'
@@ -25,7 +25,7 @@ function formatBytes(bytes: number): string {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i]
 }
 
-type SettingsTab = 'integrations' | 'api-keys' | 'backups' | 'other'
+type SettingsTab = 'integrations' | 'api-keys' | 'api-tokens' | 'backups' | 'other'
 
 const OLX_INTEGRATION_ENABLED = false
 
@@ -443,6 +443,7 @@ export default function Settings() {
   const tabs: { id: SettingsTab; label: string; icon: React.ReactNode }[] = [
     { id: 'integrations', label: 'Integrations', icon: <Store className="h-4 w-4" /> },
     { id: 'api-keys', label: 'API Keys', icon: <Key className="h-4 w-4" /> },
+    { id: 'api-tokens', label: 'API Tokens', icon: <ShieldAlert className="h-4 w-4" /> },
     { id: 'backups', label: 'Backups', icon: <Database className="h-4 w-4" /> },
     { id: 'other', label: 'Other', icon: <SettingsIcon className="h-4 w-4" /> },
   ]
@@ -1126,6 +1127,9 @@ export default function Settings() {
                 </div>
                 )}
 
+                {/* Named API tokens */}
+                {activeTab === 'api-tokens' && <ApiTokenSettings />}
+
                 {/* General display and business information */}
                 {activeTab === 'other' && (
                   <>
@@ -1614,6 +1618,379 @@ function BackupSettings() {
           />
         </div>
 
+      </div>
+    </div>
+  )
+}
+
+/**
+ * Named API tokens.
+ *
+ * This page manages the credentials accepted alongside the shared `API_TOKEN`
+ * environment variable. Two honest facts it must keep visible:
+ *
+ *  1. The plaintext is shown exactly once, right after creation. The server
+ *     keeps only a SHA-256 hash, so there is no "show again".
+ *  2. With no `API_TOKEN` configured (the local default) the API accepts every
+ *     request, so minting tokens here does not lock anything down on its own.
+ *     The status card says so instead of implying protection that is not there.
+ */
+const COMMON_SCOPES = [
+  '/api/slicer',
+  '/api/printers',
+  '/api/materials',
+  '/api/print-jobs',
+  '/api/queue',
+  '/api/orders',
+  '/api/sales',
+  '/api/projects',
+]
+
+function formatTimestamp(value?: string): string {
+  if (!value) return '—'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return '—'
+  return date.toLocaleString()
+}
+
+function ApiTokenSettings() {
+  const queryClient = useQueryClient()
+  const [name, setName] = useState('')
+  const [fullAccess, setFullAccess] = useState(true)
+  const [selectedScopes, setSelectedScopes] = useState<string[]>([])
+  const [customScope, setCustomScope] = useState('')
+  const [created, setCreated] = useState<{ token: string; name: string } | null>(null)
+  const [copied, setCopied] = useState(false)
+
+  const statusQuery = useQuery({
+    queryKey: ['api-tokens', 'status'],
+    queryFn: () => apiTokensApi.status(),
+    retry: false,
+  })
+  const tokensQuery = useQuery({
+    queryKey: ['api-tokens'],
+    queryFn: () => apiTokensApi.list(),
+    retry: false,
+  })
+
+  const invalidate = async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['api-tokens'] }),
+      queryClient.invalidateQueries({ queryKey: ['api-tokens', 'status'] }),
+    ])
+  }
+
+  const createMutation = useMutation({
+    mutationFn: (input: { name: string; scopes?: string[] }) => apiTokensApi.create(input),
+    onSuccess: async result => {
+      setCreated({ token: result.token, name: result.api_token.name })
+      setName('')
+      setFullAccess(true)
+      setSelectedScopes([])
+      setCustomScope('')
+      await invalidate()
+    },
+  })
+
+  const revokeMutation = useMutation({
+    mutationFn: (id: string) => apiTokensApi.revoke(id),
+    onSuccess: invalidate,
+  })
+
+  const scopesForRequest = useMemo(() => {
+    if (fullAccess) return ['*']
+    const list = [...selectedScopes]
+    const trimmed = customScope.trim()
+    if (trimmed) list.push(trimmed)
+    return list
+  }, [fullAccess, selectedScopes, customScope])
+
+  const canCreate = name.trim().length > 0 && !createMutation.isPending && (fullAccess || scopesForRequest.length > 0)
+
+  const handleCopy = async (token: string) => {
+    try {
+      await navigator.clipboard?.writeText(token)
+      setCopied(true)
+      window.setTimeout(() => setCopied(false), 2500)
+    } catch {
+      // Clipboard can be blocked by permissions; the value is still selectable.
+    }
+  }
+
+  const toggleScope = (scope: string) => {
+    setSelectedScopes(prev => (prev.includes(scope) ? prev.filter(s => s !== scope) : [...prev, scope]))
+  }
+
+  const tokens: APIToken[] = tokensQuery.data ?? []
+  const activeTokens = tokens.filter(t => !t.revoked_at)
+  const revokedTokens = tokens.filter(t => t.revoked_at)
+  const browserToken = typeof window !== 'undefined' ? window.localStorage.getItem('API_TOKEN') : null
+
+  return (
+    <div className="space-y-6">
+      {/* Status: is auth actually enforcing anything? */}
+      <div className="bg-surface-900/50 border border-surface-800 rounded-xl p-6">
+        <div className="flex items-start gap-3 mb-4">
+          <div className="p-2 bg-amber-500/10 rounded-lg">
+            <ShieldAlert className="h-6 w-6 text-amber-400" />
+          </div>
+          <div>
+            <h2 className="text-lg font-semibold text-surface-100">API authentication status</h2>
+            <p className="text-sm text-surface-400">
+              Whether requests without a credential are currently being rejected.
+            </p>
+          </div>
+        </div>
+
+        {statusQuery.isLoading ? (
+          <div className="flex items-center justify-center py-4">
+            <RefreshCw className="h-5 w-5 text-surface-400 animate-spin" />
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <span className={cn(
+                'badge',
+                statusQuery.data?.auth_enabled ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'
+              )}>
+                {statusQuery.data?.auth_enabled ? 'Auth enabled' : 'Auth disabled'}
+              </span>
+              <span className="text-sm text-surface-400">
+                {statusQuery.data?.active_count ?? 0} active · {statusQuery.data?.revoked_count ?? 0} revoked
+              </span>
+            </div>
+            {!statusQuery.data?.auth_enabled && (
+              <div className="flex items-start gap-2 p-3 bg-amber-500/5 border border-amber-500/20 rounded-lg">
+                <AlertCircle className="h-4 w-4 text-amber-400 mt-0.5 flex-shrink-0" />
+                <p className="text-sm text-surface-300">
+                  No <code className="text-surface-200">API_TOKEN</code> is configured, so every request is accepted
+                  without a credential. Creating a token below does not close the API by itself — it only prepares a
+                  credential for when authentication is turned on.
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Create */}
+      <div className="bg-surface-900/50 border border-surface-800 rounded-xl p-6">
+        <div className="flex items-start gap-3 mb-5">
+          <div className="p-2 bg-purple-500/10 rounded-lg">
+            <Plus className="h-6 w-6 text-purple-400" />
+          </div>
+          <div>
+            <h2 className="text-lg font-semibold text-surface-100">New token</h2>
+            <p className="text-sm text-surface-400">
+              Name it after the integration that will use it. The token value is displayed only once.
+            </p>
+          </div>
+        </div>
+
+        <div className="space-y-4">
+          <label className="block">
+            <span className="block text-sm font-medium text-surface-300 mb-2">Name</span>
+            <input
+              type="text"
+              value={name}
+              onChange={event => setName(event.target.value)}
+              placeholder="Integração Etsy"
+              maxLength={64}
+              className="input w-full"
+            />
+          </label>
+
+          <div>
+            <span className="block text-sm font-medium text-surface-300 mb-2">Scope</span>
+            <label className="flex items-center gap-2 mb-2">
+              <input
+                type="checkbox"
+                checked={fullAccess}
+                onChange={event => setFullAccess(event.target.checked)}
+                className="rounded border-surface-700 bg-surface-900 text-accent-500 focus:ring-accent-500"
+              />
+              <span className="text-sm text-surface-200">Full access (all routes)</span>
+            </label>
+            {!fullAccess && (
+              <div className="space-y-3 pl-6">
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {COMMON_SCOPES.map(scope => (
+                    <label key={scope} className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={selectedScopes.includes(scope)}
+                        onChange={() => toggleScope(scope)}
+                        className="rounded border-surface-700 bg-surface-900 text-accent-500 focus:ring-accent-500"
+                      />
+                      <code className="text-xs text-surface-300">{scope}</code>
+                    </label>
+                  ))}
+                </div>
+                <label className="block">
+                  <span className="block text-xs text-surface-400 mb-1">Custom prefix under /api</span>
+                  <input
+                    type="text"
+                    value={customScope}
+                    onChange={event => setCustomScope(event.target.value)}
+                    placeholder="/api/cameras"
+                    className="input w-full"
+                  />
+                </label>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="mt-5 flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => createMutation.mutate({ name: name.trim(), scopes: scopesForRequest })}
+            disabled={!canCreate}
+            className="flex items-center gap-2 px-4 py-2 bg-accent-600 hover:bg-accent-700 text-white font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+          >
+            {createMutation.isPending ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+            Create token
+          </button>
+          {createMutation.isError && (
+            <p className="text-sm text-red-400">
+              {createMutation.error instanceof Error ? createMutation.error.message : 'Failed to create token'}
+            </p>
+          )}
+        </div>
+
+        {/* The plaintext, shown once */}
+        {created && (
+          <div className="mt-5 p-4 bg-green-500/5 border border-green-500/30 rounded-lg space-y-2">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="h-4 w-4 text-green-400" />
+              <p className="text-sm font-medium text-green-300">Token created for {created.name}</p>
+            </div>
+            <p className="text-xs text-surface-400">
+              Copy it now. Only a hash is stored, so this value cannot be shown again.
+            </p>
+            <div className="flex items-center gap-2">
+              <code className="flex-1 bg-surface-950 border border-surface-800 rounded-lg px-3 py-2 text-sm text-surface-100 break-all select-all">
+                {created.token}
+              </code>
+              <button
+                type="button"
+                onClick={() => handleCopy(created.token)}
+                className="btn btn-secondary"
+                title="Copy token"
+              >
+                <Copy className="h-4 w-4" />
+                {copied ? 'Copied' : 'Copy'}
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Token list */}
+      <div className="bg-surface-900/50 border border-surface-800 rounded-xl p-6">
+        <div className="flex items-start gap-3 mb-5">
+          <div className="p-2 bg-blue-500/10 rounded-lg">
+            <Key className="h-6 w-6 text-blue-400" />
+          </div>
+          <div>
+            <h2 className="text-lg font-semibold text-surface-100">Tokens</h2>
+            <p className="text-sm text-surface-400">
+              Revoking takes effect immediately; the row is kept as a record.
+            </p>
+          </div>
+        </div>
+
+        {tokensQuery.isLoading ? (
+          <div className="flex items-center justify-center py-8">
+            <RefreshCw className="h-6 w-6 text-surface-400 animate-spin" />
+          </div>
+        ) : tokens.length === 0 ? (
+          <div className="bg-surface-800/50 rounded-lg p-4 text-center">
+            <p className="text-surface-400">No tokens yet. Create one above to give an integration a named credential.</p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {activeTokens.map(token => (
+              <div key={token.id} className="flex items-start justify-between gap-4 bg-surface-800/50 rounded-lg p-3">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm font-medium text-surface-200">{token.name}</p>
+                    <span className="badge bg-surface-700 text-surface-300 font-mono">{token.prefix}…</span>
+                  </div>
+                  <p className="text-xs text-surface-500 mt-1">
+                    {token.scopes.includes('*') ? 'Full access' : token.scopes.join(', ')}
+                  </p>
+                  <p className="text-xs text-surface-500">
+                    Created {formatTimestamp(token.created_at)} · Last used {formatTimestamp(token.last_used_at)}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (window.confirm(`Revoke the token "${token.name}"? Anything using it stops working at once.`)) {
+                      revokeMutation.mutate(token.id)
+                    }
+                  }}
+                  disabled={revokeMutation.isPending}
+                  className="flex items-center gap-1 px-3 py-1.5 text-sm text-red-400 hover:bg-red-500/10 rounded-lg transition-colors disabled:opacity-50"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  Revoke
+                </button>
+              </div>
+            ))}
+
+            {revokedTokens.length > 0 && (
+              <div className="pt-2">
+                <p className="text-xs uppercase tracking-wide text-surface-500 mb-2">Revoked</p>
+                {revokedTokens.map(token => (
+                  <div key={token.id} className="flex items-start justify-between gap-4 bg-surface-800/30 rounded-lg p-3 mb-2 opacity-70">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-medium text-surface-400 line-through">{token.name}</p>
+                        <span className="badge bg-surface-700 text-surface-400 font-mono">{token.prefix}…</span>
+                        <span className="badge bg-red-500/10 text-red-400">revoked</span>
+                      </div>
+                      <p className="text-xs text-surface-500 mt-1">
+                        Created {formatTimestamp(token.created_at)} · Revoked {formatTimestamp(token.revoked_at)}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* The token already stored in this browser */}
+      <div className="bg-surface-900/50 border border-surface-800 rounded-xl p-6">
+        <div className="flex items-start gap-3 mb-4">
+          <div className="p-2 bg-surface-700/30 rounded-lg">
+            <Eye className="h-6 w-6 text-surface-400" />
+          </div>
+          <div>
+            <h2 className="text-lg font-semibold text-surface-100">Token in this browser</h2>
+            <p className="text-sm text-surface-400">
+              The value this browser sends on every API call. It lives in local storage.
+            </p>
+          </div>
+        </div>
+        {browserToken ? (
+          <div className="flex items-center gap-2">
+            <code className="flex-1 bg-surface-950 border border-surface-800 rounded-lg px-3 py-2 text-sm text-surface-100 break-all select-all">
+              {browserToken}
+            </code>
+            <button type="button" onClick={() => handleCopy(browserToken)} className="btn btn-secondary">
+              <Copy className="h-4 w-4" />
+              Copy
+            </button>
+          </div>
+        ) : (
+          <p className="text-sm text-surface-400">
+            No token is stored here. This browser is relying on authentication being disabled.
+          </p>
+        )}
       </div>
     </div>
   )
