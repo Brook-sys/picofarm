@@ -1805,3 +1805,28 @@ type QuoteFilters struct {
 	Limit      int          `json:"limit,omitempty"`
 	Offset     int          `json:"offset,omitempty"`
 }
+
+// APIToken is a named credential accepted by ApiTokenAuth alongside the
+// API_TOKEN environment variable. The plaintext is never stored: only a SHA-256
+// hash, so a database leak cannot be replayed as a live credential. TokenHash
+// is deliberately unexported from JSON — no response may ever carry it.
+type APIToken struct {
+	ID         uuid.UUID  `json:"id"`
+	Name       string     `json:"name"`
+	Prefix     string     `json:"prefix"`
+	TokenHash  string     `json:"-"`
+	Scopes     []string   `json:"scopes"`
+	CreatedAt  time.Time  `json:"created_at"`
+	LastUsedAt *time.Time `json:"last_used_at,omitempty"`
+	RevokedAt  *time.Time `json:"revoked_at,omitempty"`
+}
+
+// APITokenStatus reports how the optional API auth is currently configured.
+// It deliberately carries counts and flags only: no token material, not even
+// masked.
+type APITokenStatus struct {
+	AuthEnabled           bool `json:"auth_enabled"`
+	GlobalTokenConfigured bool `json:"global_token_configured"`
+	ActiveCount           int  `json:"active_count"`
+	RevokedCount          int  `json:"revoked_count"`
+}

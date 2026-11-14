@@ -413,3 +413,56 @@ func tableColumns(t *testing.T, db *sql.DB, table string) map[string]bool {
 	}
 	return cols
 }
+
+// TestSchemaHasAPITokenColumns verifies the named-token table carries the
+// columns the repository reads and writes. The hash column is the whole point:
+// without it a leak of the database would leak live credentials.
+func TestSchemaHasAPITokenColumns(t *testing.T) {
+	db := openTestDB(t)
+
+	expected := []string{
+		"id", "name", "prefix", "token_hash", "scopes_json",
+		"created_at", "last_used_at", "revoked_at",
+	}
+
+	cols := tableColumns(t, db, "api_tokens")
+	for _, want := range expected {
+		if !cols[want] {
+			t.Errorf("api_tokens table missing column %q", want)
+		}
+	}
+}
+
+// TestSchemaAPITokenActiveNameIsUnique verifies the partial unique index on
+// name. It is what lets the UI recreate a retired name while forbidding two
+// live tokens with the same name, which would make the page ambiguous.
+func TestSchemaAPITokenActiveNameIsUnique(t *testing.T) {
+	db := openTestDB(t)
+
+	// Two active rows with the same name must be rejected.
+	if _, err := db.Exec(`INSERT INTO api_tokens (id, name, prefix, token_hash) VALUES ('1', 'mesmo', 'a', 'a')`); err != nil {
+		t.Fatalf("insert first: %v", err)
+	}
+	if _, err := db.Exec(`INSERT INTO api_tokens (id, name, prefix, token_hash) VALUES ('2', 'mesmo', 'b', 'b')`); err == nil {
+		t.Fatal("expected the second active row with the same name to be rejected")
+	}
+	// Revoking the first frees the name.
+	if _, err := db.Exec(`UPDATE api_tokens SET revoked_at = '2026-01-01 00:00:00' WHERE id = '1'`); err != nil {
+		t.Fatalf("revoke first: %v", err)
+	}
+	if _, err := db.Exec(`INSERT INTO api_tokens (id, name, prefix, token_hash) VALUES ('3', 'mesmo', 'c', 'c')`); err != nil {
+		t.Fatalf("reusing a revoked name must be allowed: %v", err)
+	}
+}
+
+// TestSchemaAPITokenHashIndexed verifies the lookup index exists: validation
+// resolves a token by hash on every request with auth on.
+func TestSchemaAPITokenHashIndexed(t *testing.T) {
+	db := openTestDB(t)
+
+	var indexSQL string
+	err := db.QueryRow(`SELECT sql FROM sqlite_master WHERE type = 'index' AND tbl_name = 'api_tokens' AND sql LIKE '%token_hash%'`).Scan(&indexSQL)
+	if err != nil {
+		t.Fatalf("api_tokens has no index on token_hash: %v", err)
+	}
+}

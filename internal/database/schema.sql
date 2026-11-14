@@ -1395,3 +1395,25 @@ CREATE TABLE IF NOT EXISTS feedback (
     app_version TEXT,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+-- ============================================
+-- API Tokens (named credentials for the optional API_TOKEN auth)
+-- ============================================
+-- The token itself is never stored: token_hash is a SHA-256 of the plaintext,
+-- so a database leak cannot be replayed as a live credential. The plaintext is
+-- returned exactly once, by POST /api/api-tokens.
+
+CREATE TABLE IF NOT EXISTS api_tokens (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    prefix TEXT NOT NULL,
+    token_hash TEXT NOT NULL,
+    scopes_json TEXT NOT NULL DEFAULT '["*"]',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    last_used_at TEXT,
+    revoked_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_api_tokens_token_hash ON api_tokens(token_hash);
+CREATE INDEX IF NOT EXISTS idx_api_tokens_created ON api_tokens(created_at DESC);
+-- Multiple tokens may share a name only after the older one is revoked.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_api_tokens_name_active ON api_tokens(name) WHERE revoked_at IS NULL;

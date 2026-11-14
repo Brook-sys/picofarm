@@ -1,7 +1,9 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -21,6 +23,10 @@ import (
 type RouterOptions struct {
 	AllowedOrigins []string
 	ApiToken       string
+	// RequireApiToken forces authentication even when ApiToken is empty, which
+	// lets a deployment rely on named tokens alone. Without it, an unset
+	// API_TOKEN means "auth off" — the documented local-development default.
+	RequireApiToken bool
 }
 
 // NewRouter creates the HTTP router with all routes.
@@ -30,16 +36,49 @@ func NewRouter(services *service.Services, hub *realtime.Hub) http.Handler {
 
 // RouterOptionsFromEnv loads router configuration from environment variables.
 // ALLOWED_ORIGINS is a comma-separated list of browser origins allowed by CORS.
+// API_TOKEN is the shared token. REQUIRE_API_TOKEN turns authentication on even
+// without a shared token.
 func RouterOptionsFromEnv() RouterOptions {
 	return RouterOptions{
-		AllowedOrigins: splitCSV(os.Getenv("ALLOWED_ORIGINS")),
-		ApiToken:       os.Getenv("API_TOKEN"),
+		AllowedOrigins:  splitCSV(os.Getenv("ALLOWED_ORIGINS")),
+		ApiToken:        os.Getenv("API_TOKEN"),
+		RequireApiToken: isTruthyEnv(os.Getenv("REQUIRE_API_TOKEN")),
 	}
+}
+
+// isTruthyEnv accepts the usual spellings so a stray "1" or "yes" is not read as
+// "off".
+func isTruthyEnv(value string) bool {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "1", "true", "yes", "on", "enabled":
+		return true
+	}
+	return false
 }
 
 // NewRouterWithOptions creates the HTTP router with all routes.
 func NewRouterWithOptions(services *service.Services, hub *realtime.Hub, opts RouterOptions) http.Handler {
 	r := chi.NewRouter()
+
+	// The hub carries its own auth/origin policy for /ws: it sits outside the
+	// /api group and a browser handshake cannot send the headers ApiTokenAuth
+	// reads.
+	if hub != nil {
+		hub.AuthToken = opts.ApiToken
+		hub.RequireAuth = opts.RequireApiToken
+		hub.AllowedOrigins = opts.AllowedOrigins
+		if services.APITokens != nil {
+			tokenSvc := services.APITokens
+			hub.ValidateToken = func(ctx context.Context, token string) ([]string, bool) {
+				resolved, err := tokenSvc.Validate(ctx, token)
+				if err != nil || resolved == nil {
+					return nil, false
+				}
+				return resolved.Scopes, true
+			}
+			hub.SubjectAllows = service.ScopeAllows
+		}
+	}
 
 	// Middleware
 	sentryMiddleware := sentryhttp.New(sentryhttp.Options{Repanic: true})
@@ -74,7 +113,10 @@ func NewRouterWithOptions(services *service.Services, hub *realtime.Hub, opts Ro
 		})
 	})
 
-	// WebSocket endpoint
+	// WebSocket endpoint. Registered outside the /api group on purpose: the
+	// browser WebSocket API cannot carry an Authorization header, so /ws keeps its
+	// own token plumbing (query parameter) instead of reusing ApiTokenAuth. The
+	// hub enforces the origin allowlist itself.
 	r.Get("/ws", hub.HandleWebSocket)
 
 	// Public API routes (no auth required)
@@ -108,8 +150,24 @@ func NewRouterWithOptions(services *service.Services, hub *realtime.Hub, opts Ro
 	})
 
 	// API routes
+	// The validator is nil when the token service is not wired (minimal test
+	// routers), which keeps the shared API_TOKEN working on its own.
+	var tokenValidator TokenValidator
+	if services.APITokens != nil {
+		tokenSvc := services.APITokens
+		tokenValidator = func(ctx context.Context, token string) ([]string, bool) {
+			resolved, err := tokenSvc.Validate(ctx, token)
+			if err != nil || resolved == nil {
+				return nil, false
+			}
+			return resolved.Scopes, true
+		}
+	}
 	r.Route("/api", func(r chi.Router) {
-		r.Use(ApiTokenAuth(opts.ApiToken))
+		if opts.RequireApiToken && opts.ApiToken == "" && tokenValidator == nil {
+			slog.Warn("REQUIRE_API_TOKEN is set but no token service is wired; /api stays open")
+		}
+		r.Use(ApiTokenAuth(opts.ApiToken, opts.RequireApiToken, tokenValidator))
 
 		// Provider-neutral sales-channel endpoints.
 		if services.SalesChannels != nil {
@@ -505,6 +563,19 @@ func NewRouterWithOptions(services *service.Services, hub *realtime.Hub, opts Ro
 				r.Delete("/", settingsHandler.Delete)
 			})
 		})
+
+		// Named API tokens. Registered inside /api on purpose: managing
+		// credentials must require a credential whenever auth is on.
+		if services.APITokens != nil {
+			apiTokenHandler := NewAPITokenHandler(services.APITokens)
+			apiTokenHandler.SetAuthEnabled(opts.ApiToken != "" || opts.RequireApiToken)
+			r.Route("/api-tokens", func(r chi.Router) {
+				r.Get("/status", apiTokenHandler.Status)
+				r.Get("/", apiTokenHandler.List)
+				r.Post("/", apiTokenHandler.Create)
+				r.Delete("/{id}", apiTokenHandler.Revoke)
+			})
+		}
 
 		// Dispatch (auto-dispatch queue management)
 		r.Route("/dispatch", func(r chi.Router) {

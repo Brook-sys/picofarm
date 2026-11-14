@@ -52,6 +52,7 @@ type Repositories struct {
 	GCodeLibrary    *GCodeLibraryRepository
 	STLLibrary      *STLLibraryRepository
 	Notifications   *NotificationRepository
+	APITokens       *APITokenRepository
 }
 
 // WithTransaction executes a function within a database transaction.
@@ -114,6 +115,7 @@ func NewRepositories(db *sql.DB) *Repositories {
 		GCodeLibrary:    &GCodeLibraryRepository{db: db},
 		STLLibrary:      &STLLibraryRepository{db: db},
 		Notifications:   &NotificationRepository{db: db},
+		APITokens:       &APITokenRepository{db: db},
 	}
 }
 

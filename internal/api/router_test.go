@@ -30,6 +30,9 @@ func createTestServices() *service.Services {
 		Sales:      &service.SaleService{},
 		Stats:      &service.StatsService{},
 		BambuCloud: &service.BambuCloudService{},
+		// APITokens is a plain struct (no repository wired): enough for the
+		// router to register /api/api-tokens, which is nil-guarded.
+		APITokens: &service.APITokenService{},
 		// Etsy and Auth are nil (optional services)
 	}
 }
@@ -336,6 +339,13 @@ func TestRouterRegistersAllExpectedRoutes(t *testing.T) {
 		{"GET", "/api/bambu-cloud/devices"},
 		{"POST", "/api/bambu-cloud/devices/add"},
 		{"DELETE", "/api/bambu-cloud/logout"},
+
+		// Named API tokens. They must stay inside /api: managing credentials
+		// has to require a credential whenever auth is on.
+		{"GET", "/api/api-tokens/status"},
+		{"GET", "/api/api-tokens/"},
+		{"POST", "/api/api-tokens/"},
+		{"DELETE", "/api/api-tokens/{id}"},
 	}
 
 	var missing []string

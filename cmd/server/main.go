@@ -85,9 +85,11 @@ func main() {
 	// Initialize repositories
 	repos := repository.NewRepositories(db)
 
-	// Initialize WebSocket hub for real-time updates
+	// Initialize WebSocket hub for real-time updates.
+	// Run() starts after the router is built: the router configures the hub's
+	// auth and origin policy, so those fields must be written before anything
+	// can read them.
 	hub := realtime.NewHub()
-	go hub.Run()
 
 	// Initialize printer manager with hub for broadcasting state changes
 	printerManager := printer.NewManager()
@@ -146,6 +148,9 @@ func main() {
 
 	// Initialize HTTP router
 	router := api.NewRouter(services, hub)
+
+	// Start the hub now that the router has configured its auth/origin policy.
+	go hub.Run()
 
 	// Create HTTP server
 	server := &http.Server{

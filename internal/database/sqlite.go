@@ -207,6 +207,13 @@ func RunMigrations(db *sql.DB) error {
 		`CREATE TABLE IF NOT EXISTS notification_templates (id TEXT PRIMARY KEY, channel_id TEXT REFERENCES notification_channels(id) ON DELETE CASCADE, event_type TEXT NOT NULL, format TEXT NOT NULL DEFAULT 'text', title_template TEXT NOT NULL DEFAULT '', body_template TEXT NOT NULL DEFAULT '', payload_template TEXT NOT NULL DEFAULT '', enabled BOOLEAN NOT NULL DEFAULT TRUE, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, UNIQUE(channel_id, event_type))`,
 		`CREATE INDEX IF NOT EXISTS idx_notification_templates_channel ON notification_templates(channel_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_notification_templates_event ON notification_templates(event_type)`,
+		// Named API tokens for the optional API_TOKEN auth (schema.sql is applied
+		// on every boot, so this is the compatibility path for databases created
+		// before the table existed).
+		`CREATE TABLE IF NOT EXISTS api_tokens (id TEXT PRIMARY KEY, name TEXT NOT NULL, prefix TEXT NOT NULL, token_hash TEXT NOT NULL, scopes_json TEXT NOT NULL DEFAULT '["*"]', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, last_used_at TEXT, revoked_at TEXT)`,
+		`CREATE INDEX IF NOT EXISTS idx_api_tokens_token_hash ON api_tokens(token_hash)`,
+		`CREATE INDEX IF NOT EXISTS idx_api_tokens_created ON api_tokens(created_at DESC)`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_api_tokens_name_active ON api_tokens(name) WHERE revoked_at IS NULL`,
 	}
 	for _, stmt := range alterStatements {
 		if _, err := db.Exec(stmt); err != nil && !isExpectedCompatibilityMigrationError(stmt, err) {

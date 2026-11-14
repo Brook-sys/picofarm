@@ -3,12 +3,14 @@ package api
 import (
 	"bufio"
 	"context"
+	"crypto/subtle"
 	"log/slog"
 	"net"
 	"net/http"
 	"strings"
 	"time"
 
+	"github.com/Brook-sys/picofarm/internal/service"
 	"github.com/google/uuid"
 )
 
@@ -167,12 +169,20 @@ func LogWarn(ctx context.Context, msg string, args ...any) {
 	slog.Warn(msg, allArgs...)
 }
 
-// ApiTokenAuth validates the API token if one is configured in router options.
-// If no token is configured (local dev), it allows all requests.
-func ApiTokenAuth(expectedToken string) func(http.Handler) http.Handler {
+// ApiTokenAuth validates the API token if auth is enabled in router options.
+// With auth disabled (local development), every request is allowed: that default
+// is documented in docs/SECURITY_MODEL.md and the token page relies on it to
+// stay reachable.
+//
+// When auth is enabled, two credential sources are accepted: the shared token
+// from the environment (API_TOKEN), and named tokens minted through
+// POST /api/api-tokens. The environment token grants full access; a named token
+// is restricted to the route prefixes declared in its scopes.
+func ApiTokenAuth(expectedToken string, requireAuth bool, validate TokenValidator) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if expectedToken == "" {
+			// Auth disabled: nothing to check.
+			if expectedToken == "" && (!requireAuth || validate == nil) {
 				next.ServeHTTP(w, r)
 				return
 			}
@@ -185,12 +195,33 @@ func ApiTokenAuth(expectedToken string) func(http.Handler) http.Handler {
 				}
 			}
 
-			if token != expectedToken {
-				http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			// Constant-time comparison against the shared token: a plain != would
+			// leak how many leading bytes matched.
+			if expectedToken != "" && subtle.ConstantTimeCompare([]byte(token), []byte(expectedToken)) == 1 {
+				next.ServeHTTP(w, r)
 				return
 			}
 
-			next.ServeHTTP(w, r)
+			if validate != nil {
+				scopes, ok := validate(r.Context(), token)
+				if !ok {
+					http.Error(w, "Unauthorized", http.StatusUnauthorized)
+					return
+				}
+				if !service.ScopeAllows(scopes, r.URL.Path) {
+					http.Error(w, "Forbidden: token scope does not cover this route", http.StatusForbidden)
+					return
+				}
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		})
 	}
 }
+
+// TokenValidator resolves a presented token to the scopes it grants. It returns
+// ok=false when the token is unknown, revoked or empty, so callers cannot tell
+// those cases apart.
+type TokenValidator func(ctx context.Context, token string) (scopes []string, ok bool)
