@@ -34,22 +34,26 @@ export function OrderDetail() {
   const [processingItem, setProcessingItem] = useState<string | null>(null)
   const [removingItem, setRemovingItem] = useState<string | null>(null)
   const [updatingStatus, setUpdatingStatus] = useState(false)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [actionError, setActionError] = useState<string | null>(null)
 
   const loadOrder = useCallback(async () => {
     if (!id) return
     setLoading(true)
-    try {
-      const [orderData, progressData] = await Promise.all([
-        ordersApi.get(id),
-        ordersApi.getProgress(id),
-      ])
-      setOrder(orderData)
-      setProgress(progressData)
-    } catch (err) {
-      console.error('Failed to load order:', err)
-    } finally {
-      setLoading(false)
+    setLoadError(null)
+    const [orderResult, progressResult] = await Promise.allSettled([
+      ordersApi.get(id),
+      ordersApi.getProgress(id),
+    ])
+    // Never keep another order's snapshot after navigation or show stale progress.
+    setOrder(orderResult.status === 'fulfilled' ? orderResult.value : null)
+    setProgress(progressResult.status === 'fulfilled' ? progressResult.value : null)
+    if (orderResult.status === 'rejected') {
+      setLoadError('Unable to load order. Please try again.')
+    } else if (progressResult.status === 'rejected') {
+      setLoadError('Unable to load progress. Order details are available; retry to refresh progress.')
     }
+    setLoading(false)
   }, [id])
 
   useEffect(() => {
@@ -60,12 +64,14 @@ export function OrderDetail() {
 
   const handleStatusChange = async (newStatus: OrderStatus) => {
     if (!id || !order) return
+    setActionError(null)
     setUpdatingStatus(true)
     try {
       const updated = await ordersApi.updateStatus(id, newStatus)
       setOrder(updated)
     } catch (err) {
       console.error('Failed to update status:', err)
+      setActionError('Unable to update order status. Refresh the order before trying again.')
     } finally {
       setUpdatingStatus(false)
     }
@@ -73,12 +79,14 @@ export function OrderDetail() {
 
   const handleProcessItem = async (itemId: string) => {
     if (!id) return
+    setActionError(null)
     setProcessingItem(itemId)
     try {
       await ordersApi.processItem(id, itemId)
       loadOrder()
     } catch (err) {
       console.error('Failed to process item:', err)
+      setActionError('Unable to process item. Refresh the order before trying again.')
     } finally {
       setProcessingItem(null)
     }
@@ -93,12 +101,14 @@ export function OrderDetail() {
   const handleRemoveItem = async (itemId: string) => {
     if (!id) return
     if (!confirm('Remove this item from the order?')) return
+    setActionError(null)
     setRemovingItem(itemId)
     try {
       await ordersApi.removeItem(id, itemId)
       loadOrder()
     } catch (err) {
       console.error('Failed to remove item:', err)
+      setActionError('Unable to remove item. Refresh the order before trying again.')
     } finally {
       setRemovingItem(null)
     }
@@ -107,11 +117,17 @@ export function OrderDetail() {
   const handleShip = async () => {
     if (!id) return
     const trackingNumber = prompt('Enter tracking number (optional):')
+    if (trackingNumber === null) return
+    setActionError(null)
+    setUpdatingStatus(true)
     try {
       const updated = await ordersApi.markShipped(id, trackingNumber || undefined)
       setOrder(updated)
     } catch (err) {
       console.error('Failed to mark as shipped:', err)
+      setActionError('Unable to mark order as shipped. Refresh the order before trying again.')
+    } finally {
+      setUpdatingStatus(false)
     }
   }
 
@@ -133,7 +149,14 @@ export function OrderDetail() {
       <div className="p-6">
         <div className="text-center py-12">
           <Package className="w-12 h-12 mx-auto text-gray-400 mb-4" />
-          <h3 className="text-lg font-medium text-gray-900 mb-2">Order not found</h3>
+          <h3 className="text-lg font-medium text-gray-900 mb-2" role="alert">
+            {loadError || 'Order not found'}
+          </h3>
+          {loadError && (
+            <button onClick={loadOrder} className="block mx-auto mb-4 text-blue-600 hover:text-blue-700">
+              Retry loading order
+            </button>
+          )}
           <Link to="/orders" className="text-blue-600 hover:text-blue-700">
             Back to orders
           </Link>
@@ -149,6 +172,13 @@ export function OrderDetail() {
 
   return (
     <div className="p-6">
+      {(loadError || actionError) && (
+        <div role="alert" className="mb-4 rounded-lg border border-red-200 bg-red-50 p-4 text-red-700">
+          {loadError && <p>{loadError}</p>}
+          {actionError && <p>{actionError}</p>}
+          <button onClick={loadOrder} className="mt-2 underline">Refresh order</button>
+        </div>
+      )}
       {/* Header */}
       <div className="flex items-center gap-4 mb-6">
         <Link to="/orders" className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
