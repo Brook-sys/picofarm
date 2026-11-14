@@ -73,7 +73,7 @@ export default function Layout() {
         <div className="h-16 flex items-center border-b border-surface-800 px-3">
           {collapsed ? (
             <div className="relative mx-auto flex h-10 w-10 items-center justify-center">
-              <img src="/picofarm-logo.png" alt="PicoFarm" className="h-9 w-9 rounded-md object-cover" />
+              <img src="/picofarm_logo.png" alt="PicoFarm" className="h-9 w-9 rounded-md object-contain" />
               <button
                 onClick={() => setCollapsed(false)}
                 className="absolute inset-0 flex items-center justify-center rounded-lg bg-surface-900/90 text-surface-100 opacity-0 transition-opacity hover:opacity-100 focus:opacity-100"
@@ -86,7 +86,7 @@ export default function Layout() {
           ) : (
             <>
               <div className="flex min-w-0 flex-1 items-center pl-2">
-                <img src="/picofarm-logo.png" alt="PicoFarm" className="h-10 w-10 shrink-0 rounded-md object-cover" />
+                <img src="/picofarm_logo.png" alt="PicoFarm" className="h-10 w-10 shrink-0 rounded-md object-contain" />
                 <span className="ml-3 truncate text-xl font-display font-semibold text-surface-100">
                   PicoFarm
                 </span>
