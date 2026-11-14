@@ -39,6 +39,8 @@ Use this matrix to decide what to manually verify or automate when changing Pico
 | Sales-channel sync and product links | External source of orders/listings/products from Etsy, Squarespace, Shopify, and future providers | Provider registry tests, fake-client conversion/sync tests, repository idempotency tests, and handler tests for generic `/api/sales-channels/*` routes, including sync-run redaction | Sync with sandbox/mock only; do not require credentials; verify the Channels page shows status/errors without secrets |
 | WebSocket status | UI freshness | Hook/unit or integration test for reconnect/cleanup when feasible | Load app, observe connected status and live updates |
 | Auth/security boundary | Prevent unsafe remote exposure | Router/CORS tests and endpoint policy tests | Verify allowed/bad origins and sensitive actions |
+| API token lifecycle | Named credentials are how the optional auth is used; a broken revoke leaves a live credential | `internal/service/api_token_test.go` (hash-only storage, immediate revoke, scope matching), `internal/api/api_token_handler_test.go` (auth matrix), schema tests for the partial unique index | Create a token, use it on its scope, revoke it, confirm the next request is `401`/`403` |
+| WebSocket origin allowlist | `/ws` is outside `/api`; the allowlist is its only always-on check | `internal/realtime/hub_test.go` covers real handshakes: loopback, configured, same-origin, no-Origin and rejected origins, plus token-on/token-off | Connect from the configured origin, confirm a disallowed origin fails the handshake |
 
 ## Regression selection guide
 

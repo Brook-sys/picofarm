@@ -4,12 +4,12 @@ This inventory classifies PicoFarm routes that carry security or operational ris
 
 ## Current policy
 
-PicoFarm currently has CORS restrictions and baseline browser security headers, but it does not implement an application-level authentication/authorization boundary in the router. Treat every route below as available to any client that can reach the backend process unless a trusted reverse proxy or network boundary protects it.
+PicoFarm has CORS restrictions, baseline browser security headers, an always-on WebSocket origin allowlist, and an **optional** application-level token check. That token check is off by default: with `API_TOKEN` unset and `REQUIRE_API_TOKEN` off, every route below is available to any client that can reach the backend process, and creating named tokens does not change that. Treat the whole inventory as open unless one of the two enable-variables is set or a trusted reverse proxy/network boundary protects it.
 
-Before exposing PicoFarm outside a trusted local network, protect these routes with one of:
+Before exposing PicoFarm outside a trusted local network, either:
 
-1. a documented trusted reverse proxy with authentication and TLS; or
-2. the optional application-level auth middleware (set `API_TOKEN` in the environment).
+1. protect the routes with a documented trusted reverse proxy with authentication and TLS; or
+2. set `API_TOKEN` (shared token) and/or `REQUIRE_API_TOKEN` (named tokens only) — see `docs/SECURITY_MODEL.md`.
 
 ## Risk classes
 
@@ -29,7 +29,7 @@ Before exposing PicoFarm outside a trusted local network, protect these routes w
 | Routes | Class | Notes |
 | --- | --- | --- |
 | `GET /health` | Public | Status/version endpoint. Do not add secrets, environment dumps, or internal paths. |
-| `GET /ws` | Public/realtime | Realtime channel. Treat as sensitive until auth policy exists. |
+| `GET /ws` | Realtime | Realtime channel. Enforces an origin allowlist on every handshake — `ALLOWED_ORIGINS`, the request's own same-origin, or a client that sends no `Origin` — and requires the API token when `API_TOKEN` or `REQUIRE_API_TOKEN` is set. Any other origin fails the handshake with `403` before the upgrade. |
 | `GET /api/public/quotes/{token}` | Public | Share-token quote access. Tokens should remain unguessable and responses should stay scoped to the quote. |
 | `GET /api/public/business-info` | Public | Business profile fields only; do not include private settings or credentials. |
 | `GET /*` | Public/frontend | Static SPA fallback when `STATIC_DIR` exists. |
@@ -104,6 +104,10 @@ Before exposing PicoFarm outside a trusted local network, protect these routes w
 | `DELETE /api/settings/{key}` | Settings/secrets | Removes runtime config; can disable integrations. |
 | `GET /api/settings/thingiverse_token` | Settings/secrets/read | Token-specific endpoint; should not leak secret material unnecessarily. |
 | `PUT /api/settings/thingiverse_token` | Settings/secrets | Stores token material. |
+| `GET /api/api-tokens` | Credentials/read | Lists named API tokens. Response carries name, prefix, scopes and usage only — never the token value or its hash. |
+| `POST /api/api-tokens` | Credentials/create | Mints a named token. The **only** response path that ever returns the token plaintext; there is no read-back. Treat the response body as a secret in logs. |
+| `DELETE /api/api-tokens/{id}` | Credentials/revoke | Retires a token immediately (revoked rows are kept as a record). Revocation is not deletion: the row remains and its hash keeps rejecting. |
+| `GET /api/api-tokens/status` | Credentials/read | Reports whether auth is enforcing and active/revoked counts. No token material. |
 | `POST /api/notifications` | Settings/integration | Creates external delivery channel. |
 | `POST /api/notifications/templates` | Settings/integration | Template rendering can leak data if misconfigured. |
 | `POST /api/notifications/templates/preview` | Integration/read | Preview may render sensitive variables. |

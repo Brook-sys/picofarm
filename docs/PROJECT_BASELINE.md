@@ -32,7 +32,9 @@ Backend defaults are defined from `cmd/server/main.go` and database helpers:
 | `DATABASE_PATH` | `~/.picofarm/picofarm.db` | Used when no explicit database path is provided |
 | `UPLOAD_DIR` | `./uploads` | Runtime uploads and generated files |
 | `STATIC_DIR` | `./web/dist` | Static frontend assets in production build |
-| `ALLOWED_ORIGINS` | unset | Comma-separated CORS origins; unset allows local development origins only |
+| `ALLOWED_ORIGINS` | unset | Comma-separated CORS origins; unset allows local development origins only. Also extends the WebSocket origin allowlist |
+| `API_TOKEN` | unset | Optional shared token for `/api/*`; when set, requests need `Authorization: Bearer <token>`. Named tokens can be managed at runtime via `/api/api-tokens` |
+| `REQUIRE_API_TOKEN` | unset | Enables authentication without a shared token (`1`/`true`/`yes`/`on`/`enabled`). Fails open with a log warning if no token service is available |
 | `SENTRY_DSN` | unset | Optional error reporting |
 | `ETSY_CLIENT_ID` | unset | Optional Etsy integration |
 | `ETSY_WEBHOOK_SECRET` | unset | Optional Etsy webhook signing secret. When set, events with a missing or invalid `X-Etsy-Signature` are rejected with `401` instead of accepted |

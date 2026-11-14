@@ -130,16 +130,79 @@ When set, all routes under `/api/*` (except `/api/public/*`) will require this t
 
 This is a baseline mechanism. It is strongly recommended to use a robust reverse proxy (e.g. Tailscale, Cloudflare Access, Authelia, Nginx Basic Auth) for broad internet exposure.
 
+### Named tokens (per-integration credentials)
+
+Alongside the shared `API_TOKEN`, named tokens can be minted and revoked at runtime through
+`/api/api-tokens` (see `docs/API_CONTRACTS.md` and the Settings → API Tokens page). The design
+points that matter for security review:
+
+- **Only a SHA-256 hash is stored.** The plaintext is returned once, by `POST /api/api-tokens`, and
+  never again. A database leak does not yield replayable credentials.
+- **Scopes are `/api` route prefixes.** `*` means full access; anything else (e.g. `/api/slicer`)
+  allows that route and its sub-paths only. A scoped token hitting another route gets `403`, not
+  `200`: the failure is visible rather than silent.
+- **Revocation is immediate.** The in-memory validation cache is dropped on every create/revoke, so
+  a retired token stops working on the next request — not after a cache TTL.
+- **The routes live inside `/api`**, so managing credentials requires a credential whenever auth is
+  enabled.
+
+Known limitations of this mechanism, stated rather than implied away:
+
+- **Per-process cache.** Validation results are cached for 30s per process so authentication does
+  not queue behind SQLite writes on the single connection. With more than one backend replica, a
+  revocation can take up to that TTL to reach the other processes. A single instance (the current
+  deployment) is unaffected.
+- **The WebSocket token travels in the query string.** Browsers cannot set headers on a WebSocket,
+  so `?token=` is the only option that works for the bundled UI. That means the token can appear in
+  proxy access logs and browser history. Use `X-API-Token`/`Authorization` from non-browser clients
+  that connect directly.
+- **Scopes are route prefixes, not actions.** `/api/settings` allows deleting settings, not just
+  reading them. A scope narrows the surface; it is not a permission model.
+- **No expiry, no rotation.** Tokens live until revoked. Rotation is revoke-and-create.
+- **`last_used_at` lags by design.** It is written at most once per minute per token, so the page
+  can show a timestamp up to a minute old.
+- **Two tokens with the same plaintext would collide on their hash.** Irrelevant in practice (32
+  random bytes), but it is why generation uses `crypto/rand` and never a name-derived value.
+
+### Turning auth on without a shared token
+
+`REQUIRE_API_TOKEN=1` (also `true`, `yes`, `on`, `enabled`) enables authentication even when
+`API_TOKEN` is empty, so a deployment can operate on named tokens alone. If it is set while no
+token service is available, the backend logs a warning and `/api` stays open — the fail mode is
+open, not closed, and it is loud.
+
+### `/ws` (realtime endpoint)
+
+`/ws` sits outside the `/api` group, so it does its own checks, in this order:
+
+1. **Origin allowlist, always on.** Three cases are accepted: no `Origin` header (a non-browser
+   client), an origin listed in `ALLOWED_ORIGINS`, and **the server's own scheme+host** — the
+   same-origin case. The last one matters because the defaults are loopback-only
+   (`http://localhost:*`, `http://127.0.0.1:*`, `http://[::1]:*`): without it, an operator reaching
+   the app by LAN IP or hostname would lose `/ws` the moment `ALLOWED_ORIGINS` is unset. A browser
+   page on any other origin cannot open a socket.
+2. **Token, only when auth is on.** With `API_TOKEN` set (or `REQUIRE_API_TOKEN`), the handshake
+   must carry the token. Browsers cannot set headers on a WebSocket, so the frontend sends it as a
+   `?token=` query parameter; non-browser clients may use `X-API-Token` or
+   `Authorization: Bearer`. Named tokens connect when a scope covers `/ws`.
+
+The order is deliberate: an unallowed origin fails at the handshake, before any token is read, so
+probing cannot distinguish "bad origin" from "bad token". The check runs twice on purpose — once in
+the hub and once in the WebSocket library — with the configured origins converted to the
+library's host-only pattern form, so a change to either is caught by the other.
+
 ### What `API_TOKEN` does not cover
 
-- `/ws` is registered outside the `/api` group, so `ApiTokenAuth` never sees it. The realtime
-  endpoint accepts any origin (`OriginPatterns: ["*"]`) with no token, so enabling `API_TOKEN`
-  protects the JSON API while leaving the event stream readable by any client that can reach the
-  port. The frontend connects to `/ws` without a token today.
 - The slicer neighbor service is a separate concern: `API_TOKEN` guards `/api/*` only (see
   "Neighbor service exposure (orca-slicer-api)").
-- With `API_TOKEN` unset, `ApiTokenAuth` passes every request through, so the whole `/api` surface
-  depends on the network boundary in front of it.
+- With `API_TOKEN` unset and `REQUIRE_API_TOKEN` off, `ApiTokenAuth` passes every request through,
+  so the whole `/api` surface depends on the network boundary in front of it. This is the
+  local-development default and the only state in which the API is open.
+- Named tokens exist independently of enforcement: creating one while auth is off prepares a
+  credential but protects nothing until `API_TOKEN`/`REQUIRE_API_TOKEN` is set. The API Tokens page
+  states this instead of implying protection.
+- The mechanism is a single shared bearer token or a short opaque token: no per-user identity, no
+  expiry, no rotation. Revoke-and-recreate is the rotation path.
 
 ## Neighbor service exposure (orca-slicer-api)
 

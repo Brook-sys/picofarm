@@ -467,6 +467,36 @@ Primary response types:
 
 Backups and settings are operationally sensitive; document validation in `docs/REGRESSION_MATRIX.md` and security assumptions in `docs/SECURITY_MODEL.md` when changing them.
 
+### Named API tokens
+
+| Route | Purpose |
+| --- | --- |
+| `GET /api/api-tokens/status` | Whether auth is enforcing, plus active/revoked counts |
+| `GET /api/api-tokens` | Every token, newest first, including revoked ones |
+| `POST /api/api-tokens` | Mints a token; returns the plaintext once |
+| `DELETE /api/api-tokens/{id}` | Revokes a token (row kept, credential rejected immediately) |
+
+`POST /api/api-tokens` response is the only place the token value ever appears:
+
+```json
+{
+  "token": "<64 hex chars>",
+  "api_token": {
+    "id": "…", "name": "Integração Etsy", "prefix": "abcd1234",
+    "scopes": ["*"], "created_at": "2026-11-14T…"
+  }
+}
+```
+
+- `scopes` defaults to `["*"]` (every route). Any other entry must be a `/api` path prefix such as
+  `/api/slicer`; a trailing slash is normalized and duplicates collapse. A scoped token that reaches
+  another route is refused with `403`.
+- The stored value is a SHA-256 hash, so no read path — `GET /api/api-tokens` included — returns the
+  token or its hash. `last_used_at` is recorded at most once per minute per token.
+- Revoking an already-revoked or unknown id answers `404`; a revoked name can be reused.
+- These routes live inside `/api`, so they require a credential exactly when the rest of the API
+  does. Auth is enabled by `API_TOKEN` or `REQUIRE_API_TOKEN`; see `docs/SECURITY_MODEL.md`.
+
 ## Contract drift found during this cycle
 
 This cycle inspected the router, Go models, frontend client, and TypeScript types and corrected two concrete drift points:

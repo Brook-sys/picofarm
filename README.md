@@ -277,8 +277,9 @@ Only the variables below are actually read by the code (`cmd/server/main.go`, `i
 | `DATABASE_PATH` | `~/.picofarm/picofarm.db` | SQLite database file path |
 | `UPLOAD_DIR` | `./uploads` | File storage directory |
 | `STATIC_DIR` | `./web/dist` | Static frontend assets served by the backend |
-| `ALLOWED_ORIGINS` | unset | Comma-separated CORS origins; unset allows local development origins only |
+| `ALLOWED_ORIGINS` | unset | Comma-separated CORS origins; unset allows local development origins only. Also extends the WebSocket origin allowlist |
 | `API_TOKEN` | unset | When set, requests need `Authorization: Bearer <token>`. Note this also blocks the Etsy webhook unless the caller presents the token |
+| `REQUIRE_API_TOKEN` | unset | Accepts `1`/`true`/`yes`/`on`/`enabled`. Enables authentication even without `API_TOKEN`, so a deployment can rely on named tokens alone (Settings → API Tokens). See `docs/SECURITY_MODEL.md` |
 | `ENCRYPTION_KEY` | unset | Key used to encrypt integration settings at rest |
 | `ENVIRONMENT` | unset | When `production`, enables production-oriented behavior (Sentry, stricter CORS) |
 | `SENTRY_DSN` | unset | Optional error reporting |
