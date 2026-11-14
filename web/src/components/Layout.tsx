@@ -7,7 +7,6 @@ import {
   Printer,
   Package,
   Settings,
-  Layers,
   Receipt,
   DollarSign,
   ShoppingBag,
@@ -73,18 +72,22 @@ export default function Layout() {
         {/* Logo + collapse toggle */}
         <div className="h-16 flex items-center border-b border-surface-800 px-3">
           {collapsed ? (
-            <button
-              onClick={() => setCollapsed(false)}
-              className="w-10 h-10 flex items-center justify-center rounded-lg text-surface-400 hover:text-surface-100 hover:bg-surface-800 transition-colors mx-auto"
-              title="Expand sidebar"
-            >
-              <PanelLeftOpen className="h-5 w-5" />
-            </button>
+            <div className="relative mx-auto flex h-10 w-10 items-center justify-center">
+              <img src="/picofarm-logo.png" alt="PicoFarm" className="h-9 w-9 rounded-md object-cover" />
+              <button
+                onClick={() => setCollapsed(false)}
+                className="absolute inset-0 flex items-center justify-center rounded-lg bg-surface-900/90 text-surface-100 opacity-0 transition-opacity hover:opacity-100 focus:opacity-100"
+                title="Expand sidebar"
+                aria-label="Expand sidebar"
+              >
+                <PanelLeftOpen className="h-5 w-5" />
+              </button>
+            </div>
           ) : (
             <>
-              <div className="flex items-center flex-1 pl-3">
-                <Layers className="h-7 w-7 text-accent-500 shrink-0" />
-                <span className="ml-3 text-xl font-display font-semibold text-surface-100 truncate">
+              <div className="flex min-w-0 flex-1 items-center pl-2">
+                <img src="/picofarm-logo.png" alt="PicoFarm" className="h-10 w-10 shrink-0 rounded-md object-cover" />
+                <span className="ml-3 truncate text-xl font-display font-semibold text-surface-100">
                   PicoFarm
                 </span>
               </div>
@@ -92,6 +95,7 @@ export default function Layout() {
                 onClick={() => setCollapsed(true)}
                 className="w-10 h-10 flex items-center justify-center rounded-lg text-surface-400 hover:text-surface-100 hover:bg-surface-800 transition-colors"
                 title="Collapse sidebar"
+                aria-label="Collapse sidebar"
               >
                 <PanelLeftClose className="h-5 w-5" />
               </button>
