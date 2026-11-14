@@ -45,7 +45,7 @@ export default function Projects() {
   const [sortField, setSortField] = useState<SortField>('updated_at')
   const [sortDir, setSortDir] = useState<SortDir>('desc')
 
-  const { data: projects = [], isLoading } = useProjects()
+  const { data: projects = [], isLoading, isError, error, refetch, isFetching } = useProjects()
   const createProject = useCreateProject()
   const deleteProject = useDeleteProject()
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
@@ -254,10 +254,17 @@ export default function Projects() {
         </div>
       </div>
 
+      {isError && (
+        <div role="alert" className="mb-6 rounded-lg border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-400">
+          <p>Failed to load projects. {projects.length > 0 && 'Showing previously loaded projects; data may be outdated. '}{error instanceof Error ? error.message : 'Please try again.'}</p>
+          <button type="button" onClick={() => refetch()} disabled={isFetching} className="btn btn-secondary mt-3">{isFetching ? 'Retrying...' : 'Retry'}</button>
+        </div>
+      )}
+
       {/* Projects */}
       {isLoading ? (
         <div className="text-surface-500">Loading...</div>
-      ) : projects.length === 0 ? (
+      ) : isError && projects.length === 0 ? null : projects.length === 0 ? (
         <div className="text-center py-16">
           <FolderKanban className="h-16 w-16 mx-auto mb-4 text-surface-600" />
           <h3 className="text-xl font-semibold text-surface-300 mb-2">

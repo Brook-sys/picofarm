@@ -29,6 +29,8 @@ export default function PrintQueue() {
   const [queue, setQueue] = useState<QueueResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [loadError, setLoadError] = useState('')
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
   const [query, setQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
   const [busyItem, setBusyItem] = useState('')
@@ -54,11 +56,12 @@ export default function PrintQueue() {
 
   const loadQueue = async (silent = false) => {
     if (!silent) setLoading(true)
-    setError('')
     try {
       setQueue(await queueApi.get())
+      setLastUpdated(new Date())
+      setLoadError('')
     } catch (err) {
-      if (!silent) setError(err instanceof Error ? err.message : 'Failed to load queue')
+      setLoadError(err instanceof Error ? err.message : 'Failed to load queue')
     } finally {
       if (!silent) setLoading(false)
     }
@@ -221,11 +224,18 @@ export default function PrintQueue() {
         </div>
       </div>
 
-      {error && <div className="mb-4 rounded-lg border border-red-500/20 bg-red-500/10 text-red-400 px-4 py-3 text-sm">{error}</div>}
+      {loadError && (
+        <div role="alert" className="mb-4 rounded-lg border border-amber-500/20 bg-amber-500/10 text-amber-300 px-4 py-3 text-sm">
+          <p>{queue ? 'Queue update failed. Displayed data may be outdated.' : 'Failed to load queue.'} {loadError}</p>
+          {lastUpdated && <p className="mt-1">Last successful update: {lastUpdated.toLocaleString()}</p>}
+          <button type="button" onClick={() => loadQueue()} disabled={loading} className="btn btn-secondary mt-2">{loading ? 'Retrying...' : 'Retry'}</button>
+        </div>
+      )}
+      {error && <div role="alert" className="mb-4 rounded-lg border border-red-500/20 bg-red-500/10 text-red-400 px-4 py-3 text-sm">{error}</div>}
       {toast && <AppToast toast={toast} onClose={() => setToast(null)} />}
       {viewingItem && <ItemDetailsModal item={viewingItem.item} onClose={() => setViewingItem(null)} />}
 
-      {loading ? <div className="text-surface-500">Loading queue...</div> : !queue || queue.items.length === 0 ? (
+      {loading && !queue ? <div className="text-surface-500">Loading queue...</div> : !queue ? null : queue.items.length === 0 ? (
         <div className="text-center py-16">
           <FileCode className="h-16 w-16 mx-auto mb-4 text-surface-600" />
           <h3 className="text-xl font-semibold text-surface-300 mb-2">No queued G-code</h3>
