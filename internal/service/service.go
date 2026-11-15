@@ -56,6 +56,7 @@ type Services struct {
 	Notifications *NotificationService
 	APITokens     *APITokenService
 	Slicer        *SlicerService
+	SlicerJobs    *SlicerJobsService
 	ModelImport   *ModelImportService
 	Thingiverse   *ThingiverseImportService
 	PrinterFiles  *PrinterFileService

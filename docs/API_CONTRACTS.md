@@ -2,6 +2,8 @@
 
 This document records the current HTTP/JSON contract conventions between the Go backend and the React/TypeScript frontend. It is based on the current router in `internal/api/router.go`, Go models in `internal/model/`, and browser client/types in `web/src/api/client.ts` and `web/src/types/index.ts`.
 
+Slicer editor/history and background-job contracts: [SLICER_REFINEMENTS.md](SLICER_REFINEMENTS.md), [SLICER_JOBS.md](SLICER_JOBS.md).
+
 ## Contract sources of truth
 
 | Layer | Source |
@@ -155,8 +157,8 @@ Most keys in `settings` are free-form key/value blobs. Two keys are validated by
   reported per profile: `{restored, skipped, failed, profiles: [{category, name, status,
   message?}]}` with `status` in `restored`/`skipped`/`failed`, and the answer is `200` even when
   some profiles fail, because the restore did run. Without `overwrite: true` a name the slicer
-  already has is skipped rather than replaced — the slicer has no delete endpoint, so a replaced
-  profile cannot be recovered from the slicer side.
+  already has is skipped rather than replaced. Bundle imports do not create editor recovery
+  snapshots; preserve a backup before overwriting.
 
 ## High-value domain contracts
 

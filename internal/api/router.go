@@ -98,7 +98,7 @@ func NewRouterWithOptions(services *service.Services, hub *realtime.Hub, opts Ro
 	r.Use(cors.Handler(cors.Options{
 		AllowedOrigins: allowedOrigins,
 		AllowedMethods: []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
-		AllowedHeaders: []string{"Accept", "Authorization", "Content-Type", "X-Request-ID"},
+		AllowedHeaders: []string{"Accept", "Authorization", "Content-Type", "X-Request-ID", "Idempotency-Key"},
 		ExposedHeaders: []string{"Link"},
 		MaxAge:         300,
 	}))
@@ -460,6 +460,9 @@ func NewRouterWithOptions(services *service.Services, hub *realtime.Hub, opts Ro
 				r.Get("/profiles/{category}/{name}", slicerHandler.GetProfileJSON)
 				r.Post("/profiles/import-url", slicerHandler.ImportProfile)
 				r.Post("/profiles/upload-json", slicerHandler.UploadProfileJSON)
+				r.Post("/profiles/validate", slicerHandler.ValidateProfile)
+				r.Post("/profiles/revisions", slicerHandler.SaveProfileRevision)
+				r.Get("/profiles/{category}/{name}/history", slicerHandler.ProfileHistory)
 				r.Post("/profiles/export", slicerHandler.ExportProfiles)
 				r.Post("/profiles/import", slicerHandler.ImportProfiles)
 				r.Post("/profiles/default", slicerHandler.SetDefaultProfile)
@@ -467,6 +470,14 @@ func NewRouterWithOptions(services *service.Services, hub *realtime.Hub, opts Ro
 				r.Post("/resolve-profiles", slicerHandler.ResolveProfiles)
 				r.Post("/preview", slicerHandler.PreviewSTL)
 				r.Post("/slice-stl", slicerHandler.SliceSTL)
+				if services.SlicerJobs != nil {
+					jobsHandler := NewSlicerJobsHandler(services.SlicerJobs)
+					r.Post("/jobs", jobsHandler.Submit)
+					r.Get("/jobs", jobsHandler.List)
+					r.Get("/jobs/{id}", jobsHandler.Get)
+					r.Post("/jobs/{id}/cancel", jobsHandler.Cancel)
+					r.Delete("/jobs/{id}", jobsHandler.Delete)
+				}
 			})
 		}
 

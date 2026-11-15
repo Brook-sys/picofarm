@@ -2,6 +2,8 @@
 
 PicoFarm is a print farm management and order fulfillment application. It combines product catalog management, sales/order workflows, printer fleet coordination, file libraries, costing, notifications, and integrations with external commerce/printer systems.
 
+Slicer worker, profile snapshots and viewer boundaries: [SLICER_REFINEMENTS.md](SLICER_REFINEMENTS.md#architecture-and-security).
+
 ## High-level shape
 
 ```text

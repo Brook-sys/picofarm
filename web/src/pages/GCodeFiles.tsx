@@ -1,4 +1,8 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { createRequestGate, paginateLibrary, slicePreviewKey, sortLibraryItems, type LibraryItem, type LibrarySortMode as SortMode } from '../lib/gcodeLibraryView'
+import { GCodeVariantComparison } from '../components/GCodeVariantComparison'
+import SlicerJobsPanel from '../components/SlicerJobsPanel'
+import { slicerSubmissionKey } from '../lib/slicerJobSubmission'
 import { useQuery } from '@tanstack/react-query'
 import { AlertTriangle, FileCode, Grid3X3, Info as InfoIcon, Link2Off, List, Loader2, Plus, Search, Star, Upload, Send } from 'lucide-react'
 import { fileLibraryApi, gcodeLibraryApi, printersApi, settingsApi, slicerApi, stlLibraryApi } from '../api/client'
@@ -16,8 +20,11 @@ import {
   parseMaterialColors,
 } from '../lib/materialColors'
 
-type SortMode = 'created_desc' | 'created_asc' | 'name_asc' | 'name_desc' | 'prints_desc' | 'time_asc' | 'grams_asc' | 'grams_desc'
-type LibraryItem = { type: 'stl'; file: STLLibraryFile } | { type: 'gcode'; file: GCodeLibraryFile }
+const slicerJobsTransport = {
+  list: () => slicerApi.listJobs(),
+  cancel: (id: string) => slicerApi.cancelJob(id),
+  delete: (id: string) => slicerApi.deleteJob(id),
+}
 
 export default function GCodeFiles() {
   const [files, setFiles] = useState<GCodeLibraryFile[]>([])
@@ -40,7 +47,6 @@ export default function GCodeFiles() {
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
   const [showFilters, setShowFilters] = useState(false)
   const [page, setPage] = useState(1)
-  const [total, setTotal] = useState(0)
   const pageSize = 50
   const [uploading, setUploading] = useState(false)
   const [uploadStatus, setUploadStatus] = useState('')
@@ -51,6 +57,7 @@ export default function GCodeFiles() {
   const [viewingSTL, setViewingSTL] = useState<STLLibraryFile | null>(null)
   const [slicingSTL, setSlicingSTL] = useState<STLLibraryFile | null>(null)
   const [toast, setToast] = useState<AppToastState | null>(null)
+  const libraryRequests = useRef(createRequestGate())
 
   const loadTags = async () => {
     try {
@@ -61,10 +68,12 @@ export default function GCodeFiles() {
   }
 
   const loadFiles = async () => {
+    const request = libraryRequests.current.begin()
     setLoading(true)
     setError('')
     try {
       const res = await fileLibraryApi.get()
+      if (!libraryRequests.current.isCurrent(request)) return
       const nextSTLs = res.stl_files || []
       const nextRootGCodes = res.root_gcode_files || []
       setSTLFiles(nextSTLs)
@@ -72,11 +81,10 @@ export default function GCodeFiles() {
       setViewingSTL(current => current ? nextSTLs.find(file => file.id === current.id) || current : current)
       setSlicingSTL(current => current ? nextSTLs.find(file => file.id === current.id) || current : current)
       setViewingFile(current => current ? [...nextRootGCodes, ...nextSTLs.flatMap(file => file.gcodes || [])].find(file => file.id === current.id) || current : current)
-      setTotal(nextSTLs.length + nextRootGCodes.length)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load files')
+      if (libraryRequests.current.isCurrent(request)) setError(err instanceof Error ? err.message : 'Failed to load files')
     } finally {
-      setLoading(false)
+      if (libraryRequests.current.isCurrent(request)) setLoading(false)
     }
   }
 
@@ -87,7 +95,11 @@ export default function GCodeFiles() {
 
   useEffect(() => { loadTags() }, [])
   useEffect(() => { printersApi.list().then(setPrinters).catch(() => setPrinters([])) }, [])
-  useEffect(() => { loadFiles() }, [])
+  useEffect(() => {
+    const gate = libraryRequests.current
+    loadFiles()
+    return () => gate.invalidate()
+  }, [])
 
   // Filament label colors. Read as a plain setting so the badge renders the
   // colors configured in Settings → Other; the key matches the react-query key
@@ -192,33 +204,24 @@ export default function GCodeFiles() {
     })
   }, [stlFiles, query, tagFilter, material, printProfile, filamentProfile, printerProfile, nozzle, layer, timeBucket, usage, hasActiveGCodeFilter, gcodeMatchesFilters])
 
-  const filtered = useMemo(() => {
-    return files.filter(gcodeMatchesFilters).sort((a, b) => {
-      switch (sortMode) {
-        case 'created_asc': return new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-        case 'name_asc': return a.display_name.localeCompare(b.display_name)
-        case 'name_desc': return b.display_name.localeCompare(a.display_name)
-        case 'prints_desc': return b.print_count - a.print_count
-        case 'time_asc': return (a.estimated_seconds ?? Number.MAX_SAFE_INTEGER) - (b.estimated_seconds ?? Number.MAX_SAFE_INTEGER)
-        case 'grams_asc': return (a.filament_grams ?? Number.MAX_SAFE_INTEGER) - (b.filament_grams ?? Number.MAX_SAFE_INTEGER)
-        case 'grams_desc': return (b.filament_grams ?? 0) - (a.filament_grams ?? 0)
-        default: return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-      }
-    })
-  }, [files, gcodeMatchesFilters, sortMode])
+  const filtered = useMemo(() => files.filter(gcodeMatchesFilters), [files, gcodeMatchesFilters])
 
   const libraryItems = useMemo<LibraryItem[]>(() => {
     const items: LibraryItem[] = [
       ...displayedSTLs.map(file => ({ type: 'stl' as const, file })),
       ...filtered.map(file => ({ type: 'gcode' as const, file })),
     ]
-    return items.sort((a, b) => {
-      if (sortMode === 'name_asc') return a.file.display_name.localeCompare(b.file.display_name)
-      if (sortMode === 'name_desc') return b.file.display_name.localeCompare(a.file.display_name)
-      if (sortMode === 'created_asc') return new Date(a.file.created_at).getTime() - new Date(b.file.created_at).getTime()
-      return new Date(b.file.created_at).getTime() - new Date(a.file.created_at).getTime()
-    })
+    return sortLibraryItems(items, sortMode)
   }, [displayedSTLs, filtered, sortMode])
+
+  const filterKey = JSON.stringify([query, material, printProfile, filamentProfile, printerProfile, nozzle, layer, timeBucket, usage, tagFilter, sortMode])
+  const [pageFilterKey, setPageFilterKey] = useState(filterKey)
+  if (pageFilterKey !== filterKey) {
+    setPageFilterKey(filterKey)
+    setPage(1)
+  }
+  const pagination = paginateLibrary(libraryItems, pageFilterKey === filterKey ? page : 1, pageSize)
+  const visibleItems = pagination.items
 
   const uploadFiles = async (selected: FileList | File[] | undefined | null, type: 'stl' | 'gcode', parentSTLId?: string | null) => {
     const selectedFiles = Array.from(selected || [])
@@ -463,6 +466,15 @@ export default function GCodeFiles() {
         </div>
       </div>
 
+      <div className="card p-4 mb-4"><SlicerJobsPanel api={slicerJobsTransport} onOpenResult={id => {
+        fileLibraryApi.get().then(library => {
+          const file = [...(library.root_gcode_files || []), ...(library.stl_files || []).flatMap(stl => stl.gcodes || [])].find(gcode => gcode.id === id)
+          if (!file) throw new Error('Resultado removido ou não encontrado na biblioteca')
+          setViewingFile(file)
+          void loadFiles()
+        }).catch(err => setError(err instanceof Error ? err.message : 'Resultado não encontrado na biblioteca'))
+      }} /></div>
+
       <div className="card p-2 mb-4">
         <div className="grid grid-cols-[minmax(220px,1fr)_auto_auto_auto] gap-2 items-center">
           <div className="relative min-w-0">
@@ -523,12 +535,13 @@ export default function GCodeFiles() {
         )}
       </div>
 
+      {['prints_desc', 'time_asc', 'grams_asc', 'grams_desc'].includes(sortMode) && <p className="mb-3 text-xs text-surface-400">Ordenação de STL usa o G-code marcado como padrão; sem padrão ou metadado, o grupo fica ao final. Filhos permanecem no grupo do STL.</p>}
       {error && <div className="mb-4 rounded-lg border border-red-500/20 bg-red-500/10 text-red-400 px-4 py-3 text-sm">{error}</div>}
       {toast && <AppToast toast={toast} onClose={() => setToast(null)} />}
       {viewingFile && <FileDetailsModal file={viewingFile} colors={materialColors} tags={tags} onCreateTag={createTag} onAddTag={addTagToFile} onRemoveTag={removeTagFromFile} onClose={() => setViewingFile(null)} />}
       {sendingFile && <SendToPrinterModal file={sendingFile} printers={printers} busy={busy === sendingFile.id} onClose={() => setSendingFile(null)} onSend={(printerId, remotePath, startPrint) => sendToPrinter(sendingFile, printerId, remotePath, startPrint)} />}
-      {viewingSTL && <STLDetailsModal file={viewingSTL} tags={tags} onCreateTag={createTag} onAddTag={addTagToSTL} onRemoveTag={removeTagFromSTL} onClose={() => setViewingSTL(null)} onRetryThumbnail={() => retrySTLThumbnail(viewingSTL)} onSlice={() => setSlicingSTL(viewingSTL)} />}
-      {slicingSTL && <SliceSTLModal file={slicingSTL} onClose={() => setSlicingSTL(null)} onDone={() => { setSlicingSTL(null); loadFiles() }} />}
+      {viewingSTL && <STLDetailsModal key={viewingSTL.id} file={viewingSTL} tags={tags} onCreateTag={createTag} onAddTag={addTagToSTL} onRemoveTag={removeTagFromSTL} onClose={() => setViewingSTL(null)} onRetryThumbnail={() => retrySTLThumbnail(viewingSTL)} onSlice={() => setSlicingSTL(viewingSTL)} />}
+      {slicingSTL && <SliceSTLModal key={slicingSTL.id} file={slicingSTL} onClose={() => setSlicingSTL(null)} onDone={() => { setSlicingSTL(null); loadFiles() }} />}
 
       {loading ? <div className="text-surface-500">Loading files...</div> : libraryItems.length === 0 ? (
         <div className="text-center py-16">
@@ -544,7 +557,7 @@ export default function GCodeFiles() {
           </div>
           {viewMode === 'grid' ? (
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-              {libraryItems.map(item => item.type === 'stl'
+              {visibleItems.map(item => item.type === 'stl'
                 ? <STLFileCard key={`stl-${item.file.id}`} file={item.file} busy={busy === item.file.id} confirmDelete={confirmDelete === item.file.id} onRename={(name) => renameSTLFile(item.file, name)} onDelete={() => deleteSTLFile(item.file.id)} onDropGCode={(gcodeId) => setGCodeParent(gcodeId, item.file.id)} onUploadGCode={(gcodes) => uploadFiles(gcodes, 'gcode', item.file.id)} onViewGCode={setViewingFile} onRenameGCode={renameFile} onAddGCode={addToQueue} onSendGCode={setSendingFile} onUnlinkGCode={(gcodeId) => setGCodeParent(gcodeId, null)} onMakeDefaultGCode={makeDefaultGCode} onRetryThumbnail={() => retrySTLThumbnail(item.file)} onViewSTL={() => setViewingSTL(item.file)} onSlice={() => setSlicingSTL(item.file)} isGCodeMatch={(gcode) => hasActiveGCodeFilter && gcodeMatchesFilters(gcode)} />
                 : <FileCard key={`gcode-${item.file.id}`} file={item.file} colors={materialColors} busy={busy === item.file.id} confirmDelete={confirmDelete === item.file.id} onView={() => setViewingFile(item.file)} onRename={(name) => renameFile(item.file, name)} onAdd={() => addToQueue(item.file.id)} onSend={() => setSendingFile(item.file)} onDelete={() => deleteFile(item.file.id)} />)}
             </div>
@@ -553,7 +566,7 @@ export default function GCodeFiles() {
               <div className="grid grid-cols-[56px_minmax(220px,1.7fr)_0.7fr_minmax(120px,1fr)_minmax(130px,1fr)_0.8fr_0.7fr_220px] gap-3 px-4 py-2 text-xs text-surface-500 border-b border-surface-800">
                 <span>Preview</span><span>Name</span><span>Type</span><span>Link</span><span>Material / Profile</span><span>Size / Time</span><span>Usage</span><span>Ações</span>
               </div>
-              {libraryItems.map(item => item.type === 'stl'
+              {visibleItems.map(item => item.type === 'stl'
                 ? <div key={`stl-group-${item.file.id}`}>
                     <STLFileRow file={item.file} busy={busy === item.file.id} confirmDelete={confirmDelete === item.file.id} onView={() => setViewingSTL(item.file)} onRename={(name) => renameSTLFile(item.file, name)} onDelete={() => deleteSTLFile(item.file.id)} onRetryThumbnail={() => retrySTLThumbnail(item.file)} onDropGCode={(gcodeId) => setGCodeParent(gcodeId, item.file.id)} onSlice={() => setSlicingSTL(item.file)} />
                     {(item.file.gcodes || []).map(gcode => <FileRow key={`linked-gcode-${gcode.id}`} file={gcode} colors={materialColors} busy={busy === gcode.id} confirmDelete={confirmDelete === gcode.id} indented matched={hasActiveGCodeFilter && gcodeMatchesFilters(gcode)} parentName={item.file.display_name} onView={() => setViewingFile(gcode)} onRename={(name) => renameFile(gcode, name)} onAdd={() => addToQueue(gcode.id)} onSend={() => setSendingFile(gcode)} onDelete={() => deleteFile(gcode.id)} />)}
@@ -564,12 +577,12 @@ export default function GCodeFiles() {
         </div>
       )}
 
-      {total > pageSize && (
+      {libraryItems.length > pageSize && (
         <div className="flex items-center justify-between mt-4 text-sm text-surface-400">
-          <span>{libraryItems.length} of {total} files · page {page}</span>
+          <span>{visibleItems.length} de {libraryItems.length} grupos/arquivos · página {pagination.current} de {pagination.pages}</span>
           <div className="flex gap-2">
-            <button className="btn btn-secondary text-sm" disabled={page === 1} onClick={() => setPage(p => Math.max(1, p - 1))}>Previous</button>
-            <button className="btn btn-secondary text-sm" disabled={page * pageSize >= total} onClick={() => setPage(p => p + 1)}>Next</button>
+            <button className="btn btn-secondary text-sm" disabled={pagination.current === 1} onClick={() => setPage(pagination.current - 1)}>Previous</button>
+            <button className="btn btn-secondary text-sm" disabled={pagination.current === pagination.pages} onClick={() => setPage(pagination.current + 1)}>Next</button>
           </div>
         </div>
       )}
@@ -583,48 +596,71 @@ function SliceSTLModal({ file, onClose, onDone }: { file: STLLibraryFile; onClos
   const [busy, setBusy] = useState('')
   const [message, setMessage] = useState('')
   const [previewResult, setPreviewResult] = useState<{ usesSupport: boolean; printTime: number; filamentUsedG: number; filamentUsedMm: number; thumbnail: string } | null>(null)
+  const [previewKey, setPreviewKey] = useState('')
+  const requestGate = useRef(createRequestGate())
+  const currentPreviewKey = slicePreviewKey(file.id, form)
+  const previewIsStale = !!previewResult && previewKey !== currentPreviewKey
+
+  const closeModal = () => {
+    requestGate.current.invalidate()
+    onClose()
+  }
 
   useEffect(() => {
+    let ignore = false
+    const gate = requestGate.current
     Promise.all([slicerApi.getConfig(), slicerApi.profiles('printers'), slicerApi.profiles('presets'), slicerApi.profiles('filaments')]).then(([config, printers, presets, filaments]) => {
+      if (ignore) return
       setProfiles({ printers, presets, filaments })
       const defaults = config.default_profiles || {}
       setForm(current => ({ ...current, printer: defaults.printers || String(printers.find(p => p.default)?.name || printers[0]?.name || ''), preset: defaults.presets || String(presets.find(p => p.default)?.name || presets[0]?.name || ''), filament: defaults.filaments || String(filaments.find(p => p.default)?.name || filaments[0]?.name || '') }))
-    }).catch(err => setMessage(err instanceof Error ? err.message : 'Failed to load slicer profiles'))
+    }).catch(err => { if (!ignore) setMessage(err instanceof Error ? err.message : 'Failed to load slicer profiles') })
+    return () => { ignore = true; gate.invalidate() }
   }, [])
 
   const generatePreview = async () => {
+    const request = requestGate.current.begin()
+    const requestedKey = currentPreviewKey
     setBusy('preview')
     setMessage('Generating preview. Large models can take a while...')
     setPreviewResult(null)
     try {
       const result = await slicerApi.preview({ stl_file_id: file.id, printer: form.printer, preset: form.preset, filament: form.filament, arrange: form.arrange, orient: form.orient, enable_support: form.enable_support, brim_type: form.brim_type, print_sequence_by_object: form.print_sequence_by_object })
+      if (!requestGate.current.isCurrent(request)) return
       setPreviewResult(result)
+      setPreviewKey(requestedKey)
+      setMessage('Preview gerado para os parâmetros enviados.')
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : 'Failed to generate preview')
+      if (requestGate.current.isCurrent(request)) setMessage(err instanceof Error ? err.message : 'Failed to generate preview')
     } finally {
-      setBusy('')
+      if (requestGate.current.isCurrent(request)) setBusy('')
     }
   }
 
   const slice = async () => {
+    const request = requestGate.current.begin()
     setBusy('slice')
-    setMessage('Slicing in Orca container. This can take a while...')
+    setMessage('Enviando tarefa em segundo plano. Em caso de erro, tente novamente sem mudar os parâmetros para reutilizar a mesma chave.')
     try {
-      await slicerApi.sliceSTL({ stl_file_id: file.id, ...form, export_type: 'gcode' })
-      setMessage('G-code generated and linked to STL.')
+      const payload = { stl_file_id: file.id, ...form, export_type: 'gcode' }
+      await slicerApi.submitJob(payload, slicerSubmissionKey(payload))
+      if (!requestGate.current.isCurrent(request)) return
+      setMessage('Tarefa registrada. Acompanhe no painel da biblioteca.')
       onDone()
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : 'Failed to slice STL')
+      if (requestGate.current.isCurrent(request)) setMessage(err instanceof Error ? err.message : 'Failed to slice STL')
     } finally {
-      setBusy('')
+      if (requestGate.current.isCurrent(request)) setBusy('')
     }
   }
 
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
       <div className="card p-6 w-full max-w-4xl max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between mb-4"><div><h2 className="text-xl font-semibold text-surface-100">Fatiar STL com Orca</h2><p className="text-sm text-surface-500 truncate">{file.display_name}</p></div><button onClick={onClose} className="btn btn-ghost text-sm">Close</button></div>
+        <div className="flex items-center justify-between mb-4"><div><h2 className="text-xl font-semibold text-surface-100">Fatiar STL com Orca</h2><p className="text-sm text-surface-500 truncate">{file.display_name}</p></div><button onClick={closeModal} className="btn btn-ghost text-sm">Close</button></div>
         {message && <div className="mb-4 rounded-lg border border-surface-800 bg-surface-900/70 p-3 text-sm text-surface-300">{message}</div>}
+        {previewIsStale && <div role="status" className="mb-4 rounded-lg border border-amber-500/40 p-3 text-sm text-amber-300">Preview desatualizado — os parâmetros mudaram. Imagem e estimativas abaixo não são válidas para a configuração atual. Gere outro preview.</div>}
+        {busy && <p className="mb-3 text-xs text-surface-400">Fechar ignora a resposta nesta janela, mas não cancela o trabalho no servidor.</p>}
         <div className="grid gap-5 md:grid-cols-[1fr_340px]">
           <div className="space-y-4">
             <label className="block"><span className="text-xs text-surface-500 mb-1 block">Printer profile</span><select className="input" value={form.printer} onChange={e => setForm({ ...form, printer: e.target.value })}>{profiles.printers.map(p => <option key={String(p.name)} value={String(p.name)}>{String(p.name)}</option>)}</select></label>
@@ -632,9 +668,10 @@ function SliceSTLModal({ file, onClose, onDone }: { file: STLLibraryFile; onClos
             <label className="block"><span className="text-xs text-surface-500 mb-1 block">Filament profile</span><select className="input" value={form.filament} onChange={e => setForm({ ...form, filament: e.target.value })}>{profiles.filaments.map(p => <option key={String(p.name)} value={String(p.name)}>{String(p.name)}</option>)}</select></label>
             <label className="block"><span className="text-xs text-surface-500 mb-1 block">G-code name</span><input className="input" value={form.display_name} onChange={e => setForm({ ...form, display_name: e.target.value })} /></label>
             <div className="rounded-xl border border-surface-800 bg-surface-900/60 p-4"><div className="text-xs font-medium text-surface-400 mb-3">Opções de fatiamento</div><div className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm"><label className="inline-flex items-center gap-3 cursor-pointer select-none"><input type="checkbox" className="sr-only peer" checked={form.arrange} onChange={e => setForm({ ...form, arrange: e.target.checked })} /><span className="relative inline-flex h-6 w-11 shrink-0 items-center rounded-full bg-surface-700 transition-colors peer-focus-visible:ring-2 peer-focus-visible:ring-accent-500/50 peer-checked:bg-accent-500 after:absolute after:left-0.5 after:top-0.5 after:h-5 after:w-5 after:rounded-full after:bg-white after:shadow after:transition-all peer-checked:after:translate-x-5" /><span>Auto-arrange</span></label><label className="inline-flex items-center gap-3 cursor-pointer select-none"><input type="checkbox" className="sr-only peer" checked={form.orient} onChange={e => setForm({ ...form, orient: e.target.checked })} /><span className="relative inline-flex h-6 w-11 shrink-0 items-center rounded-full bg-surface-700 transition-colors peer-focus-visible:ring-2 peer-focus-visible:ring-accent-500/50 peer-checked:bg-accent-500 after:absolute after:left-0.5 after:top-0.5 after:h-5 after:w-5 after:rounded-full after:bg-white after:shadow after:transition-all peer-checked:after:translate-x-5" /><span>Auto-orient</span></label><label className="inline-flex items-center gap-3 cursor-pointer select-none"><input type="checkbox" className="sr-only peer" checked={form.enable_support} onChange={e => setForm({ ...form, enable_support: e.target.checked })} /><span className="relative inline-flex h-6 w-11 shrink-0 items-center rounded-full bg-surface-700 transition-colors peer-focus-visible:ring-2 peer-focus-visible:ring-accent-500/50 peer-checked:bg-accent-500 after:absolute after:left-0.5 after:top-0.5 after:h-5 after:w-5 after:rounded-full after:bg-white after:shadow after:transition-all peer-checked:after:translate-x-5" /><span>Suporte</span></label><label className="inline-flex items-center gap-3 cursor-pointer select-none"><input type="checkbox" className="sr-only peer" checked={form.brim_type} onChange={e => setForm({ ...form, brim_type: e.target.checked })} /><span className="relative inline-flex h-6 w-11 shrink-0 items-center rounded-full bg-surface-700 transition-colors peer-focus-visible:ring-2 peer-focus-visible:ring-accent-500/50 peer-checked:bg-accent-500 after:absolute after:left-0.5 after:top-0.5 after:h-5 after:w-5 after:rounded-full after:bg-white after:shadow after:transition-all peer-checked:after:translate-x-5" /><span>Borda</span></label><label className="inline-flex items-center gap-3 cursor-pointer select-none"><input type="checkbox" className="sr-only peer" checked={form.print_sequence_by_object} onChange={e => setForm({ ...form, print_sequence_by_object: e.target.checked })} /><span className="relative inline-flex h-6 w-11 shrink-0 items-center rounded-full bg-surface-700 transition-colors peer-focus-visible:ring-2 peer-focus-visible:ring-accent-500/50 peer-checked:bg-accent-500 after:absolute after:left-0.5 after:top-0.5 after:h-5 after:w-5 after:rounded-full after:bg-white after:shadow after:transition-all peer-checked:after:translate-x-5" /><span>Sequência por objeto</span></label>{form.print_sequence_by_object && <div className="col-span-2 mt-1 text-xs text-amber-400">Atenção: Pode causar colisão</div>}</div></div>
-            <div className="flex gap-2"><button className="btn btn-secondary" disabled={!!busy} onClick={generatePreview} type="button">{busy === 'preview' ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Gerando preview...</> : 'Gerar Preview'}</button><button className="btn btn-primary" disabled={!!busy || !form.printer || !form.preset || !form.filament} onClick={slice} type="button">{busy === 'slice' ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Gerando G-code...</> : 'Gerar G-code'}</button></div>
+            <div className="flex gap-2"><button className="btn btn-secondary" disabled={!!busy || !form.printer || !form.preset || !form.filament} onClick={generatePreview} type="button">{busy === 'preview' ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Gerando preview...</> : 'Gerar Preview'}</button><button className="btn btn-primary" disabled={!!busy || !form.printer || !form.preset || !form.filament} onClick={slice} type="button">{busy === 'slice' ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Gerando G-code...</> : 'Gerar em segundo plano'}</button></div>
+            <p className="text-xs text-surface-400">Você pode navegar após o envio. Repetir os mesmos parâmetros consulta a mesma tarefa, inclusive após falha de rede; para refazer, remova explicitamente o registro encerrado do histórico. Mudar parâmetros pode criar outra tarefa. Após recarregar a página, confira o painel antes de reenviar: a chave local não sobrevive ao reload.</p>
           </div>
-          <div className="rounded-xl border border-surface-800 bg-surface-900/70 p-3"><div className="mb-2 text-sm font-medium text-surface-200">Preview</div>{busy === 'preview' ? <SlicerLoadingState title="Gerando preview" description="Preparando o modelo e renderizando a prévia. Arquivos grandes podem demorar alguns minutos." /> : busy === 'slice' ? <SlicerLoadingState title="Gerando G-code" description="O Orca está fatiando o STL no container. Não feche esta janela até o processo terminar." /> : previewResult ? <div className="space-y-3"><img src={`data:image/png;base64,${previewResult.thumbnail}`} alt="Preview" className="rounded border border-surface-800" /><div className="text-xs space-y-1 text-surface-300"><div>Tempo: {Math.floor(previewResult.printTime / 3600)}h {Math.floor((previewResult.printTime % 3600) / 60)}m</div><div>Filamento: {previewResult.filamentUsedG.toFixed(1)} g / {previewResult.filamentUsedMm.toFixed(0)} mm</div>{previewResult.usesSupport && <div className="text-emerald-400">Usa suporte</div>}{form.print_sequence_by_object && <div className="text-amber-400">Atenção: Pode causar colisão</div>}</div></div> : <div className="flex h-64 items-center justify-center rounded-lg border border-dashed border-surface-700 bg-surface-950/40 text-sm text-surface-600">Clique em Gerar Preview</div>}</div>
+          <div className="rounded-xl border border-surface-800 bg-surface-900/70 p-3"><div className="mb-2 text-sm font-medium text-surface-200">Preview</div>{busy === 'preview' ? <SlicerLoadingState title="Gerando preview" description="Preparando o modelo e renderizando a prévia. Arquivos grandes podem demorar alguns minutos." /> : busy === 'slice' ? <SlicerLoadingState title="Gerando G-code" description="Registrando tarefa no PicoFarm. Fechar esta janela não cancela uma tarefa já aceita; acompanhe o painel da biblioteca." /> : previewResult ? <div className="space-y-3"><img src={`data:image/png;base64,${previewResult.thumbnail}`} alt="Preview" className="rounded border border-surface-800" /><div className="text-xs space-y-1 text-surface-300"><div>Tempo: {Math.floor(previewResult.printTime / 3600)}h {Math.floor((previewResult.printTime % 3600) / 60)}m</div><div>Filamento: {previewResult.filamentUsedG.toFixed(1)} g / {previewResult.filamentUsedMm.toFixed(0)} mm</div>{previewResult.usesSupport && <div className="text-emerald-400">Usa suporte</div>}{form.print_sequence_by_object && <div className="text-amber-400">Atenção: Pode causar colisão</div>}</div></div> : <div className="flex h-64 items-center justify-center rounded-lg border border-dashed border-surface-700 bg-surface-950/40 text-sm text-surface-600">Clique em Gerar Preview</div>}</div>
         </div>
       </div>
     </div>
@@ -682,6 +719,7 @@ function STLDetailsModal({ file, tags, onCreateTag, onAddTag, onRemoveTag, onClo
             </div>
           </div>
         </div>
+        <GCodeVariantComparison file={file} />
       </div>
     </div>
   )

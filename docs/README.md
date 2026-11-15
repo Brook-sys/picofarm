@@ -10,7 +10,9 @@ This directory contains the operational documentation for PicoFarm. Prefer updat
 - [API and data contracts](API_CONTRACTS.md) — HTTP/JSON conventions, route groups, shared enum values, and Go/TypeScript synchronization rules.
 - [Sales channels architecture](SALES_CHANNELS.md) — modular provider/adapters plan for Etsy, Squarespace, Shopify, and future commerce channels.
 - [Regression matrix](REGRESSION_MATRIX.md) — critical user flows to validate manually or automate as tests.
-- [Improvements roadmap](IMPROVEMENTS_ROADMAP.md) — prioritized, non-implemented proposals for PicoFarm, frontend performance, and the slicer API.
+- [Improvements roadmap](IMPROVEMENTS_ROADMAP.md) — selected proposals and status of implemented local increments.
+- [Slicer refinements](SLICER_REFINEMENTS.md) — editor contracts, snapshots, viewer budgets, test evidence and limitations.
+- [Background slicer jobs](SLICER_JOBS.md) — bounded local queue, idempotency, recovery and cancellation boundaries.
 - [Security model](SECURITY_MODEL.md) — current assumptions and hardening work for local/self-hosted operation.
 - [Sensitive endpoint inventory](SECURITY_ENDPOINTS.md) — route-level risk classes for printer control, files, backups, settings, public routes, and integrations.
 

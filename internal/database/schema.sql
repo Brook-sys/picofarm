@@ -1,6 +1,20 @@
 -- PicoFarm SQLite Schema
 -- Consolidated from PostgreSQL migrations 001-013
 
+-- Immutable editor recovery snapshots. Upload outcome is deliberately not
+-- implied: the remote slicer may accept a write even when its response is lost.
+CREATE TABLE IF NOT EXISTS slicer_profile_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    source_hash TEXT NOT NULL,
+    category TEXT NOT NULL,
+    name TEXT NOT NULL,
+    hash TEXT NOT NULL,
+    json TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
+CREATE INDEX IF NOT EXISTS idx_slicer_profile_history_lookup
+    ON slicer_profile_history(source_hash, category, name, id DESC);
+
 -- Files table (content-addressed storage)
 CREATE TABLE IF NOT EXISTS files (
     id TEXT PRIMARY KEY,

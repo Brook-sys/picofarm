@@ -356,7 +356,21 @@ export type SlicerImportResult = {
   profiles: Array<{ category: string; name: string; status: string; message?: string }>
 }
 
+export type SlicerProfileValidation = { valid: boolean; errors: string[]; warnings: string[] }
+export type SlicerProfileHistory = {
+  current_json: string
+  current_hash: string
+  revisions: Array<{ id: number; hash: string; json: string; created_at: string }>
+}
+
 export const slicerApi = {
+  listJobs: () => fetchApi<import('../components/SlicerJobsPanel').SlicerJobView[]>('/slicer/jobs'),
+  submitJob: (data: Record<string, unknown>, key: string) => fetchApi<import('../components/SlicerJobsPanel').SlicerJobView>('/slicer/jobs', { method: 'POST', headers: { 'Idempotency-Key': key }, body: JSON.stringify(data) }),
+  cancelJob: (id: string) => fetchApi<import('../components/SlicerJobsPanel').SlicerJobView>(`/slicer/jobs/${encodeURIComponent(id)}/cancel`, { method: 'POST' }),
+  deleteJob: (id: string) => fetchApi<void>(`/slicer/jobs/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  validateProfile: (data: { category: string; name: string; json: string }) => fetchApi<SlicerProfileValidation>('/slicer/profiles/validate', { method: 'POST', body: JSON.stringify(data) }),
+  profileHistory: (category: string, name: string) => fetchApi<SlicerProfileHistory>(`/slicer/profiles/${category}/${encodeURIComponent(name)}/history`),
+  saveProfileRevision: (data: { category: string; name: string; json: string; expected_hash: string }) => fetchApi<SlicerProfileHistory>('/slicer/profiles/revisions', { method: 'POST', body: JSON.stringify(data) }),
   getConfig: () => fetchApi<{ connection_url: string; connection_url_source?: string; default_profiles?: Record<string, string> }>('/slicer/config'),
   setConfig: (connectionUrl: string) => fetchApi<{ connection_url: string; connection_url_source?: string }>('/slicer/config', { method: 'PUT', body: JSON.stringify({ connection_url: connectionUrl }) }),
   health: () => fetchApi<Record<string, unknown>>('/slicer/health'),

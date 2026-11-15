@@ -104,6 +104,12 @@ func main() {
 		},
 	}
 	services := service.NewServicesWithConfig(repos, fileStorage, printerManager, hub, servicesConfig)
+	services.SlicerJobs, err = service.NewSlicerJobsService(context.Background(), services.Settings, services.Slicer)
+	if err != nil {
+		slog.Error("failed to initialize slicer jobs", "error", err)
+		os.Exit(1)
+	}
+	defer services.SlicerJobs.Close()
 
 	// Initialize backup service with database access
 	backupService := service.NewBackupService(db, dbPath)

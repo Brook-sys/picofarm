@@ -1,7 +1,28 @@
 # Plano de melhorias e correções — PicoFarm e Orca Slicer API
 
-**Status:** planejamento, não implementação.
-**Última consolidação:** 2026-11-14.
+**Status:** planejamento com incrementos locais implementados; não implica deploy.
+**Última consolidação:** 2026-11-15.
+
+## Incremento do fatiador implementado nesta rodada
+
+- Contrato preview/slice alinhado, booleanos explícitos e multipart temporário em disco no PicoFarm. Não há benchmark de RSS ou disco; o orçamento global de recursos abaixo continua pendente.
+- Comparação de 2–4 G-codes existentes do mesmo STL, preview desatualizado identificado e paginação local de 50 grupos. Comparação de novos cenários não foi implementada.
+- Viewer com dimensões/eixos originais, unidade mm assumida, vistas rápidas e render sob demanda. Preview limitado a 32 MiB/500 mil triângulos; parsing ainda síncrono.
+- Editor Validate → Save, conflito por hash e snapshots imutáveis. Preflight parcial, não certificação Orca ou de segurança física. Ver limites em API/security.
+- Fila local PicoFarm com uma execução e oito esperando, sem replay após restart. Ver [SLICER_JOBS.md](SLICER_JOBS.md).
+- No repositório do slicer: suporte do preview preservado e cache isolado por entradas/perfis/executável; testes com CLI sintético, sem validação Orca real nesta rodada.
+
+### Seleção aprovada ainda pendente
+
+Preservação de encomendas antigas; comparação A/B de novos fatiamentos; página Simulações; margem de material; compras por demanda; rastreabilidade e custo final de bobinas; organização em massa (primeiro tags/vínculos); simulador comercial; estoque pronto; remessas parciais; visões salvas; controle de notificações. Não são funcionalidades entregues.
+
+### Delimitação da seleção
+
+Ficam para futuro explícito: painel de pendências, contagem boa/refugo/faltante, roteiro de bancada, perfis rápidos de teste e aproveitamento de sobras. Repetir encomenda e licenças comerciais continuam condicionais. Novos overrides no modal não foram aprovados.
+
+Descartados nesta seleção: substituição de material, reutilização de receita G-code, painel independente de resolução de perfis, superfície de mesa, relatório de upload, experimentos, briefing, aprovação pública, revisão comercial, CRM, sinal/saldo, financeiro por pedido, personalização por item, pós-venda e busca global. A validação dentro do editor permanece no escopo. Tokens não foram alterados; logo continua na menor prioridade.
+
+As propostas abaixo são backlog de investigação e não autorização automática para implementar itens descartados ou futuros.
 **Prioridade da marca/logo:** baixa, no fim do plano. A logo correta foi implantada; melhorias gráficas ficam como polimento opcional.
 
 Este documento reúne problemas observados, propostas e critérios para decidir trabalhos futuros. Uma proposta não significa que o problema esteja reproduzido, que já exista uma solução aprovada ou que haja compromisso de prazo. Antes de cada ciclo: confirmar o estado atual em código/produção, definir escopo, risco, testes e critérios mensuráveis. Não incluir segredos nem detalhes do ambiente local aqui.
@@ -47,7 +68,7 @@ Esta ordem prioriza risco de perda de dados e indisponibilidade antes de funcion
 
 ## P0 — Slicer: memória e capacidade
 
-**Motivo/evidência:** `AUD-04` confirma que o PicoFarm copia o STL inteiro para memória antes de enviar slice/preview. No serviço slicer, examinar também buffering multipart, geração de thumbnail, cache e processos externos. Ainda não há medição de RSS nem carga para quantificar o risco.
+**Motivo/evidência histórica:** `AUD-04` identificou cópia integral do STL em memória no PicoFarm. Nesta rodada o multipart de slice/preview passou a temporário em disco; isso não limita tamanho nem comprova o consumo global. No serviço slicer, examinar também buffering multipart, geração de thumbnail, cache e processos externos. Ainda não há medição de RSS nem carga para quantificar o risco.
 
 **Proposta incremental:** primeiro definir modelo de recursos: máximo de bytes por entrada, memória disponível, timeout por fase e concorrência permitida. Medir heap/RSS com modelos sintéticos progressivos e chamadas concorrentes. Em seguida considerar streaming multipart para o backend PicoFarm e slicer, admission control com semáforo e fila limitada/rejeição explícita. Evitar “otimizar” sem perfil de memória comparável.
 

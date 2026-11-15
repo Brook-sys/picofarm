@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Plus, Globe, CheckCircle, XCircle, RefreshCw, Server, ExternalLink, DownloadCloud, Upload, Pencil, Save } from 'lucide-react'
 import { slicerApi, type SlicerProfileBundle } from '../api/client'
 
 type ProfileCategory = 'printers' | 'presets' | 'filaments'
 type AddModalState = { category: ProfileCategory; mode: 'url' | 'json'; name: string; url: string; json: string; overwrite: boolean; status: 'idle' | 'importing'; message: string } | null
-type EditModalState = { category: ProfileCategory; name: string; json: string; originalJson: string; status: 'loading' | 'idle' | 'saving' | 'saved' | 'error'; message: string } | null
+type ProfileRevision = { id: number; hash: string; json: string; created_at: string }
+type EditModalState = { category: ProfileCategory; name: string; json: string; originalJson: string; currentHash: string; revisions: ProfileRevision[]; validation: { valid: boolean; errors: string[]; warnings: string[] } | null; status: 'loading' | 'validating' | 'idle' | 'saving' | 'saved' | 'error'; message: string } | null
 type RestoreState = { bundle: SlicerProfileBundle; overwrite: boolean; status: 'idle' | 'restoring'; message: string } | null
 
 const CATEGORIES: Array<{ key: ProfileCategory; title: string; description: string }> = [
@@ -26,6 +27,8 @@ export default function SlicerSettings() {
   const [success, setSuccess] = useState('')
   const [addModal, setAddModal] = useState<AddModalState>(null)
   const [editModal, setEditModal] = useState<EditModalState>(null)
+  const editorRequest = useRef(0)
+  const editorBusy = useRef(false)
   const [restoreModal, setRestoreModal] = useState<RestoreState>(null)
 
   useEffect(() => {
@@ -67,27 +70,48 @@ export default function SlicerSettings() {
     return () => { cancelled = true }
   }, [])
 
-  const editCategory = editModal?.category
-  const editName = editModal?.name
-  const editJson = editModal?.json
-  const editOriginalJson = editModal?.originalJson
-  const editStatus = editModal?.status
-
+  const editorDirty = !!editModal && editModal.json !== editModal.originalJson
   useEffect(() => {
-    if (!editCategory || !editName || !editJson || editStatus === 'loading' || editJson === editOriginalJson) return
-    const timer = window.setTimeout(async () => {
-      try {
-        JSON.parse(editJson)
-        setEditModal(current => current ? { ...current, status: 'saving', message: 'Saving...' } : current)
-        await slicerApi.uploadProfileJSON({ category: editCategory, name: editName, json: editJson })
-        setEditModal(current => current ? { ...current, originalJson: current.json, status: 'saved', message: 'Saved automatically' } : current)
-        await loadProfiles(false)
-      } catch (err) {
-        setEditModal(current => current ? { ...current, status: 'error', message: err instanceof Error ? err.message : 'Save failed' } : current)
-      }
-    }, 900)
-    return () => window.clearTimeout(timer)
-  }, [editCategory, editName, editJson, editOriginalJson, editStatus])
+    if (!editorDirty) return
+    const warnBeforeUnload = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = '' }
+    window.addEventListener('beforeunload', warnBeforeUnload)
+    return () => window.removeEventListener('beforeunload', warnBeforeUnload)
+  }, [editorDirty])
+
+  const closeEditor = () => {
+    if (editorBusy.current) return
+    if (editModal && editModal.json !== editModal.originalJson && !window.confirm('Discard unsaved profile changes?')) return
+    editorRequest.current++
+    setEditModal(null)
+  }
+
+  const validateEditor = async () => {
+    if (!editModal || editorBusy.current) return
+    const draft = editModal
+    editorBusy.current = true
+    setEditModal({ ...draft, status: 'validating', message: '' })
+    try {
+      const validation = await slicerApi.validateProfile({ category: draft.category, name: draft.name, json: draft.json })
+      setEditModal(current => current ? { ...current, status: 'idle', validation, message: validation.valid ? 'Preflight checks passed. Review warnings before saving.' : 'Fix validation errors before saving.' } : current)
+    } catch (err) {
+      setEditModal(current => current ? { ...current, status: 'error', message: err instanceof Error ? err.message : 'Validation failed' } : current)
+    } finally { editorBusy.current = false }
+  }
+
+  const saveEditor = async () => {
+    if (!editModal || editorBusy.current || !editModal.validation?.valid || !editModal.currentHash) return
+    const draft = editModal
+    editorBusy.current = true
+    setEditModal({ ...draft, status: 'saving', message: 'Saving with recovery snapshots...' })
+    try {
+      const result = await slicerApi.saveProfileRevision({ category: draft.category, name: draft.name, json: draft.json, expected_hash: draft.currentHash })
+      const json = JSON.stringify(JSON.parse(result.current_json), null, 2)
+      setEditModal(current => current ? { ...current, json, originalJson: json, currentHash: result.current_hash, revisions: result.revisions, validation: null, status: 'saved', message: 'Saved and read back from slicer.' } : current)
+      await loadProfiles(false)
+    } catch (err) {
+      setEditModal(current => current ? { ...current, status: 'error', message: err instanceof Error ? err.message : 'Save failed; reload before retrying if outcome is uncertain.' } : current)
+    } finally { editorBusy.current = false }
+  }
 
   const saveConnection = async () => {
     setBusy('save')
@@ -183,13 +207,18 @@ export default function SlicerSettings() {
   }
 
   const editProfile = async (category: ProfileCategory, name: string) => {
-    setEditModal({ category, name, json: '', originalJson: '', status: 'loading', message: 'Loading profile...' })
+    if (editorBusy.current) return
+    const request = ++editorRequest.current
+    const initial: NonNullable<EditModalState> = { category, name, json: '', originalJson: '', currentHash: '', revisions: [], validation: null, status: 'loading', message: 'Loading profile and recovery history...' }
+    setEditModal(initial)
     try {
-      const profile = await slicerApi.profileJSON(category, name)
-      const json = JSON.stringify(profile, null, 2)
-      setEditModal({ category, name, json, originalJson: json, status: 'idle', message: '' })
+      const result = await slicerApi.profileHistory(category, name)
+      if (request !== editorRequest.current) return
+      const json = JSON.stringify(JSON.parse(result.current_json), null, 2)
+      setEditModal({ ...initial, json, originalJson: json, currentHash: result.current_hash, revisions: result.revisions, status: 'idle', message: '' })
     } catch (err) {
-      setEditModal({ category, name, json: '', originalJson: '', status: 'error', message: err instanceof Error ? err.message : 'Failed to load profile' })
+      if (request !== editorRequest.current) return
+      setEditModal({ ...initial, status: 'error', message: err instanceof Error ? err.message : 'Failed to load profile' })
     }
   }
 
@@ -392,12 +421,21 @@ export default function SlicerSettings() {
           </div>
         </div>
         <p className="text-xs text-surface-500">
-          Restoring never overwrites a profile that already exists unless you ask it to: the slicer has no delete endpoint, so a skipped profile keeps
+          Restoring never overwrites a profile that already exists unless you ask it to. A skipped profile keeps
           working while a replaced one is gone. Default profile selections are not part of the bundle — set those again after a restore.
         </p>
       </div>
 
-      {editModal && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"><div className="card w-full max-w-4xl p-6"><div className="flex items-start justify-between gap-4 mb-4"><div><h2 className="text-xl font-semibold text-surface-100">Edit {editModal.name}</h2><p className="text-sm text-surface-500">{editModal.category} · JSON autosaves after you stop typing.</p></div><button onClick={() => setEditModal(null)} className="btn btn-secondary">Close</button></div>{editModal.message && <div className={editModal.status === 'error' ? 'mb-3 text-sm text-red-300' : 'mb-3 text-sm text-emerald-300'}>{editModal.message}</div>}{editModal.status === 'loading' ? <div className="py-12 text-center text-surface-500">Loading...</div> : <textarea value={editModal.json} onChange={e => setEditModal(current => current ? { ...current, json: e.target.value, status: 'idle', message: '' } : current)} className="input min-h-[60vh] font-mono text-xs" spellCheck={false} />}</div></div>}
+      {editModal && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"><div role="dialog" aria-modal="true" aria-labelledby="profile-editor-title" className="card w-full max-w-4xl p-6 max-h-[95vh] overflow-y-auto">
+        <div className="flex items-start justify-between gap-4 mb-4"><div><h2 id="profile-editor-title" className="text-xl font-semibold text-surface-100">Edit {editModal.name}</h2><p className="text-sm text-surface-500">{editModal.category} · Changes are only sent when you click Save.</p></div><button onClick={closeEditor} disabled={editModal.status === 'saving' || editModal.status === 'validating'} className="btn btn-secondary">Close</button></div>
+        {editModal.message && <div role="status" className={editModal.status === 'error' ? 'mb-3 text-sm text-red-300' : 'mb-3 text-sm text-surface-300'}>{editModal.message}</div>}
+        {editModal.status === 'loading' ? <div className="py-12 text-center text-surface-500">Loading...</div> : <>
+          <textarea aria-label="Profile JSON" value={editModal.json} disabled={!editModal.currentHash || editModal.status === 'saving' || editModal.status === 'validating'} onChange={e => setEditModal(current => current ? { ...current, json: e.target.value, validation: null, status: 'idle', message: '' } : current)} className="input min-h-[40vh] font-mono text-xs" spellCheck={false} />
+          {editModal.validation && <div className="my-3 text-sm"><ul className="text-red-300">{editModal.validation.errors.map((message, index) => <li key={index}>{message}</li>)}</ul><ul className="text-amber-200">{editModal.validation.warnings.map((message, index) => <li key={index}>{message}</li>)}</ul></div>}
+          <div className="flex justify-end gap-2 my-3"><span className="text-xs text-surface-400 mr-auto">{editModal.json !== editModal.originalJson ? 'Unsaved changes' : 'No unsaved changes'}</span><button onClick={() => { if (editModal.json === editModal.originalJson || window.confirm('Discard draft and reload current slicer profile?')) editProfile(editModal.category, editModal.name) }} disabled={editModal.status === 'saving' || editModal.status === 'validating'} className="btn btn-secondary">Reload</button><button onClick={validateEditor} disabled={!editModal.currentHash || editModal.status === 'saving' || editModal.status === 'validating'} className="btn btn-secondary">Validate</button><button onClick={saveEditor} disabled={!editModal.validation?.valid || !editModal.currentHash || editModal.json === editModal.originalJson || editModal.status === 'saving' || editModal.status === 'validating'} className="btn btn-primary"><Save className="h-4 w-4 mr-2" />Save</button></div>
+          <details className="border-t border-surface-800 pt-3"><summary className="text-sm text-surface-300 cursor-pointer">Recovery snapshots ({editModal.revisions.length}, latest 50, up to 4 MiB)</summary><p className="text-xs text-surface-500 my-2">Snapshots include attempted saves, not only successful ones. Load into draft, validate and Save to create a new revision. Recovery covers this editor, not direct slicer edits or import/sync paths. Storage is capped at 64 MiB globally; when full, saves are refused without deleting snapshots. Export a full backup separately.</p><div className="space-y-2">{editModal.revisions.map(revision => <div key={revision.id} className="flex items-center justify-between gap-2 text-xs text-surface-400"><span>#{revision.id} · {revision.created_at} · {revision.hash.slice(0, 12)}</span><button disabled={editModal.status === 'saving' || editModal.status === 'validating'} onClick={() => { if (editModal.json !== editModal.originalJson && !window.confirm('Replace unsaved draft with this snapshot?')) return; setEditModal(current => current ? { ...current, json: JSON.stringify(JSON.parse(revision.json), null, 2), validation: null, status: 'idle', message: 'Snapshot loaded into draft; nothing sent to slicer.' } : current) }} className="btn btn-secondary text-xs">Load into draft</button></div>)}</div></details>
+        </>}
+      </div></div>}
 
       {addModal && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"><div className="card w-full max-w-lg p-6"><h2 className="text-xl font-semibold text-surface-100 mb-1">Import {addModal.category} profile</h2><p className="text-sm text-surface-500 mb-4">Import from a raw HTTPS URL or paste the Orca profile JSON directly.</p><div className="space-y-4"><div className="flex rounded-lg border border-surface-800 bg-surface-900/50 p-1"><button onClick={() => setAddModal({ ...addModal, mode: 'url' })} className={addModal.mode === 'url' ? 'btn btn-primary flex-1 text-xs' : 'btn btn-ghost flex-1 text-xs'}>URL</button><button onClick={() => setAddModal({ ...addModal, mode: 'json' })} className={addModal.mode === 'json' ? 'btn btn-primary flex-1 text-xs' : 'btn btn-ghost flex-1 text-xs'}>Raw JSON</button></div><label className="block"><span className="text-xs text-surface-500 mb-1 block">Profile name {addModal.mode === 'json' ? '(optional, uses JSON name)' : ''}</span><input value={addModal.name} onChange={e => setAddModal({ ...addModal, name: e.target.value })} className="input" placeholder="standard-020" autoFocus /></label>{addModal.mode === 'url' ? <><label className="block"><span className="text-xs text-surface-500 mb-1 block">Raw JSON URL</span><input value={addModal.url} onChange={e => setAddModal({ ...addModal, url: e.target.value })} className="input" placeholder="https://raw.githubusercontent.com/.../profile.json" /></label><label className="flex items-center gap-2 text-sm text-surface-300"><input type="checkbox" checked={addModal.overwrite} onChange={e => setAddModal({ ...addModal, overwrite: e.target.checked })} />Overwrite existing profile</label></> : <label className="block"><span className="text-xs text-surface-500 mb-1 block">Profile JSON</span><textarea value={addModal.json} onChange={e => setAddModal({ ...addModal, json: e.target.value })} className="input min-h-56 font-mono text-xs" placeholder='{ "layer_height": "0.20" }' /></label>}{addModal.message && <div className="text-xs text-red-400">{addModal.message}</div>}</div><div className="mt-6 flex justify-end gap-2"><button onClick={() => setAddModal(null)} className="btn btn-secondary">Cancel</button><button onClick={importProfile} disabled={(addModal.mode === 'url' && (!addModal.name.trim() || !addModal.url.trim())) || (addModal.mode === 'json' && !addModal.json.trim()) || addModal.status === 'importing'} className="btn btn-primary">Import</button></div></div></div>}
 

@@ -2,6 +2,8 @@
 
 This document records PicoFarm's current security assumptions and the hardening work needed before broader self-hosted exposure.
 
+Slicer snapshots, queue isolation and validation limits: [SLICER_REFINEMENTS.md](SLICER_REFINEMENTS.md).
+
 ## Current operating assumption
 
 PicoFarm currently appears optimized for local or trusted-network operation. It manages sensitive operational capabilities:

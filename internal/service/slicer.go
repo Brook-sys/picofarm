@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -23,11 +24,15 @@ import (
 )
 
 type SlicerService struct {
-	settings *SettingsService
-	stls     *repository.STLLibraryRepository
-	files    *repository.FileRepository
-	gcodes   *GCodeLibraryService
-	storage  storage.Storage
+	// operationURL is immutable on an operation-local copy. Never set it on the
+	// shared service: configuration changes apply only to subsequent operations.
+	operationURL          string
+	profileMutationLocked bool
+	settings              *SettingsService
+	stls                  *repository.STLLibraryRepository
+	files                 *repository.FileRepository
+	gcodes                *GCodeLibraryService
+	storage               storage.Storage
 	// Three clients instead of one, because the operations they serve need
 	// wildly different deadlines (see the timeouts below). A single 60 minute
 	// client meant that a slicer that never answered /health kept the UI
@@ -139,16 +144,17 @@ type SlicerSliceResult struct {
 }
 
 type SlicerPreviewRequest struct {
-	STLFileID             uuid.UUID `json:"stl_file_id"`
-	Printer               string    `json:"printer"`
-	Preset                string    `json:"preset"`
-	Filament              string    `json:"filament"`
-	Arrange               bool      `json:"arrange"`
-	Orient                bool      `json:"orient"`
-	EnableSupport         bool      `json:"enable_support"`
-	BrimType              bool      `json:"brim_type"`
-	PrintSequenceByObject bool      `json:"print_sequence_by_object"`
-	MulticolorOnePlate    bool      `json:"multicolor_one_plate"`
+	STLFileID             uuid.UUID                 `json:"stl_file_id"`
+	Printer               string                    `json:"printer"`
+	Preset                string                    `json:"preset"`
+	Filament              string                    `json:"filament"`
+	Arrange               bool                      `json:"arrange"`
+	Orient                bool                      `json:"orient"`
+	EnableSupport         bool                      `json:"enable_support"`
+	BrimType              bool                      `json:"brim_type"`
+	PrintSequenceByObject bool                      `json:"print_sequence_by_object"`
+	MulticolorOnePlate    bool                      `json:"multicolor_one_plate"`
+	Overrides             map[string]map[string]any `json:"overrides"`
 }
 
 type SlicerPreviewResult struct {
@@ -220,6 +226,9 @@ func (s *SlicerService) GetConfig(ctx context.Context) (SlicerConfig, error) {
 // the stored setting, which in turn wins over nothing. The second return value
 // names the source so the UI can explain why an edit appears to have no effect.
 func (s *SlicerService) effectiveConnectionURL(ctx context.Context) (string, string, error) {
+	if s.operationURL != "" {
+		return s.operationURL, "operation", nil
+	}
 	if fromEnv := strings.TrimRight(strings.TrimSpace(os.Getenv(SlicerConnectionURLEnv)), "/"); fromEnv != "" {
 		// A malformed env value is an operator error worth reporting instead of
 		// silently falling back to a stale setting.
@@ -338,6 +347,17 @@ func (s *SlicerService) GetProfileJSON(ctx context.Context, category, name strin
 }
 
 func (s *SlicerService) ImportProfile(ctx context.Context, req SlicerImportRequest) (map[string]any, error) {
+	if !s.profileMutationLocked {
+		slicerEditorMu.Lock()
+		defer slicerEditorMu.Unlock()
+		operation, err := s.pinProfileOperation(ctx)
+		if err != nil {
+			return nil, err
+		}
+		operation.profileMutationLocked = true
+		return operation.ImportProfile(ctx, req)
+	}
+
 	category := normalizeSlicerCategory(req.Category)
 	payload, _ := json.Marshal(map[string]any{"name": req.Name, "url": req.URL, "overwrite": req.Overwrite})
 	body, err := s.doWithKind(ctx, slicerCallProfile, http.MethodPost, "/profiles/"+category+"/import-url", bytes.NewReader(payload), "application/json")
@@ -352,6 +372,17 @@ func (s *SlicerService) ImportProfile(ctx context.Context, req SlicerImportReque
 }
 
 func (s *SlicerService) UploadProfileJSON(ctx context.Context, req SlicerUploadProfileRequest) (map[string]any, error) {
+	if !s.profileMutationLocked {
+		slicerEditorMu.Lock()
+		defer slicerEditorMu.Unlock()
+		operation, err := s.pinProfileOperation(ctx)
+		if err != nil {
+			return nil, err
+		}
+		operation.profileMutationLocked = true
+		return operation.UploadProfileJSON(ctx, req)
+	}
+
 	category := normalizeSlicerCategory(req.Category)
 	var raw map[string]any
 	if err := json.Unmarshal([]byte(req.JSON), &raw); err != nil {
@@ -451,6 +482,17 @@ func (s *SlicerService) ExportProfiles(ctx context.Context, req SlicerExportRequ
 // per-profile uploads that follow may still fail individually and are reported
 // in the result rather than thrown away.
 func (s *SlicerService) ImportProfiles(ctx context.Context, req SlicerImportBundleRequest) (*SlicerImportBundleResult, error) {
+	if !s.profileMutationLocked {
+		slicerEditorMu.Lock()
+		defer slicerEditorMu.Unlock()
+		operation, err := s.pinProfileOperation(ctx)
+		if err != nil {
+			return nil, err
+		}
+		operation.profileMutationLocked = true
+		return operation.ImportProfiles(ctx, req)
+	}
+
 	profiles, err := validateSlicerBundle(req.Profiles)
 	if err != nil {
 		return nil, err
@@ -510,6 +552,17 @@ func (s *SlicerService) ImportProfiles(ctx context.Context, req SlicerImportBund
 }
 
 func (s *SlicerService) UpdateProfileFromSource(ctx context.Context, category, name string) (map[string]any, error) {
+	if !s.profileMutationLocked {
+		slicerEditorMu.Lock()
+		defer slicerEditorMu.Unlock()
+		operation, err := s.pinProfileOperation(ctx)
+		if err != nil {
+			return nil, err
+		}
+		operation.profileMutationLocked = true
+		return operation.UpdateProfileFromSource(ctx, category, name)
+	}
+
 	category = normalizeSlicerCategory(category)
 	body, err := s.doWithKind(ctx, slicerCallProfile, http.MethodPost, "/profiles/"+category+"/"+url.PathEscape(name)+"/update-from-source", nil, "")
 	if err != nil {
@@ -536,6 +589,9 @@ func (s *SlicerService) ResolveProfiles(ctx context.Context, payload map[string]
 }
 
 func (s *SlicerService) SliceSTL(ctx context.Context, req SlicerSliceRequest) (*SlicerSliceResult, error) {
+	if req.ExportType != "" && req.ExportType != "gcode" {
+		return nil, fmt.Errorf("PicoFarm STL slicing only imports gcode output")
+	}
 	stl, err := s.stls.GetByID(ctx, req.STLFileID)
 	if err != nil || stl == nil {
 		return nil, fmt.Errorf("stl file not found")
@@ -550,7 +606,14 @@ func (s *SlicerService) SliceSTL(ctx context.Context, req SlicerSliceRequest) (*
 	}
 	defer reader.Close()
 
-	body := &bytes.Buffer{}
+	// Spool multipart data to disk instead of retaining a second complete model
+	// in the Go heap. The file remains request-scoped, including cancellation.
+	body, err := os.CreateTemp("", "picofarm-slice-*.multipart")
+	if err != nil {
+		return nil, fmt.Errorf("create slicer request: %w", err)
+	}
+	defer os.Remove(body.Name())
+	defer body.Close()
 	writer := multipart.NewWriter(body)
 	part, err := writer.CreateFormFile("file", file.OriginalName)
 	if err != nil {
@@ -565,30 +628,21 @@ func (s *SlicerService) SliceSTL(ctx context.Context, req SlicerSliceRequest) (*
 	addFormField(writer, "exportType", firstNonEmpty(req.ExportType, "gcode"))
 	addFormField(writer, "resolveProfiles", "true")
 	addFormField(writer, "sanitizeProfiles", "true")
-	if req.Arrange {
-		addFormField(writer, "arrange", "true")
-	}
-	if req.Orient {
-		addFormField(writer, "orient", "true")
-	}
-	if req.EnableSupport {
-		addFormField(writer, "enableSupport", "true")
-	}
-	if req.BrimType {
-		addFormField(writer, "brim_type", "true")
-	}
-	if req.PrintSequenceByObject {
-		addFormField(writer, "print_sequence_by_object", "true")
-	}
-	if req.MulticolorOnePlate {
-		addFormField(writer, "multicolorOnePlate", "true")
-	}
+	writeSlicerOptions(writer, req.Arrange, req.Orient, req.EnableSupport, req.BrimType, req.PrintSequenceByObject, req.MulticolorOnePlate)
 	if len(req.Overrides) > 0 {
-		overrides, _ := json.Marshal(req.Overrides)
+		overrides, err := json.Marshal(req.Overrides)
+		if err != nil {
+			return nil, fmt.Errorf("invalid slicer overrides: %w", err)
+		}
 		addFormField(writer, "overrides", string(overrides))
 	}
-	writer.Close()
+	if err := writer.Close(); err != nil {
+		return nil, err
+	}
 
+	if _, err := body.Seek(0, io.SeekStart); err != nil {
+		return nil, err
+	}
 	resp, err := s.doRawWithKind(ctx, slicerCallSlice, http.MethodPost, "/slice", body, writer.FormDataContentType())
 	if err != nil {
 		return nil, err
@@ -634,7 +688,14 @@ func (s *SlicerService) PreviewSTL(ctx context.Context, req SlicerPreviewRequest
 	}
 	defer reader.Close()
 
-	body := &bytes.Buffer{}
+	// Spool multipart data to disk instead of retaining a second complete model
+	// in the Go heap. The file remains request-scoped, including cancellation.
+	body, err := os.CreateTemp("", "picofarm-slice-*.multipart")
+	if err != nil {
+		return nil, fmt.Errorf("create slicer request: %w", err)
+	}
+	defer os.Remove(body.Name())
+	defer body.Close()
 	writer := multipart.NewWriter(body)
 	part, err := writer.CreateFormFile("file", file.OriginalName)
 	if err != nil {
@@ -648,26 +709,21 @@ func (s *SlicerService) PreviewSTL(ctx context.Context, req SlicerPreviewRequest
 	addFormField(writer, "filament", req.Filament)
 	addFormField(writer, "resolveProfiles", "true")
 	addFormField(writer, "sanitizeProfiles", "true")
-	if req.Arrange {
-		addFormField(writer, "arrange", "true")
+	writeSlicerOptions(writer, req.Arrange, req.Orient, req.EnableSupport, req.BrimType, req.PrintSequenceByObject, req.MulticolorOnePlate)
+	if len(req.Overrides) > 0 {
+		overrides, err := json.Marshal(req.Overrides)
+		if err != nil {
+			return nil, fmt.Errorf("invalid slicer overrides: %w", err)
+		}
+		addFormField(writer, "overrides", string(overrides))
 	}
-	if req.Orient {
-		addFormField(writer, "orient", "true")
+	if err := writer.Close(); err != nil {
+		return nil, err
 	}
-	if req.EnableSupport {
-		addFormField(writer, "enableSupport", "true")
-	}
-	if req.BrimType {
-		addFormField(writer, "brim_type", "true")
-	}
-	if req.PrintSequenceByObject {
-		addFormField(writer, "print_sequence_by_object", "true")
-	}
-	if req.MulticolorOnePlate {
-		addFormField(writer, "multicolorOnePlate", "true")
-	}
-	writer.Close()
 
+	if _, err := body.Seek(0, io.SeekStart); err != nil {
+		return nil, err
+	}
 	resp, err := s.doRawWithKind(ctx, slicerCallSlice, http.MethodPost, "/slice/preview", body, writer.FormDataContentType())
 	if err != nil {
 		return nil, err
@@ -682,6 +738,21 @@ func (s *SlicerService) PreviewSTL(ctx context.Context, req SlicerPreviewRequest
 		return nil, fmt.Errorf("invalid preview response")
 	}
 	return &result, nil
+}
+
+// writeSlicerOptions uses the upstream multipart contract for both preview and
+// slice. Explicit false values matter: omitting a pointer-backed option leaves
+// the selected profile in control instead of honoring the user's switch.
+func writeSlicerOptions(writer *multipart.Writer, arrange, orient, support, brim, byObject, multicolor bool) {
+	for _, option := range []struct {
+		name  string
+		value bool
+	}{
+		{"arrange", arrange}, {"orient", orient}, {"enableSupport", support},
+		{"brimType", brim}, {"printSequenceByObject", byObject}, {"multicolorOnePlate", multicolor},
+	} {
+		addFormField(writer, option.name, strconv.FormatBool(option.value))
+	}
 }
 
 // slicerCallKind selects the HTTP deadline for a call. Slicing is slow by
@@ -729,6 +800,17 @@ func (s *SlicerService) doRawWithKind(ctx context.Context, kind slicerCallKind, 
 	req, err := http.NewRequestWithContext(ctx, method, baseURL+path, body)
 	if err != nil {
 		return nil, err
+	}
+	if file, ok := body.(*os.File); ok {
+		info, statErr := file.Stat()
+		if statErr != nil {
+			return nil, statErr
+		}
+		position, seekErr := file.Seek(0, io.SeekCurrent)
+		if seekErr != nil {
+			return nil, seekErr
+		}
+		req.ContentLength = info.Size() - position
 	}
 	if contentType != "" {
 		req.Header.Set("Content-Type", contentType)
