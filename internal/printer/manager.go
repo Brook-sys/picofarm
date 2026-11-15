@@ -193,14 +193,6 @@ func (m *Manager) setOffline(id uuid.UUID) {
 	}
 }
 
-// setState stores a state and broadcasts it.
-func (m *Manager) setState(id uuid.UUID, state *model.PrinterState) {
-	m.mu.Lock()
-	m.states[id] = state
-	m.mu.Unlock()
-	m.broadcast(model.EventPrinterStateUpdated, state)
-}
-
 // storeClient installs a client for a printer, closing a previous one instead
 // of leaking it. Callers must not hold mu. It reports whether the client was
 // installed, which is false when the manager is shutting down.

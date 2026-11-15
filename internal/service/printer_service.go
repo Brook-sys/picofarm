@@ -201,7 +201,7 @@ func (s *PrinterService) performReconnect(ctx context.Context, id uuid.UUID, aut
 			return err
 		}
 		if auth == nil || auth.IsExpired(0) {
-			return fmt.Errorf("Bambu Cloud authentication unavailable or expired")
+			return fmt.Errorf("bambu cloud authentication unavailable or expired")
 		}
 		p.ConnectionURI = auth.MQTTUsername
 		p.APIKey = auth.AccessToken

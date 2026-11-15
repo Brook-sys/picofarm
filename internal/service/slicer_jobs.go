@@ -1,6 +1,7 @@
 package service
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -131,7 +132,7 @@ func (s *SlicerJobsService) Submit(req SlicerSliceRequest, key string) (SlicerJo
 	for _, job := range s.jobs {
 		if job.IdempotencyKey == key {
 			existing, _ := json.Marshal(job.Request)
-			if string(existing) != string(payload) {
+			if !bytes.Equal(existing, payload) {
 				return SlicerJob{}, ErrSlicerJobInvalid
 			}
 			return cloneSlicerJob(job), nil
