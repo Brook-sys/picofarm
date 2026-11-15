@@ -37,6 +37,10 @@ Use `[REDACTED]` in docs, issues, plans, and logs shared with agents.
 
 Sales-channel integrations add OAuth tokens, API keys, webhook secrets, signed callback/query parameters, and external API error payloads. Follow `docs/SALES_CHANNELS.md` for provider contracts and never expose raw credential material through generic `/api/sales-channels/*` responses, sync-run records, frontend state, logs, fixtures, or documentation.
 
+## Camera monitoring
+
+The camera wall displays existing browser-reachable stream URLs; it does not proxy, transcode, authenticate or record them. Camera access remains subject to the camera service's own authorization, TLS and browser mixed-content rules. Do not expose cameras publicly to make the wall work. Browser layout preferences contain IDs and display settings, not stream URLs or credentials. Diagnostic URLs can contain sensitive material: redact them before sharing screenshots. Viewing pause affects only the browser preview, never the physical print. See [camera wall](CAMERA_WALL.md) for lifecycle and performance limits.
+
 ## CORS and browser origins
 
 `internal/api/router.go` restricts browser CORS origins through the `ALLOWED_ORIGINS` environment variable.

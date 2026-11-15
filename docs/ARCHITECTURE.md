@@ -52,6 +52,8 @@ The production frontend is served from `STATIC_DIR` (default `./web/dist`) on di
 
 ## Frontend layout
 
+The [camera wall](CAMERA_WALL.md) is a frontend-only monitoring view using the existing cameras and printer-state APIs; layout preferences stay in browser storage. It does not add video transcoding or recording.
+
 | Path | Responsibility |
 | --- | --- |
 | `web/src/App.tsx` | Route shell and app-level WebSocket use |

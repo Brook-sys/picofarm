@@ -4,6 +4,8 @@ This directory contains the operational documentation for PicoFarm. Prefer updat
 
 ## Start here
 
+- [Camera wall](CAMERA_WALL.md) — multi-camera layout, local viewing controls and stream/performance limitations.
+
 - [Install with Docker Compose](INSTALL_DOCKER_COMPOSE.md) — recommended BETA end-user setup, persistence, safe access, upgrades and non-Docker installation backlog.
 - [Public website](WEBSITE.md) — bilingual content, screenshot placeholders, validation and Vercel configuration.
 
