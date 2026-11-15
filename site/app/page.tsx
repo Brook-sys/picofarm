@@ -1,896 +1,138 @@
 "use client";
 
-import {
-  Layers,
-  Printer,
-  ShoppingBag,
-  BarChart3,
-  Package,
-  Receipt,
-  Wifi,
-  FileText,
-  Clock,
-  Zap,
-  Monitor,
-  Container,
-  Cloud,
-  ChevronRight,
-  ArrowRight,
-  FolderKanban,
-  CheckCircle2,
-  DollarSign,
-  RefreshCw,
-  Shield,
-  Gauge,
-  GitBranch,
-  ScanLine,
-  Boxes,
-  TrendingUp,
-  PieChart,
-  CalendarRange,
-  Menu,
-  X,
-  Github,
-  ExternalLink,
-  Bell,
-  Database,
-  ListChecks,
-  ShoppingCart,
-} from "lucide-react";
-import { useState, useEffect, useRef, type ReactNode } from "react";
+import { ArrowRight, Bell, Camera, CheckCircle2, Container, FileText, FlaskConical, FolderOpen, Github, Layers, ListOrdered, Menu, Package, Printer, ScanLine, Settings2, TriangleAlert, X } from "lucide-react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { LanguageSwitch, useLocale } from "./components/locale";
+import { landingContent } from "./components/landing-content";
 
-// ─── Animated section wrapper ───────────────────────────────────────────────
-function AnimatedSection({
-  children,
-  className = "",
-  delay = 0,
-}: {
-  children: ReactNode;
-  className?: string;
-  delay?: number;
-}) {
+const REPO = "https://github.com/Brook-sys/picofarm";
+const DAEDALUS = "https://github.com/philjestin/Daedalus";
+const primary = "inline-flex items-center justify-center gap-2 rounded-xl bg-accent-500 px-5 py-3 text-sm font-semibold text-white hover:bg-accent-600 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent-400";
+const secondary = "inline-flex items-center justify-center gap-2 rounded-xl border border-surface-700 px-5 py-3 text-sm font-medium text-surface-200 hover:border-accent-400 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent-400";
+
+function AnimatedSection({ children, className = "" }: { children: ReactNode; className?: string }) {
   const ref = useRef<HTMLDivElement>(null);
-  const [visible, setVisible] = useState(false);
-
   useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) {
-          setTimeout(() => setVisible(true), delay);
-          observer.unobserve(el);
-        }
-      },
-      { threshold: 0.1 }
-    );
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, [delay]);
-
-  return (
-    <div
-      ref={ref}
-      className={`transition-all duration-700 ${
-        visible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-8"
-      } ${className}`}
-    >
-      {children}
-    </div>
-  );
-}
-
-// ─── Feature card ───────────────────────────────────────────────────────────
-function FeatureCard({
-  icon,
-  title,
-  description,
-  delay = 0,
-}: {
-  icon: ReactNode;
-  title: string;
-  description: string;
-  delay?: number;
-}) {
-  return (
-    <AnimatedSection delay={delay}>
-      <div className="glow-card rounded-xl border border-surface-800 bg-surface-900/50 p-6 h-full">
-        <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-lg bg-accent-500/10 text-accent-500">
-          {icon}
-        </div>
-        <h3 className="mb-2 text-lg font-semibold text-surface-50">{title}</h3>
-        <p className="text-sm leading-relaxed text-surface-400">
-          {description}
-        </p>
-      </div>
-    </AnimatedSection>
-  );
-}
-
-// ─── Stat pill ──────────────────────────────────────────────────────────────
-function Stat({ value, label }: { value: string; label: string }) {
-  return (
-    <div className="text-center">
-      <div className="text-3xl font-bold gradient-text">{value}</div>
-      <div className="mt-1 text-sm text-surface-400">{label}</div>
-    </div>
-  );
-}
-
-// ─── Integration badge ──────────────────────────────────────────────────────
-function IntegrationBadge({
-  name,
-  protocol,
-  delay = 0,
-}: {
-  name: string;
-  protocol: string;
-  delay?: number;
-}) {
-  return (
-    <AnimatedSection delay={delay}>
-      <div className="glow-card flex items-center gap-4 rounded-xl border border-surface-800 bg-surface-900/50 px-6 py-5">
-        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-accent-500/10">
-          <Wifi className="h-5 w-5 text-accent-500" />
-        </div>
-        <div>
-          <div className="font-semibold text-surface-50">{name}</div>
-          <div className="font-mono text-xs text-surface-500">{protocol}</div>
-        </div>
-      </div>
-    </AnimatedSection>
-  );
-}
-
-// ─── Section heading ────────────────────────────────────────────────────────
-function SectionHeading({
-  badge,
-  title,
-  description,
-}: {
-  badge: string;
-  title: string;
-  description: string;
-}) {
-  return (
-    <AnimatedSection className="mx-auto mb-16 max-w-2xl text-center">
-      <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-accent-500/20 bg-accent-500/5 px-4 py-1.5 text-xs font-medium text-accent-400">
-        <span className="h-1.5 w-1.5 rounded-full bg-accent-500" />
-        {badge}
-      </div>
-      <h2 className="mb-4 text-3xl font-bold tracking-tight text-surface-50 sm:text-4xl">
-        {title}
-      </h2>
-      <p className="text-lg leading-relaxed text-surface-400">{description}</p>
-    </AnimatedSection>
-  );
-}
-
-// ─── Screenshot component ───────────────────────────────────────────────────
-function Screenshot({
-  src,
-  alt,
-  className = "",
-}: {
-  src: string;
-  alt: string;
-  className?: string;
-}) {
-  return (
-    <img
-      src={src}
-      alt={alt}
-      className={`w-full rounded-xl ${className}`}
-      loading="lazy"
-    />
-  );
-}
-
-// ─── Showcase row (alternating image + text) ────────────────────────────────
-function ShowcaseRow({
-  icon,
-  title,
-  description,
-  bullets,
-  reversed = false,
-  screenshot,
-  screenshotAlt,
-}: {
-  icon: ReactNode;
-  title: string;
-  description: string;
-  bullets: string[];
-  reversed?: boolean;
-  screenshot: string;
-  screenshotAlt: string;
-}) {
-  return (
-    <div
-      className={`flex flex-col gap-12 lg:flex-row lg:items-center lg:gap-16 ${
-        reversed ? "lg:flex-row-reverse" : ""
-      }`}
-    >
-      <AnimatedSection className="flex-1">
-        <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-lg bg-accent-500/10 text-accent-500">
-          {icon}
-        </div>
-        <h3 className="mb-3 text-2xl font-bold text-surface-50">{title}</h3>
-        <p className="mb-6 leading-relaxed text-surface-400">{description}</p>
-        <ul className="space-y-3">
-          {bullets.map((b, i) => (
-            <li key={i} className="flex items-start gap-3 text-sm">
-              <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-accent-500" />
-              <span className="text-surface-300">{b}</span>
-            </li>
-          ))}
-        </ul>
-      </AnimatedSection>
-
-      <AnimatedSection className="flex-1" delay={150}>
-        <div className="glow-accent rounded-2xl border border-surface-800 bg-surface-900/80 p-1">
-          <Screenshot src={screenshot} alt={screenshotAlt} />
-        </div>
-      </AnimatedSection>
-    </div>
-  );
-}
-
-// ─── Navigation ─────────────────────────────────────────────────────────────
-function Nav() {
-  const [open, setOpen] = useState(false);
-  const [scrolled, setScrolled] = useState(false);
-
-  useEffect(() => {
-    const handle = () => setScrolled(window.scrollY > 20);
-    window.addEventListener("scroll", handle, { passive: true });
-    return () => window.removeEventListener("scroll", handle);
+    const element = ref.current;
+    if (!element || !window.matchMedia || !window.IntersectionObserver) return;
+    const motion = window.matchMedia("(prefers-reduced-motion: reduce)");
+    let animation: Animation | undefined;
+    const stop = () => { if (motion.matches) animation?.cancel(); };
+    const observer = new IntersectionObserver(([entry]) => {
+      if (!entry.isIntersecting) return;
+      if (!motion.matches && element.animate) {
+        animation = element.animate([{ opacity: 0, transform: "translateY(24px)" }, { opacity: 1, transform: "translateY(0)" }], { duration: 650, easing: "ease-out" });
+      }
+      observer.unobserve(element);
+    }, { threshold: 0.08 });
+    observer.observe(element);
+    motion.addEventListener("change", stop);
+    return () => { observer.disconnect(); animation?.cancel(); motion.removeEventListener("change", stop); };
   }, []);
-
-  const links = [
-    { href: "#features", label: "Features" },
-    { href: "#printers", label: "Printers" },
-    { href: "#orders", label: "Orders" },
-    { href: "#analytics", label: "Analytics" },
-    { href: "#integrations", label: "Integrations" },
-    { href: "#deploy", label: "Deploy" },
-    { href: "/docs", label: "Docs" },
-  ];
-
-  return (
-    <nav
-      className={`fixed top-0 z-50 w-full transition-all duration-300 ${
-        scrolled
-          ? "bg-surface-950/80 backdrop-blur-xl border-b border-surface-800/50"
-          : "bg-transparent"
-      }`}
-    >
-      <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
-        <a href="#" className="flex items-center gap-2.5">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent-500/10">
-            <Layers className="h-4.5 w-4.5 text-accent-500" />
-          </div>
-          <span className="text-lg font-bold tracking-tight text-surface-50">
-            PicoFarm
-          </span>
-        </a>
-
-        <div className="hidden items-center gap-8 md:flex">
-          {links.map((l) => (
-            <a
-              key={l.href}
-              href={l.href}
-              className="text-sm text-surface-400 transition-colors hover:text-surface-100"
-            >
-              {l.label}
-            </a>
-          ))}
-        </div>
-
-        <div className="hidden md:flex items-center gap-3">
-          <a
-            href="#get-started"
-            className="rounded-lg bg-accent-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-accent-600"
-          >
-            Get Started
-          </a>
-        </div>
-
-        <button
-          onClick={() => setOpen(!open)}
-          className="md:hidden text-surface-400"
-        >
-          {open ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-        </button>
-      </div>
-
-      {open && (
-        <div className="border-t border-surface-800/50 bg-surface-950/95 backdrop-blur-xl px-6 py-4 md:hidden">
-          {links.map((l) => (
-            <a
-              key={l.href}
-              href={l.href}
-              onClick={() => setOpen(false)}
-              className="block py-2 text-sm text-surface-400 transition-colors hover:text-surface-100"
-            >
-              {l.label}
-            </a>
-          ))}
-          <a
-            href="#get-started"
-            onClick={() => setOpen(false)}
-            className="mt-3 block rounded-lg bg-accent-500 px-4 py-2 text-center text-sm font-medium text-white"
-          >
-            Get Started
-          </a>
-        </div>
-      )}
-    </nav>
-  );
+  // Content stays visible if JavaScript, IntersectionObserver or animation fails.
+  return <div ref={ref} className={className}>{children}</div>;
 }
 
-// ─── Page ───────────────────────────────────────────────────────────────────
+function Brand() {
+  return <a href="/" aria-label="PicoFarm" className="flex shrink-0 items-center gap-2.5 rounded-md focus-visible:outline-2 focus-visible:outline-accent-400"><img src="/picofarm_logo.png" alt="" width={36} height={36} className="h-9 w-9 object-contain" /><span className="text-lg font-bold tracking-tight text-surface-50">PicoFarm</span></a>;
+}
+
+function Nav() {
+  const { locale } = useLocale();
+  const t = landingContent[locale];
+  const [open, setOpen] = useState(false);
+  const button = useRef<HTMLButtonElement>(null);
+  const header = useRef<HTMLElement>(null);
+  const links = ["#features", "#experimental", "#deploy", "/docs"];
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") { setOpen(false); button.current?.focus(); }
+    };
+    const onPointer = (event: PointerEvent) => {
+      if (!header.current?.contains(event.target as Node)) setOpen(false);
+    };
+    document.addEventListener("keydown", onKey);
+    document.addEventListener("pointerdown", onPointer);
+    return () => { document.removeEventListener("keydown", onKey); document.removeEventListener("pointerdown", onPointer); };
+  }, [open]);
+  return <header ref={header} className="fixed top-0 z-50 w-full border-b border-surface-800/70 bg-surface-950/95 backdrop-blur-xl">
+    <a href="#main" className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-lg focus:bg-surface-950 focus:p-4 focus:text-accent-400">{t.skip}</a>
+    <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-3 sm:px-6">
+      <Brand />
+      <nav aria-label={locale === "pt-BR" ? "Navegação principal" : "Main navigation"} className="hidden items-center gap-5 lg:flex">{links.map((href, i) => <a key={href} href={href} className="rounded text-sm text-surface-300 hover:text-white focus-visible:outline-2 focus-visible:outline-accent-400">{t.nav[i]}</a>)}</nav>
+      <div className="flex items-center gap-2"><LanguageSwitch /><button ref={button} type="button" aria-expanded={open} aria-controls="mobile-navigation" aria-label={open ? t.close : t.menu} onClick={() => setOpen(!open)} className="rounded-lg p-3 text-surface-200 focus-visible:outline-2 focus-visible:outline-accent-400 lg:hidden">{open ? <X aria-hidden="true" className="h-5 w-5" /> : <Menu aria-hidden="true" className="h-5 w-5" />}</button></div>
+    </div>
+    {open && <nav id="mobile-navigation" aria-label={locale === "pt-BR" ? "Navegação móvel" : "Mobile navigation"} className="border-t border-surface-800 px-6 py-4 lg:hidden">{links.map((href, i) => <a key={href} href={href} onClick={() => setOpen(false)} className="block rounded py-3 text-surface-200 focus-visible:outline-2 focus-visible:outline-accent-400">{t.nav[i]}</a>)}</nav>}
+  </header>;
+}
+
+function Heading({ badge, title, description }: { badge: string; title: string; description: string }) {
+  return <AnimatedSection className="mx-auto mb-12 max-w-2xl text-center"><p className="mb-4 text-xs font-semibold uppercase tracking-widest text-accent-400">{badge}</p><h2 className="mb-4 text-3xl font-bold tracking-tight text-surface-50 sm:text-4xl">{title}</h2><p className="leading-relaxed text-surface-400 sm:text-lg">{description}</p></AnimatedSection>;
+}
+
+function ScreenshotPlaceholder({ title }: { title: string }) {
+  const { locale } = useLocale();
+  const t = landingContent[locale];
+  return <figure className="overflow-hidden rounded-2xl border border-surface-700 bg-surface-900 shadow-2xl">
+    <div aria-hidden="true" className="flex items-center gap-2 border-b border-surface-700 bg-surface-800/50 px-4 py-3">{[0, 1, 2].map((n) => <span key={n} className="h-2 w-2 rounded-full bg-surface-600" />)}<span className="ml-3 truncate font-mono text-xs text-surface-400">PicoFarm / {title}</span></div>
+    <div className="flex aspect-video min-h-44 flex-col items-center justify-center gap-3 bg-surface-800/40 px-5 text-center"><ScanLine aria-hidden="true" className="h-10 w-10 text-surface-500" /><p className="text-sm font-medium text-surface-300 sm:text-lg">{title}</p><p className="font-mono text-xs text-surface-400">{t.placeholder}</p></div>
+    <figcaption className="border-t border-surface-700 px-4 py-3 text-center text-xs text-surface-400">{t.notScreenshot}</figcaption>
+  </figure>;
+}
+
 export default function Home() {
-  return (
-    <>
-      <Nav />
-
-      {/* ─── Hero ──────────────────────────────────────────────────────── */}
-      <section className="relative overflow-hidden pt-32 pb-24 sm:pt-40 sm:pb-32">
-        <div className="absolute inset-0 grid-bg" />
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] rounded-full bg-accent-500/5 blur-[120px]" />
-
+  const { locale } = useLocale();
+  const t = landingContent[locale];
+  const icons = [ListOrdered, Printer, FolderOpen, Layers, FileText, Bell, Camera, Settings2, Package];
+  return <>
+    <Nav />
+    <main id="main" tabIndex={-1}>
+      <section className="relative overflow-hidden pb-20 pt-28 sm:pb-28 sm:pt-32">
+        <div aria-hidden="true" className="pointer-events-none absolute inset-0 grid-bg" />
+        <div aria-hidden="true" className="pointer-events-none absolute left-1/2 top-1/3 h-[500px] w-[500px] -translate-x-1/2 rounded-full bg-accent-500/5 blur-[100px]" />
         <div className="relative mx-auto max-w-6xl px-6">
-          <AnimatedSection className="mx-auto max-w-3xl text-center">
-            <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-accent-500/20 bg-accent-500/5 px-4 py-1.5 text-xs font-medium text-accent-400">
-              <Zap className="h-3.5 w-3.5" />
-              Print Farm Management + Order Fulfillment
-            </div>
-
-            <h1 className="mb-6 text-4xl font-bold tracking-tight text-surface-50 sm:text-6xl lg:text-7xl">
-              Run your print farm
-              <br />
-              <span className="gradient-text">like a factory</span>
-            </h1>
-
-            <p className="mx-auto mb-10 max-w-xl text-lg leading-relaxed text-surface-400">
-              PicoFarm is the all-in-one platform for managing printers,
-              fulfilling orders from Etsy, Shopify &amp; Squarespace, tracking
-              materials, and growing your maker business.
-            </p>
-
-            <div className="flex flex-col items-center gap-4 sm:flex-row sm:justify-center">
-              <a
-                href="#get-started"
-                className="group inline-flex items-center gap-2 rounded-xl bg-accent-500 px-6 py-3 text-sm font-semibold text-white transition-all hover:bg-accent-600 hover:gap-3"
-              >
-                Get Started
-                <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
-              </a>
-              <a
-                href="#features"
-                className="inline-flex items-center gap-2 rounded-xl border border-surface-700 px-6 py-3 text-sm font-medium text-surface-300 transition-colors hover:border-surface-600 hover:text-surface-100"
-              >
-                See Features
-                <ChevronRight className="h-4 w-4" />
-              </a>
-            </div>
+          <aside aria-labelledby="beta-warning" className="mb-10 rounded-2xl border-2 border-accent-500/70 bg-surface-900 p-5 sm:p-7">
+            <div className="flex items-start gap-3"><TriangleAlert aria-hidden="true" className="mt-1 h-7 w-7 shrink-0 text-accent-400" /><div><h2 id="beta-warning" className="mb-2 text-lg font-bold text-accent-400 sm:text-xl">{t.warningTitle}</h2><p className="leading-relaxed text-surface-200">{t.warningBefore}<a className="font-semibold underline underline-offset-4 hover:text-accent-400" href={DAEDALUS}>Daedalus</a>{t.warningAfter}</p><p className="mt-3 text-sm leading-relaxed text-surface-300">{t.report} <a href={`${REPO}/issues/new/choose`} className="font-semibold text-accent-400 underline underline-offset-4">{t.reportLink} <span aria-hidden="true">↗</span></a></p></div></div>
+          </aside>
+          <AnimatedSection className="mx-auto max-w-4xl text-center">
+            <p className="mb-5 inline-flex rounded-full border border-accent-500/25 bg-accent-500/5 px-4 py-2 text-xs font-medium text-accent-400">{t.badge}</p>
+            <h1 className="mb-6 text-4xl font-bold tracking-tight text-surface-50 sm:text-6xl lg:text-7xl">{t.title}<br /><span className="gradient-text">{t.highlight}</span></h1>
+            <p className="mx-auto mb-8 max-w-2xl text-lg leading-relaxed text-surface-400">{t.intro}</p>
+            <div className="flex flex-col justify-center gap-3 sm:flex-row"><a href="/docs#installation" className={primary}><Container aria-hidden="true" className="h-4 w-4" />{t.install}</a><a href="/docs" className={secondary}>{t.docs}<ArrowRight aria-hidden="true" className="h-4 w-4" /></a></div>
+            <a href={REPO} className="mt-5 inline-flex items-center gap-2 rounded py-2 text-sm text-surface-300 underline-offset-4 hover:underline"><Github aria-hidden="true" className="h-4 w-4" />{t.github}</a>
           </AnimatedSection>
-
-          {/* Hero stats */}
-          <AnimatedSection
-            className="mx-auto mt-20 flex max-w-md justify-between"
-            delay={300}
-          >
-            <Stat value="4" label="Printer Protocols" />
-            <Stat value="4" label="Sales Channels" />
-            <Stat value="50+" label="API Endpoints" />
-          </AnimatedSection>
-
-          {/* Hero screenshot */}
-          <AnimatedSection className="mt-16" delay={400}>
-            <div className="glow-accent rounded-2xl border border-surface-800 bg-surface-900/80 p-2">
-              <Screenshot
-                src="/screenshots/dashboard.png"
-                alt="PicoFarm dashboard showing financial overview, revenue charts, and print farm status"
-              />
-            </div>
-          </AnimatedSection>
+          <AnimatedSection className="glow-accent mt-12 rounded-2xl"><ScreenshotPlaceholder title={t.preview} /></AnimatedSection>
         </div>
       </section>
 
-      {/* ─── Features Grid ─────────────────────────────────────────────── */}
-      <section id="features" className="py-24 sm:py-32">
-        <div className="mx-auto max-w-6xl px-6">
-          <SectionHeading
-            badge="Features"
-            title="Everything you need to scale"
-            description="From a single printer to a full farm, PicoFarm gives you complete visibility and control over every part of your operation."
-          />
+      <section id="features" className="scroll-mt-24 py-20 sm:py-28"><div className="mx-auto max-w-6xl px-6">
+        <Heading badge={t.featuresBadge} title={t.featuresTitle} description={t.featuresIntro} />
+        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">{t.features.map(([title, description], i) => { const Icon = icons[i]; return <AnimatedSection key={i}><article className="glow-card h-full rounded-xl border border-surface-800 bg-surface-900/50 p-6"><span className="mb-4 flex h-11 w-11 items-center justify-center rounded-lg bg-accent-500/10 text-accent-500"><Icon aria-hidden="true" className="h-5 w-5" /></span><h3 className="mb-2 text-lg font-semibold text-surface-50">{title}</h3><p className="text-sm leading-relaxed text-surface-400">{description}</p></article></AnimatedSection>; })}</div>
+      </div></section>
 
-          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-            <FeatureCard
-              icon={<Printer className="h-5 w-5" />}
-              title="Multi-Printer Fleet Control"
-              description="Manage Bambu Lab, OctoPrint, Klipper, and manual printers from a single dashboard. Real-time status, temperatures, and progress via MQTT and REST."
-              delay={0}
-            />
-            <FeatureCard
-              icon={<ShoppingBag className="h-5 w-5" />}
-              title="Multi-Channel Orders"
-              description="Unified order management for Etsy, Shopify, Squarespace, and direct sales. Import, track, and fulfill from one interface."
-              delay={80}
-            />
-            <FeatureCard
-              icon={<FolderKanban className="h-5 w-5" />}
-              title="Product Catalog"
-              description="Define products with multi-part designs, pricing, and printer constraints. Immutable design versioning with 3MF file parsing."
-              delay={160}
-            />
-            <FeatureCard
-              icon={<Zap className="h-5 w-5" />}
-              title="Auto-Dispatch"
-              description="Automatically assign print jobs to available printers based on material compatibility and constraints. Human-in-the-loop confirm, reject, or skip."
-              delay={0}
-            />
-            <FeatureCard
-              icon={<Package className="h-5 w-5" />}
-              title="Material & Spool Tracking"
-              description="Track filament inventory by type, color, and weight. Bambu Lab AMS integration with automatic spool and tray management."
-              delay={80}
-            />
-            <FeatureCard
-              icon={<BarChart3 className="h-5 w-5" />}
-              title="Financial Analytics"
-              description="Revenue trends, profit-per-hour, gross margins, and per-product profitability. Know exactly how your business is performing."
-              delay={160}
-            />
-            <FeatureCard
-              icon={<Receipt className="h-5 w-5" />}
-              title="Expense Tracking with OCR"
-              description="Upload receipts and let OCR parse vendor, amount, date, and items. Categorize across filament, tools, shipping, fees, and more."
-              delay={0}
-            />
-            <FeatureCard
-              icon={<ListChecks className="h-5 w-5" />}
-              title="Task Checklists"
-              description="Auto-generated checklists from product parts. Track completion per item, print directly from checklist entries, and regenerate as needed."
-              delay={80}
-            />
-            <FeatureCard
-              icon={<Bell className="h-5 w-5" />}
-              title="Material Alerts"
-              description="Low spool inventory alerts with configurable thresholds. Warning and critical severity levels with dismissible notifications."
-              delay={160}
-            />
-            <FeatureCard
-              icon={<CalendarRange className="h-5 w-5" />}
-              title="Production Timeline"
-              description="Gantt-style timeline of orders, tasks, and print jobs. Configurable date ranges with progress tracking and status color coding."
-              delay={0}
-            />
-            <FeatureCard
-              icon={<Database className="h-5 w-5" />}
-              title="Automated Backups"
-              description="Scheduled daily or weekly backups with retention policies. Manual backup creation, restoration, and automatic backup on startup."
-              delay={80}
-            />
-            <FeatureCard
-              icon={<Wifi className="h-5 w-5" />}
-              title="Real-Time Updates"
-              description="WebSocket-powered live updates for printer state, job progress, dispatch requests, and order sync. No manual refreshing needed."
-              delay={160}
-            />
-          </div>
-        </div>
-      </section>
+      <section className="border-t border-surface-800/50 py-20 sm:py-28"><div className="mx-auto grid max-w-6xl items-center gap-12 px-6 lg:grid-cols-2">
+        <AnimatedSection><h2 className="mb-4 text-3xl font-bold text-surface-50">{t.workflowTitle}</h2><p className="mb-6 leading-relaxed text-surface-400">{t.workflowIntro}</p><ul className="space-y-4">{t.workflowBullets.map((item) => <li key={item} className="flex items-start gap-3 text-sm text-surface-300"><CheckCircle2 aria-hidden="true" className="h-5 w-5 shrink-0 text-accent-500" />{item}</li>)}</ul></AnimatedSection>
+        <AnimatedSection><ScreenshotPlaceholder title={t.libraryPreview} /></AnimatedSection>
+      </div></section>
 
-      {/* ─── Printer Management Deep Dive ──────────────────────────────── */}
-      <section
-        id="printers"
-        className="py-24 sm:py-32 border-t border-surface-800/50"
-      >
-        <div className="mx-auto max-w-6xl px-6 space-y-32">
-          <ShowcaseRow
-            icon={<Printer className="h-5 w-5" />}
-            title="Fleet management for every printer"
-            description="Connect your entire fleet regardless of manufacturer. PicoFarm speaks every protocol so you don't have to."
-            bullets={[
-              "Bambu Lab via MQTT with AMS spool & tray management",
-              "OctoPrint REST API with file upload and direct control",
-              "Klipper/Moonraker for advanced open-source setups",
-              "Manual printers for logging jobs without a connection",
-              "Automatic network discovery and Bambu Cloud pairing",
-              "Real-time temperature, progress, and HMS error tracking",
-            ]}
-            screenshot="/screenshots/printers.png"
-            screenshotAlt="PicoFarm printer fleet showing Bambu Lab P1S, A1, and H2S printers with status and temperature readings"
-          />
+      <section id="experimental" className="scroll-mt-24 border-y border-surface-800 bg-surface-900/30 py-20 sm:py-28"><div className="mx-auto max-w-6xl px-6">
+        <Heading badge={t.experimentalBadge} title={t.experimentalTitle} description={t.experimentalIntro} />
+        <div className="grid gap-5 lg:grid-cols-3">{t.experiments.map(([title, description]) => <AnimatedSection key={title}><article className="h-full rounded-xl border border-dashed border-accent-500/35 p-6"><FlaskConical aria-hidden="true" className="mb-4 h-6 w-6 text-accent-400" /><p className="mb-3 text-xs font-medium uppercase tracking-wide text-accent-400">{t.experimentalBadge}</p><h3 className="mb-3 text-lg font-semibold text-surface-100">{title}</h3><p className="text-sm leading-relaxed text-surface-400">{description}</p></article></AnimatedSection>)}</div>
+      </div></section>
 
-          <ShowcaseRow
-            icon={<ShoppingBag className="h-5 w-5" />}
-            title="Orders from everywhere, managed in one place"
-            description="Stop switching between Etsy, Shopify, Squarespace, and spreadsheets. See every order in a unified interface with full status tracking."
-            bullets={[
-              "Etsy OAuth with PKCE and real-time webhook sync",
-              "Shopify OAuth integration with order and inventory sync",
-              "Squarespace API integration for storefront orders",
-              "Manual order creation for direct sales and custom work",
-              "Task-based workflow: orders become trackable print jobs",
-              "Status pipeline from pending through printing to shipped",
-            ]}
-            reversed
-            screenshot="/screenshots/tasks.png"
-            screenshotAlt="PicoFarm task view showing order fulfillment progress with completion tracking"
-          />
+      <section id="deploy" className="scroll-mt-24 py-20 sm:py-28"><div className="mx-auto max-w-6xl px-6">
+        <Heading badge={t.deployBadge} title={t.deployTitle} description={t.deployIntro} />
+        <AnimatedSection className="glow-card mx-auto max-w-3xl rounded-2xl border border-surface-800 bg-surface-900/50 p-6 sm:p-8">
+          <Container aria-hidden="true" className="mb-6 h-9 w-9 text-accent-500" />
+          <ol className="space-y-5">{t.steps.map((step, i) => <li key={step} className="flex items-start gap-4 text-surface-200"><span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-accent-500/10 font-mono text-sm text-accent-400">{i + 1}</span><span>{step}</span></li>)}</ol>
+          <p className="my-7 border-t border-surface-800 pt-6 text-sm leading-relaxed text-surface-400">{t.deployNote}</p>
+          <a href="/docs#installation" className={primary}>{t.install}<ArrowRight aria-hidden="true" className="h-4 w-4" /></a>
+        </AnimatedSection>
+      </div></section>
 
-          <ShowcaseRow
-            icon={<TrendingUp className="h-5 w-5" />}
-            title="Know your numbers"
-            description="Built-in analytics show you exactly where your money is going and where it's coming from. Make data-driven decisions about what to print."
-            bullets={[
-              "Revenue trends with time-series charts and profit overlays",
-              "Sales breakdown by channel and by project",
-              "Profit-per-hour metrics to optimize your product mix",
-              "Expense tracking across 8 categories with OCR receipts",
-              "Gross margin and net revenue after marketplace fees",
-              "Per-product profitability with unit cost analysis",
-            ]}
-            screenshot="/screenshots/sales.png"
-            screenshotAlt="PicoFarm sales analytics showing revenue by project, profit breakdown, and weekly insights"
-          />
-        </div>
-      </section>
-
-      {/* ─── Production & Materials ───────────────────────────────────── */}
-      <section
-        id="analytics"
-        className="py-24 sm:py-32 border-t border-surface-800/50"
-      >
-        <div className="mx-auto max-w-6xl px-6">
-          <SectionHeading
-            badge="Production"
-            title="Visibility across your entire operation"
-            description="From spool inventory to production timelines, see everything happening in your print farm at a glance."
-          />
-          <div className="grid gap-6 lg:grid-cols-2">
-            <AnimatedSection>
-              <div className="glow-card rounded-2xl border border-surface-800 bg-surface-900/50 p-1">
-                <Screenshot
-                  src="/screenshots/timeline.png"
-                  alt="PicoFarm production timeline showing Gantt-style order scheduling"
-                />
-              </div>
-              <div className="mt-4 px-2">
-                <h3 className="font-semibold text-surface-100">
-                  Production Timeline
-                </h3>
-                <p className="mt-1 text-sm text-surface-400">
-                  Gantt-style view of all active orders, tasks, and print jobs.
-                  Configurable date ranges with status color coding: pending, in
-                  progress, printing, completed, shipped, and cancelled.
-                </p>
-              </div>
-            </AnimatedSection>
-            <AnimatedSection delay={150}>
-              <div className="glow-card rounded-2xl border border-surface-800 bg-surface-900/50 p-1">
-                <Screenshot
-                  src="/screenshots/materials.png"
-                  alt="PicoFarm material inventory showing spool tracking with weight and color"
-                />
-              </div>
-              <div className="mt-4 px-2">
-                <h3 className="font-semibold text-surface-100">
-                  Material Inventory
-                </h3>
-                <p className="mt-1 text-sm text-surface-400">
-                  Track every spool across PLA, PETG, ABS, ASA, and TPU.
-                  Automatic weight updates with Bambu Lab AMS integration, color
-                  visualization, and low-stock alerts.
-                </p>
-              </div>
-            </AnimatedSection>
-          </div>
-        </div>
-      </section>
-
-      {/* ─── Expenses & Projects ─────────────────────────────────────── */}
-      <section className="py-24 sm:py-32 border-t border-surface-800/50">
-        <div className="mx-auto max-w-6xl px-6 space-y-32">
-          <ShowcaseRow
-            icon={<Receipt className="h-5 w-5" />}
-            title="Receipt OCR that actually works"
-            description="Upload a photo of any receipt and PicoFarm extracts the details automatically. Confirm with a click and categorize across 8 expense types."
-            bullets={[
-              "Automatic vendor, amount, date, and line item extraction",
-              "Confidence scores so you know when to double-check",
-              "8 categories: filament, parts, tools, shipping, fees, subscriptions, advertising, and other",
-              "Auto-create spool entries from filament expenses",
-              "Retry OCR processing if results need improvement",
-            ]}
-            screenshot="/screenshots/expenses.png"
-            screenshotAlt="PicoFarm expense tracking showing OCR-parsed receipts from Amazon, Bambu Lab, and Home Depot"
-          />
-
-          <ShowcaseRow
-            icon={<FolderKanban className="h-5 w-5" />}
-            title="Organize products your way"
-            description="Build a product catalog with multi-part designs, reusable templates, and automatic cost rollups. Everything you need to know about what you make."
-            bullets={[
-              "Multi-part product definitions with design versioning",
-              "3MF parsing extracts print time, weight, filament, and nozzle size",
-              "Reusable templates with materials and supplies per recipe",
-              "Automatic cost rollups: material, printing time, and supplies",
-              "Tag-based filtering and search across parts and designs",
-              "Per-product profitability tracking with unit cost analysis",
-            ]}
-            reversed
-            screenshot="/screenshots/projects.png"
-            screenshotAlt="PicoFarm project catalog showing maker products with descriptions and dates"
-          />
-        </div>
-      </section>
-
-      {/* ─── 3MF + Design Versioning ───────────────────────────────────── */}
-      <section className="py-24 sm:py-32 border-t border-surface-800/50">
-        <div className="mx-auto max-w-6xl px-6">
-          <SectionHeading
-            badge="Smart Workflows"
-            title="From file to finished product"
-            description="Upload 3MF files and PicoFarm extracts everything it needs. Paired with immutable design versioning and automated job management, you always know exactly what was printed."
-          />
-
-          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-            {[
-              {
-                icon: <FileText className="h-5 w-5" />,
-                title: "3MF Parsing",
-                desc: "Automatically extract print time, weight, filament type, nozzle size, and printer model from sliced files.",
-              },
-              {
-                icon: <GitBranch className="h-5 w-5" />,
-                title: "Design Versions",
-                desc: "Immutable version history for every design. Know exactly which version was used for each print job.",
-              },
-              {
-                icon: <ScanLine className="h-5 w-5" />,
-                title: "Print Job Lifecycle",
-                desc: "Full job tracking from queued to completed. Retry chains for failures, immutable event logs, and material usage recording.",
-              },
-              {
-                icon: <Boxes className="h-5 w-5" />,
-                title: "Bill of Materials",
-                desc: "Define materials and supplies per product. Automatic cost rollups with snapshot-based material cost recording at print time.",
-              },
-            ].map((item, i) => (
-              <FeatureCard
-                key={item.title}
-                icon={item.icon}
-                title={item.title}
-                description={item.desc}
-                delay={i * 80}
-              />
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ─── Integrations ──────────────────────────────────────────────── */}
-      <section
-        id="integrations"
-        className="py-24 sm:py-32 border-t border-surface-800/50"
-      >
-        <div className="mx-auto max-w-6xl px-6">
-          <SectionHeading
-            badge="Integrations"
-            title="Connects to your stack"
-            description="First-class integrations with the printers you own and the marketplaces you sell on."
-          />
-
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            <IntegrationBadge
-              name="Bambu Lab"
-              protocol="MQTT (LAN + Cloud)"
-              delay={0}
-            />
-            <IntegrationBadge
-              name="OctoPrint"
-              protocol="REST API"
-              delay={80}
-            />
-            <IntegrationBadge
-              name="Klipper / Moonraker"
-              protocol="REST API"
-              delay={160}
-            />
-            <IntegrationBadge
-              name="Etsy"
-              protocol="OAuth 2.0 + PKCE + Webhooks"
-              delay={0}
-            />
-            <IntegrationBadge
-              name="Shopify"
-              protocol="OAuth + Order Sync"
-              delay={80}
-            />
-            <IntegrationBadge
-              name="Squarespace"
-              protocol="API Key"
-              delay={160}
-            />
-          </div>
-
-          <AnimatedSection className="mt-6">
-            <div className="glow-card flex items-center gap-4 rounded-xl border border-surface-800 bg-surface-900/50 px-6 py-5 max-w-sm mx-auto">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-surface-800">
-                <Printer className="h-5 w-5 text-surface-400" />
-              </div>
-              <div>
-                <div className="font-semibold text-surface-50">
-                  Manual Printers
-                </div>
-                <div className="font-mono text-xs text-surface-500">
-                  No connection required
-                </div>
-              </div>
-            </div>
-          </AnimatedSection>
-        </div>
-      </section>
-
-      {/* ─── Deploy ────────────────────────────────────────────────────── */}
-      <section
-        id="deploy"
-        className="py-24 sm:py-32 border-t border-surface-800/50"
-      >
-        <div className="mx-auto max-w-6xl px-6">
-          <SectionHeading
-            badge="Deploy"
-            title="Run it your way"
-            description="Self-hosted Docker container, or build the binary and serve it anywhere. Your data, your infrastructure."
-          />
-
-          <div className="grid gap-5 sm:grid-cols-3">
-            {[
-              {
-                icon: <Container className="h-6 w-6" />,
-                title: "Docker",
-                desc: "Multi-stage Docker build with embedded SQLite. Mount one volume at /data for the database and uploads and you're running.",
-                code: "docker run -p 8084:8084",
-              },
-              {
-                icon: <Cloud className="h-6 w-6" />,
-                title: "Self-Hosted",
-                desc: "Build the Go server and the frontend, then serve both from the same port. Configure entirely with environment variables.",
-                code: "make build",
-              },
-              {
-                icon: <Monitor className="h-6 w-6" />,
-                title: "On Your Network",
-                desc: "Printer discovery runs from the server, so a container on the same LAN as your printers sees the whole fleet.",
-                code: "curl localhost:8084/health",
-              },
-            ].map((item, i) => (
-              <AnimatedSection key={item.title} delay={i * 100}>
-                <div className="glow-card h-full rounded-xl border border-surface-800 bg-surface-900/50 p-6">
-                  <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-accent-500/10 text-accent-500">
-                    {item.icon}
-                  </div>
-                  <h3 className="mb-2 text-lg font-semibold text-surface-50">
-                    {item.title}
-                  </h3>
-                  <p className="mb-4 text-sm leading-relaxed text-surface-400">
-                    {item.desc}
-                  </p>
-                  <div className="rounded-lg bg-surface-950 px-4 py-2.5 font-mono text-sm text-accent-400">
-                    <span className="text-surface-600">$ </span>
-                    {item.code}
-                  </div>
-                </div>
-              </AnimatedSection>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ─── Tech Stack ────────────────────────────────────────────────── */}
-      <section className="py-24 sm:py-32 border-t border-surface-800/50">
-        <div className="mx-auto max-w-6xl px-6">
-          <SectionHeading
-            badge="Under the Hood"
-            title="Built with modern tools"
-            description="A performant, type-safe stack designed for reliability and speed."
-          />
-
-          <AnimatedSection>
-            <div className="mx-auto max-w-3xl">
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-                {[
-                  { label: "Go", detail: "Backend" },
-                  { label: "React 19", detail: "Frontend" },
-                  { label: "TypeScript", detail: "Type Safety" },
-                  { label: "SQLite", detail: "Database" },
-                  { label: "Tailwind CSS 4", detail: "Styling" },
-                  { label: "WebSocket", detail: "Real-time" },
-                  { label: "TanStack Query", detail: "Data Fetching" },
-                  { label: "Vite", detail: "Build Tool" },
-                  { label: "Chi Router", detail: "HTTP" },
-                  { label: "MQTT", detail: "Bambu Protocol" },
-                  { label: "Docker", detail: "Containers" },
-                ].map((t) => (
-                  <div
-                    key={t.label}
-                    className="rounded-lg border border-surface-800 bg-surface-900/50 px-4 py-3 text-center"
-                  >
-                    <div className="text-sm font-semibold text-surface-100">
-                      {t.label}
-                    </div>
-                    <div className="mt-0.5 font-mono text-[10px] text-surface-500">
-                      {t.detail}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </AnimatedSection>
-        </div>
-      </section>
-
-      {/* ─── CTA ───────────────────────────────────────────────────────── */}
-      <section
-        id="get-started"
-        className="relative py-24 sm:py-32 border-t border-surface-800/50"
-      >
-        <div className="absolute inset-0 grid-bg" />
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] rounded-full bg-accent-500/5 blur-[100px]" />
-
-        <div className="relative mx-auto max-w-6xl px-6">
-          <AnimatedSection className="mx-auto max-w-2xl text-center">
-            <h2 className="mb-4 text-3xl font-bold tracking-tight text-surface-50 sm:text-4xl">
-              Ready to take control?
-            </h2>
-            <p className="mb-8 text-lg leading-relaxed text-surface-400">
-              Stop juggling spreadsheets, browser tabs, and printer UIs.
-              PicoFarm brings your entire operation into one place.
-            </p>
-
-            <div className="flex flex-col items-center gap-4 sm:flex-row sm:justify-center">
-              <a
-                href="https://github.com/Brook-sys/picofarm"
-                className="group inline-flex items-center gap-2 rounded-xl bg-accent-500 px-8 py-3.5 text-sm font-semibold text-white transition-all hover:bg-accent-600"
-              >
-                <Github className="h-4 w-4" />
-                View on GitHub
-                <ExternalLink className="h-3.5 w-3.5 opacity-50" />
-              </a>
-              <div className="rounded-xl border border-surface-700 bg-surface-900/50 px-6 py-3.5 font-mono text-sm text-surface-300">
-                <span className="text-surface-600">$ </span>
-                git clone Brook-sys/picofarm &amp;&amp; make dev
-              </div>
-            </div>
-          </AnimatedSection>
-        </div>
-      </section>
-
-      {/* ─── Footer ────────────────────────────────────────────────────── */}
-      <footer className="border-t border-surface-800/50 py-12">
-        <div className="mx-auto max-w-6xl px-6">
-          <div className="flex flex-col items-center justify-between gap-6 sm:flex-row">
-            <div className="flex items-center gap-2.5">
-              <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent-500/10">
-                <Layers className="h-4 w-4 text-accent-500" />
-              </div>
-              <span className="text-sm font-bold text-surface-300">
-                PicoFarm
-              </span>
-            </div>
-            <div className="flex items-center gap-6 text-xs text-surface-500">
-              <span>Built with Go and React</span>
-              <span className="hidden sm:inline text-surface-700">|</span>
-              <span>Print Farm Management</span>
-            </div>
-          </div>
-        </div>
-      </footer>
-    </>
-  );
+      <section className="relative overflow-hidden border-t border-surface-800/50 py-20 sm:py-28"><div aria-hidden="true" className="pointer-events-none absolute inset-0 grid-bg" /><AnimatedSection className="relative mx-auto max-w-2xl px-6 text-center"><h2 className="mb-4 text-3xl font-bold text-surface-50 sm:text-4xl">{t.betaTitle}</h2><p className="mb-8 leading-relaxed text-surface-400 sm:text-lg">{t.betaIntro}</p><a href={REPO} className={primary}><Github aria-hidden="true" className="h-4 w-4" />{t.github}</a></AnimatedSection></section>
+    </main>
+    <footer className="border-t border-surface-800/50 py-10"><div className="mx-auto flex max-w-6xl flex-col justify-between gap-6 px-6 sm:flex-row"><div><Brand /><p className="mt-3 text-sm text-surface-400">{t.footer}</p></div><div className="flex flex-wrap items-center gap-5 text-xs text-surface-400"><a className="hover:text-white" href="/docs">{t.nav[3]}</a><a className="hover:text-white" href={REPO}>GitHub</a><a className="hover:text-white" href={DAEDALUS}>{t.origin}</a><span className="text-accent-400">{t.beta}</span></div></div></footer>
+  </>;
 }

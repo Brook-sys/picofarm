@@ -1,19 +1,17 @@
-# Security Policy
+# Security policy / Política de segurança
 
-## Reporting a Vulnerability
+## Report privately / Relate em privado
 
-If you discover a security vulnerability, please report it responsibly.
+Do not publish vulnerabilities, credentials, printer access codes or personal data in public Issues.
+Use [GitHub private vulnerability reporting](https://github.com/Brook-sys/picofarm/security/advisories/new) for this repository.
 
-**Do not open a public GitHub issue.**
+Não publique vulnerabilidades, credenciais, códigos de acesso de impressoras ou dados pessoais nas Issues públicas.
+Use o [relato privado de vulnerabilidades do GitHub](https://github.com/Brook-sys/picofarm/security/advisories/new) deste repositório.
 
-Instead, email **middleton.philip.pm@gmail.com** with:
+Include the affected commit/image, impact, sanitized reproduction steps and a minimal example when possible. Never test against someone else's printer or server without permission. There is no guaranteed response time or security-support SLA.
 
-- Description of the vulnerability
-- Steps to reproduce
-- Potential impact
+Informe o commit/imagem afetado, impacto, passos anonimizados e um exemplo mínimo quando possível. Não teste impressoras ou servidores de terceiros sem autorização. Não há prazo de resposta garantido nem SLA de suporte de segurança.
 
-You should receive a response within 48 hours. We'll work with you to understand the issue and coordinate a fix before any public disclosure.
+## Project status
 
-## Supported Versions
-
-Only the latest release is supported with security updates.
+PicoFarm is BETA. This fork is developed entirely with AI (vibe coding), from the [Daedalus](https://github.com/philjestin/Daedalus) codebase. Tests do not establish production safety. Keep deployments private, maintain backups and supervise physical printer operations. Review [the security model](docs/SECURITY_MODEL.md) before exposing an installation.

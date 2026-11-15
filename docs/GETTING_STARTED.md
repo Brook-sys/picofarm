@@ -1,6 +1,6 @@
 # Getting started with PicoFarm
 
-This guide covers a source checkout and a locally built Docker image. It does not assume a particular host, private network, remote, or deployment service. For security boundaries, read the [security model](SECURITY_MODEL.md) before exposing an installation.
+For end-user BETA testing, start with the recommended [Docker Compose installation](INSTALL_DOCKER_COMPOSE.md). A packaged installation without Docker is future work. This guide covers contributor source development and a locally built Docker image. It does not assume a particular host, private network, remote, or deployment service. For security boundaries, read the [security model](SECURITY_MODEL.md) before exposing an installation.
 
 ## 1. Choose how to run
 

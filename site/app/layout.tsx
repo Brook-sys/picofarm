@@ -1,39 +1,30 @@
 import type { Metadata } from "next";
+import { LocaleProvider } from "./components/locale";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "PicoFarm - Print Farm Management & Order Fulfillment",
+  icons: { icon: "/picofarm_logo.png" },
+  title: "PicoFarm — Organize your 3D printing",
   description:
-    "The all-in-one platform for managing your 3D print farm, tracking orders from Etsy & Squarespace, and running your maker business.",
+    "Open-source 3D printer management for one printer or a small farm. Organize your queue, files and filament. Self-hosted BETA, developed with AI.",
   openGraph: {
-    title: "PicoFarm - Print Farm Management & Order Fulfillment",
+    title: "PicoFarm — Organize your 3D printing",
     description:
-      "The all-in-one platform for managing your 3D print farm, tracking orders from Etsy & Squarespace, and running your maker business.",
+      "Your printers, queue, files and filament in one place. Join the open-source, self-hosted PicoFarm BETA.",
     type: "website",
   },
 };
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <head>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link
-          rel="preconnect"
-          href="https://fonts.gstatic.com"
-          crossOrigin="anonymous"
-        />
-        <link
-          href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap"
-          rel="stylesheet"
-        />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
       </head>
       <body className="bg-surface-950 text-surface-100 antialiased">
-        {children}
+        <LocaleProvider>{children}</LocaleProvider>
       </body>
     </html>
   );

@@ -1,1 +1,5 @@
-blank_issues_enabled: true
+blank_issues_enabled: false
+contact_links:
+  - name: Installation guide / Guia de instalação
+    url: https://github.com/Brook-sys/picofarm/blob/main/docs/INSTALL_DOCKER_COMPOSE.md
+    about: Start here for Docker Compose installation / Comece por aqui para instalar com Docker Compose.

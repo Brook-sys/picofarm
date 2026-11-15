@@ -1,23 +1,24 @@
-name: Feature Request
-description: Suggest a new feature or improvement
-labels: ["enhancement"]
+name: Suggestion / Sugestão
+description: Suggest an improvement / Sugira uma melhoria
+title: "[Suggestion]: "
 body:
+  - type: markdown
+    attributes:
+      value: "English or português brasileiro welcome. Search existing issues first. Do not include credentials, personal data or private infrastructure details. / Procure sugestões existentes e não publique dados sensíveis."
   - type: textarea
     id: problem
     attributes:
-      label: Problem
-      description: What problem does this solve? What's the use case?
+      label: What problem would this solve? / Qual problema resolveria?
+      description: Describe your printing workflow and the difficulty, without assuming a particular implementation.
     validations:
       required: true
   - type: textarea
-    id: solution
+    id: proposal
     attributes:
-      label: Proposed solution
-      description: How should this work?
+      label: Suggested improvement / Melhoria sugerida
     validations:
       required: true
   - type: textarea
     id: alternatives
     attributes:
-      label: Alternatives considered
-      description: Any other approaches you've thought about?
+      label: Alternatives and context / Alternativas e contexto

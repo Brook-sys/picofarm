@@ -1,0 +1,19 @@
+services:
+  picofarm:
+    image: ghcr.io/brook-sys/picofarm:latest
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8084:8084"
+    environment:
+      PORT: "8084"
+      DATABASE_PATH: /data/picofarm.db
+      UPLOAD_DIR: /data/uploads
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:?Set a stable ENCRYPTION_KEY in .env before starting}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:8084}
+      PRINTER_RECONNECT_INTERVAL: ${PRINTER_RECONNECT_INTERVAL:-10s}
+      PRINTER_RECONNECT_MAX_CONCURRENT: ${PRINTER_RECONNECT_MAX_CONCURRENT:-4}
+    volumes:
+      - picofarm-data:/data
+
+volumes:
+  picofarm-data:

@@ -1,45 +1,60 @@
-name: Bug Report
-description: Report a bug or unexpected behavior
-labels: ["bug"]
+name: Bug report / Relatar bug
+description: Report a reproducible problem / Relate um problema reproduzível
+title: "[Bug]: "
 body:
-  - type: textarea
-    id: description
+  - type: markdown
     attributes:
-      label: What happened?
-      description: A clear description of the bug.
+      value: |
+        English or português brasileiro welcome. PicoFarm is BETA and this fork is developed with AI (vibe coding).
+        Search existing issues first. Never share API tokens, passwords, access codes, customer data, private addresses or an unredacted database.
+        Português: procure relatos existentes antes. Não publique tokens, senhas, códigos de acesso, dados de clientes, endereços privados ou banco de dados sem anonimização.
+        For a security vulnerability, follow SECURITY.md instead of posting sensitive details publicly.
+  - type: input
+    id: version
+    attributes:
+      label: Version / Versão
+      description: Commit from /health or image tag/digest; do not paste private URLs.
+      placeholder: "Commit or image tag / Commit ou tag da imagem"
     validations:
       required: true
   - type: textarea
-    id: expected
+    id: environment
     attributes:
-      label: Expected behavior
-      description: What did you expect to happen?
+      label: Environment / Ambiente
+      description: Docker Compose version, server OS/architecture, browser/version. Printer model and connection protocol if relevant. Do not include private hostnames or IPs.
     validations:
       required: true
   - type: textarea
     id: reproduce
     attributes:
-      label: Steps to reproduce
-      description: How can we reproduce this?
-      placeholder: |
-        1. Go to '...'
-        2. Click on '...'
-        3. See error
-    validations:
-      required: true
-  - type: dropdown
-    id: platform
-    attributes:
-      label: Platform
-      options:
-        - Desktop app (macOS)
-        - Desktop app (Windows)
-        - Web (Docker)
-        - Web (self-hosted)
+      label: Steps to reproduce / Passos para reproduzir
+      placeholder: "1. ...\n2. ...\n3. ..."
     validations:
       required: true
   - type: textarea
-    id: context
+    id: expected
     attributes:
-      label: Additional context
-      description: Screenshots, logs, browser version, etc.
+      label: Expected behavior / Comportamento esperado
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior and frequency / Comportamento observado e frequência
+      description: Include the error message, approximate time, how often it happens, and whether it affects a real print.
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Sanitized logs and screenshots / Logs e capturas anonimizados
+      description: Review attachments before submitting. Remove credentials, personal data and private network details. Explain any attempted workaround.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting / Antes de enviar
+      options:
+        - label: I searched existing issues / Procurei relatos existentes.
+          required: true
+        - label: I removed secrets and personal/private data / Removi segredos e dados pessoais ou privados.
+          required: true
