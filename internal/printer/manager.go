@@ -1,6 +1,7 @@
 package printer
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"sync"
@@ -75,7 +76,8 @@ type Manager struct {
 	// closed is set by DisconnectAll during graceful shutdown. Connect refuses
 	// to open new connections afterwards, so a reconnect goroutine that lost the
 	// race with shutdown cannot resurrect a printer.
-	closed bool
+	closed      bool
+	generations map[uuid.UUID]uint64
 
 	// printerLocks serializes Connect/Disconnect on the same printer. It is
 	// deliberately separate from mu: those calls block on the network for as
@@ -104,6 +106,7 @@ func SupportsConnectionType(t model.ConnectionType) bool {
 // NewManager creates a new printer manager.
 func NewManager() *Manager {
 	return &Manager{
+		generations:     make(map[uuid.UUID]uint64),
 		clients:         make(map[uuid.UUID]Client),
 		states:          make(map[uuid.UUID]*model.PrinterState),
 		statusCallbacks: []StatusChangeCallback{},
@@ -249,7 +252,8 @@ func buildClient(p *model.Printer) (Client, error) {
 // block for the client's whole timeout, and the previous code held mu for that
 // long: with several offline printers, one slow printer froze status reads and
 // every other connection attempt for seconds to minutes.
-func (m *Manager) Connect(p *model.Printer) error {
+func (m *Manager) Connect(p *model.Printer) error { return m.ConnectContext(context.Background(), p) }
+func (m *Manager) ConnectContext(ctx context.Context, p *model.Printer) error {
 	if p == nil {
 		return fmt.Errorf("printer is required")
 	}
@@ -286,10 +290,45 @@ func (m *Manager) Connect(p *model.Printer) error {
 		return err
 	}
 
+	// Invalidate the previous generation BEFORE any new client callbacks can fire.
+	m.mu.Lock()
+	if m.generations == nil {
+		m.generations = map[uuid.UUID]uint64{}
+	}
+	m.generations[p.ID]++
+	generation := m.generations[p.ID]
+	m.states[p.ID] = &model.PrinterState{PrinterID: p.ID, Status: model.PrinterStatusOffline, UpdatedAt: time.Now()}
+	previous := m.clients[p.ID]
+	delete(m.clients, p.ID)
+	m.mu.Unlock()
+	if previous != nil {
+		_ = previous.Disconnect()
+	}
+	valid := func() bool { m.mu.RLock(); defer m.mu.RUnlock(); return !m.closed && m.generations[p.ID] == generation }
+	success := false
+	defer func() {
+		if !success {
+			m.mu.Lock()
+			if m.generations[p.ID] == generation {
+				m.generations[p.ID]++
+			}
+			m.mu.Unlock()
+			_ = client.Disconnect()
+		}
+	}()
 	// Set up status callback
 	client.SetStatusCallback(func(state *model.PrinterState) {
+		if state == nil {
+			return
+		}
+		snapshot := *state
+		state = &snapshot
 		state = attachCapabilities(state, client)
 		m.mu.Lock()
+		if m.closed || m.generations[p.ID] != generation {
+			m.mu.Unlock()
+			return
+		}
 		oldState := m.states[p.ID]
 		m.states[p.ID] = state
 		callbacks := make([]StatusChangeCallback, len(m.statusCallbacks))
@@ -303,6 +342,9 @@ func (m *Manager) Connect(p *model.Printer) error {
 
 		// Notify registered status change listeners
 		for _, cb := range callbacks {
+			if !valid() {
+				return
+			}
 			cb(state, oldState)
 		}
 	})
@@ -313,28 +355,34 @@ func (m *Manager) Connect(p *model.Printer) error {
 			m.mu.RLock()
 			cb := m.macroAutomationCallback
 			m.mu.RUnlock()
-			if cb != nil {
+			if cb != nil && valid() {
 				cb(printerID)
 			}
 		})
 	}
 
 	// Connect (network, no manager lock held)
-	if err := client.Connect(); err != nil {
+	connector, ok := client.(interface{ ConnectContext(context.Context) error })
+	if !ok {
+		return fmt.Errorf("printer client does not implement cancellable connection")
+	}
+	if err := connector.ConnectContext(ctx); err != nil {
 		slog.Error("failed to connect to printer", "printer_id", p.ID, "error", err)
 		m.setOffline(p.ID)
 		return err
 	}
 
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if !valid() {
+		return fmt.Errorf("printer connection superseded or disconnected")
+	}
 	if !m.storeClient(p.ID, client) {
 		return fmt.Errorf("printer manager is shutting down")
 	}
 
-	// Get initial status (network, no manager lock held)
-	if state, err := client.GetStatus(); err == nil && state != nil {
-		state = attachCapabilities(state, client)
-		m.setState(p.ID, state)
-	}
+	success = true
 
 	slog.Info("connected to printer", "printer_id", p.ID, "type", p.ConnectionType)
 
@@ -348,12 +396,16 @@ func (m *Manager) Connect(p *model.Printer) error {
 
 // Disconnect closes connection to a printer.
 func (m *Manager) Disconnect(id uuid.UUID) {
+	m.mu.Lock()
+	m.generations[id]++
+	m.mu.Unlock()
 	unlock := m.lockPrinter(id)
 	defer unlock()
 
 	m.mu.Lock()
 	client, ok := m.clients[id]
 	delete(m.clients, id)
+	m.generations[id]++
 	delete(m.states, id)
 	m.mu.Unlock()
 
@@ -377,6 +429,9 @@ func (m *Manager) DisconnectAll() {
 	m.clients = make(map[uuid.UUID]Client)
 	m.states = make(map[uuid.UUID]*model.PrinterState)
 	m.closed = true
+	for id := range m.generations {
+		m.generations[id]++
+	}
 	m.mu.Unlock()
 
 	if len(clients) == 0 {

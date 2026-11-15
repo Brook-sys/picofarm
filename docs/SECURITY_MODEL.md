@@ -4,6 +4,8 @@ This document records PicoFarm's current security assumptions and the hardening 
 
 Slicer snapshots, queue isolation and validation limits: [SLICER_REFINEMENTS.md](SLICER_REFINEMENTS.md).
 
+Printer connection attempts are resource-bounded with configurable cadence and concurrency; see [PRINTER_RECONNECTION.md](PRINTER_RECONNECTION.md). Recovery is communication-only, not authorization to replay physical commands or proof that a power-interrupted print completed.
+
 ## Current operating assumption
 
 PicoFarm currently appears optimized for local or trusted-network operation. It manages sensitive operational capabilities:

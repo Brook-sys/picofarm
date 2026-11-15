@@ -84,6 +84,8 @@ The server loads a `.env` file from its working directory when present. Exported
 | `ALLOWED_ORIGINS` | Unset allows loopback development origins; use explicit comma-separated origins for another browser origin |
 | `ENCRYPTION_KEY` | Optional explicit key for encrypted integration settings; preserve it securely across restarts and migrations |
 | `SLICER_CONNECTION_URL` | Optional external slicer URL; overrides the saved slicer connection setting |
+| `PRINTER_RECONNECT_INTERVAL` | `10s`; minimum interval between connection-attempt starts for the same printer; must be at least `2s`. Total attempt timeout is interval minus `1s` |
+| `PRINTER_RECONNECT_MAX_CONCURRENT` | `4`; integer from `1` to `256` limiting simultaneous printer connection attempts; a conservative default, not a measured hardware maximum |
 | `PICOFARM_SCAN_NETWORK` | Optional printer-discovery CIDR; see [runtime defaults](PROJECT_BASELINE.md#runtime-defaults) for container networking and scan limits |
 
 This is not an exhaustive variable list. Authentication settings and their limitations are documented in the [security model](SECURITY_MODEL.md); Etsy settings and additional runtime defaults are in the [baseline](PROJECT_BASELINE.md). No commerce credentials or slicer service are required for the basic catalog/manual-printer workflow.

@@ -13,6 +13,7 @@ This directory contains the operational documentation for PicoFarm. Prefer updat
 - [Improvements roadmap](IMPROVEMENTS_ROADMAP.md) — selected proposals and status of implemented local increments.
 - [Slicer refinements](SLICER_REFINEMENTS.md) — editor contracts, snapshots, viewer budgets, test evidence and limitations.
 - [Background slicer jobs](SLICER_JOBS.md) — bounded local queue, idempotency, recovery and cancellation boundaries.
+- [Printer reconnection](PRINTER_RECONNECTION.md) — configurable attempt interval/concurrency, deadlines and power-cycle recovery limits.
 - [Security model](SECURITY_MODEL.md) — current assumptions and hardening work for local/self-hosted operation.
 - [Sensitive endpoint inventory](SECURITY_ENDPOINTS.md) — route-level risk classes for printer control, files, backups, settings, public routes, and integrations.
 

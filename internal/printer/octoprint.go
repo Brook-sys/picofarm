@@ -12,6 +12,7 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Brook-sys/picofarm/internal/model"
@@ -25,6 +26,9 @@ type OctoPrintClient struct {
 	apiKey         string
 	httpClient     *http.Client
 	statusCallback func(*model.PrinterState)
+	lifeCtx        context.Context
+	lifeCancel     context.CancelFunc
+	closeOnce      sync.Once
 	stopPolling    chan struct{}
 }
 
@@ -42,29 +46,47 @@ func NewOctoPrintClient(printerID uuid.UUID, baseURL string, apiKey string) *Oct
 }
 
 // Connect establishes connection and starts status polling.
-func (c *OctoPrintClient) Connect() error {
-	// Verify connection by getting version
-	_, err := c.doRequest("GET", "/api/version", nil)
-	if err != nil {
-		return fmt.Errorf("failed to connect to OctoPrint: %w", err)
+func (c *OctoPrintClient) Connect() error { return c.ConnectContext(context.Background()) }
+func (c *OctoPrintClient) ConnectContext(ctx context.Context) error {
+	if _, err := c.doRequestContext(ctx, "GET", "/api/version", nil); err != nil {
+		return err
 	}
-
-	// Start polling for status updates
+	state, err := c.GetStatusContext(ctx)
+	if err != nil {
+		return err
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	c.lifeCtx, c.lifeCancel = context.WithCancel(context.Background())
+	if c.statusCallback != nil {
+		c.statusCallback(state)
+	}
 	go c.pollStatus()
 
 	return nil
 }
-
-// Disconnect stops polling and closes connection.
 func (c *OctoPrintClient) Disconnect() error {
-	close(c.stopPolling)
+	c.closeOnce.Do(func() {
+		if c.lifeCancel != nil {
+			c.lifeCancel()
+		}
+		close(c.stopPolling)
+	})
 	return nil
 }
 
 // GetStatus retrieves current printer status.
 func (c *OctoPrintClient) GetStatus() (*model.PrinterState, error) {
+	ctx := c.lifeCtx
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return c.GetStatusContext(ctx)
+}
+func (c *OctoPrintClient) GetStatusContext(ctx context.Context) (*model.PrinterState, error) {
 	// Get printer state
-	printerResp, err := c.doRequest("GET", "/api/printer", nil)
+	printerResp, err := c.doRequestContext(ctx, "GET", "/api/printer", nil)
 	if err != nil {
 		// Connection failure means the printer is offline, not an application error
 		offlineState := &model.PrinterState{PrinterID: c.printerID, Status: model.PrinterStatusOffline, UpdatedAt: time.Now()}
@@ -72,7 +94,7 @@ func (c *OctoPrintClient) GetStatus() (*model.PrinterState, error) {
 	}
 
 	// Get job state
-	jobResp, err := c.doRequest("GET", "/api/job", nil)
+	jobResp, err := c.doRequestContext(ctx, "GET", "/api/job", nil)
 	if err != nil {
 		jobResp = []byte("{}")
 	}
@@ -368,12 +390,19 @@ func (c *OctoPrintClient) SetStatusCallback(cb func(*model.PrinterState)) {
 
 // doRequest performs an HTTP request to the OctoPrint API.
 func (c *OctoPrintClient) doRequest(method string, path string, body []byte) ([]byte, error) {
+	ctx := c.lifeCtx
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return c.doRequestContext(ctx, method, path, body)
+}
+func (c *OctoPrintClient) doRequestContext(ctx context.Context, method string, path string, body []byte) ([]byte, error) {
 	var bodyReader io.Reader
 	if body != nil {
 		bodyReader = bytes.NewReader(body)
 	}
 
-	req, err := http.NewRequest(method, c.baseURL+path, bodyReader)
+	req, err := http.NewRequestWithContext(ctx, method, c.baseURL+path, bodyReader)
 	if err != nil {
 		return nil, err
 	}

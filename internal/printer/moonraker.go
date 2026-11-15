@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log/slog"
 	"mime/multipart"
 	"net"
 	"net/http"
@@ -15,6 +14,7 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Brook-sys/picofarm/internal/model"
@@ -30,6 +30,9 @@ type MoonrakerClient struct {
 	httpClient              *http.Client
 	statusCallback          func(*model.PrinterState)
 	macroAutomationCallback func(uuid.UUID)
+	lifeCtx                 context.Context
+	lifeCancel              context.CancelFunc
+	closeOnce               sync.Once
 	stopPolling             chan struct{}
 }
 
@@ -57,28 +60,57 @@ func NewMoonrakerClient(printerID uuid.UUID, baseURL string) *MoonrakerClient {
 }
 
 // Connect establishes connection and starts status polling.
-func (c *MoonrakerClient) Connect() error {
-	// Verify connection by getting server info
-	_, err := c.doRequest("GET", "/server/info", nil)
-	if err != nil {
-		return fmt.Errorf("failed to connect to Moonraker: %w", err)
+func (c *MoonrakerClient) Connect() error { return c.ConnectContext(context.Background()) }
+func (c *MoonrakerClient) ConnectContext(ctx context.Context) error {
+	if _, err := c.doRequestContext(ctx, "GET", "/server/info", nil); err != nil {
+		return err
 	}
-
+	state, err := c.GetStatusContext(ctx)
+	if err != nil {
+		return err
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	c.lifeCtx, c.lifeCancel = context.WithCancel(context.Background())
+	// Dial once within the shared attempt deadline; no nested retries.
+	wsURL := strings.Replace(strings.Replace(c.baseURL, "http://", "ws://", 1), "https://", "wss://", 1) + "/websocket"
+	conn, resp, err := websocket.Dial(ctx, wsURL, &websocket.DialOptions{HTTPClient: c.httpClient})
+	if resp != nil && resp.Body != nil {
+		_ = resp.Body.Close()
+	}
+	if err != nil {
+		_ = c.Disconnect()
+		return err
+	}
+	if c.statusCallback != nil {
+		c.statusCallback(state)
+	}
 	go c.pollStatus()
-	go c.listenWebsocket()
+	go c.listenWebsocket(conn)
 	return nil
 }
-
-// Disconnect stops polling.
 func (c *MoonrakerClient) Disconnect() error {
-	close(c.stopPolling)
+	c.closeOnce.Do(func() {
+		if c.lifeCancel != nil {
+			c.lifeCancel()
+		}
+		close(c.stopPolling)
+	})
 	return nil
 }
 
 // GetStatus retrieves current printer status.
 func (c *MoonrakerClient) GetStatus() (*model.PrinterState, error) {
+	ctx := c.lifeCtx
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return c.GetStatusContext(ctx)
+}
+func (c *MoonrakerClient) GetStatusContext(ctx context.Context) (*model.PrinterState, error) {
 	// Get printer status
-	resp, err := c.doRequest("GET", "/printer/objects/query?print_stats&display_status&extruder&heater_bed", nil)
+	resp, err := c.doRequestContext(ctx, "GET", "/printer/objects/query?print_stats&display_status&extruder&heater_bed", nil)
 	if err != nil {
 		// Connection failure means the printer is offline, not an application error
 		offlineState := &model.PrinterState{PrinterID: c.printerID, Status: model.PrinterStatusOffline, UpdatedAt: time.Now()}
@@ -164,13 +196,20 @@ func (c *MoonrakerClient) SetMacroAutomationCallback(cb func(printerID uuid.UUID
 }
 
 // doRequest performs an HTTP request to the Moonraker API.
-func (c *MoonrakerClient) doRequest(method string, path string, body []byte) ([]byte, error) { //nolint:unparam // body kept for future POST/PUT support
+func (c *MoonrakerClient) doRequest(method string, path string, body []byte) ([]byte, error) {
+	ctx := c.lifeCtx
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return c.doRequestContext(ctx, method, path, body)
+}
+func (c *MoonrakerClient) doRequestContext(ctx context.Context, method string, path string, body []byte) ([]byte, error) { //nolint:unparam // body kept for future POST/PUT support
 	var bodyReader io.Reader
 	if body != nil {
 		bodyReader = bytes.NewReader(body)
 	}
 
-	req, err := http.NewRequest(method, c.baseURL+path, bodyReader)
+	req, err := http.NewRequestWithContext(ctx, method, c.baseURL+path, bodyReader)
 	if err != nil {
 		return nil, err
 	}
@@ -263,7 +302,7 @@ func (c *MoonrakerClient) pollStatus() {
 			return
 		case <-ticker.C:
 			state, err := c.GetStatus()
-			if err == nil && c.statusCallback != nil {
+			if err == nil && c.lifeCtx.Err() == nil && c.statusCallback != nil {
 				c.statusCallback(state)
 			}
 		}
@@ -271,86 +310,24 @@ func (c *MoonrakerClient) pollStatus() {
 }
 
 // listenWebsocket maintains a WebSocket connection to Moonraker to receive JSON-RPC events.
-func (c *MoonrakerClient) listenWebsocket() {
-	wsURL := strings.Replace(c.baseURL, "http://", "ws://", 1)
-	wsURL = strings.Replace(wsURL, "https://", "wss://", 1)
-	wsURL += "/websocket"
-
+func (c *MoonrakerClient) listenWebsocket(conn *websocket.Conn) {
+	defer conn.CloseNow()
 	for {
-		select {
-		case <-c.stopPolling:
+		var msg struct {
+			Method string
+			Params []interface{}
+		}
+		if err := wsjson.Read(c.lifeCtx, conn, &msg); err != nil {
+			if c.lifeCtx.Err() == nil && c.statusCallback != nil {
+				c.lifeCancel()
+				c.statusCallback(&model.PrinterState{PrinterID: c.printerID, Status: model.PrinterStatusOffline, UpdatedAt: time.Now()})
+			}
 			return
-		default:
 		}
-
-		ctx, cancel := context.WithCancel(context.Background())
-
-		conn, resp, err := websocket.Dial(ctx, wsURL, &websocket.DialOptions{
-			HTTPClient: c.httpClient,
-		})
-
-		if err != nil {
-			if resp != nil && resp.Body != nil {
-				_ = resp.Body.Close()
+		if msg.Method == "notify_gcode_response" && len(msg.Params) > 0 {
+			if text, ok := msg.Params[0].(string); ok && strings.Contains(text, "AUTOMATION_EVENT:READY_FOR_NEXT_JOB") && c.macroAutomationCallback != nil {
+				c.macroAutomationCallback(c.printerID)
 			}
-			cancel()
-			select {
-			case <-time.After(5 * time.Second): // reconnect delay
-			case <-c.stopPolling:
-				return
-			}
-			continue
-		}
-
-		if resp != nil && resp.Body != nil {
-			_ = resp.Body.Close()
-		}
-
-		slog.Debug("MoonrakerClient: WebSocket connected", "printer_id", c.printerID)
-
-		// Start a goroutine to wait for stop signal and close the connection
-		go func() {
-			select {
-			case <-c.stopPolling:
-				cancel()
-				_ = conn.Close(websocket.StatusNormalClosure, "shutting down")
-			case <-ctx.Done():
-			}
-		}()
-
-		// Read loop
-		for {
-			var msg struct {
-				Method string        `json:"method"`
-				Params []interface{} `json:"params"`
-			}
-			err := wsjson.Read(ctx, conn, &msg)
-			if err != nil {
-				slog.Debug("MoonrakerClient: WebSocket read error", "printer_id", c.printerID, "error", err)
-				cancel()
-				_ = conn.Close(websocket.StatusAbnormalClosure, "")
-				break
-			}
-
-			if msg.Method == "notify_gcode_response" && len(msg.Params) > 0 {
-				if responseStr, ok := msg.Params[0].(string); ok {
-					if strings.Contains(responseStr, "AUTOMATION_EVENT:READY_FOR_NEXT_JOB") {
-						slog.Info("MoonrakerClient: Received automation macro event", "printer_id", c.printerID)
-						if c.macroAutomationCallback != nil {
-							go c.macroAutomationCallback(c.printerID)
-						}
-					}
-				}
-			}
-		}
-
-		_ = conn.Close(websocket.StatusAbnormalClosure, "")
-
-		// Backoff before reconnecting
-		select {
-		case <-time.After(2 * time.Second):
-		case <-c.stopPolling:
-			return
 		}
 	}
 }

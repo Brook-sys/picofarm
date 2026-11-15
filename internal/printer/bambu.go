@@ -1,11 +1,13 @@
 package printer
 
 import (
+	"context"
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -24,6 +26,8 @@ import (
 // Bambu printers use MQTT over TLS on port 8883 for status and control.
 // File uploads are done via FTPS on port 990 (LAN mode only).
 type BambuClient struct {
+	brokerURL      string
+	telemetry      chan struct{}
 	printerID      uuid.UUID
 	host           string
 	accessCode     string
@@ -108,15 +112,21 @@ func (c *BambuClient) SetSerialNumber(serial string) {
 
 // Connect establishes MQTT connection to Bambu printer.
 // Connection pattern follows the bambulabs_api community SDK.
-func (c *BambuClient) Connect() error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+func (c *BambuClient) Connect() error { return c.ConnectContext(context.Background()) }
+func (c *BambuClient) ConnectContext(ctx context.Context) error {
+	c.telemetry = make(chan struct{}, 1)
 
-	if c.connected && c.mqttClient != nil && c.mqttClient.IsConnected() {
+	c.mu.RLock()
+	alreadyConnected := c.connected && c.mqttClient != nil && c.mqttClient.IsConnected()
+	c.mu.RUnlock()
+	if alreadyConnected {
 		return nil
 	}
 
-	broker := fmt.Sprintf("ssl://%s:%d", c.host, BambuMQTTPort)
+	broker := c.brokerURL
+	if broker == "" {
+		broker = fmt.Sprintf("ssl://%s:%d", c.host, BambuMQTTPort)
+	}
 
 	// Determine MQTT credentials based on mode
 	username := "bblp"
@@ -142,17 +152,44 @@ func (c *BambuClient) Connect() error {
 		SetUsername(username).
 		SetPassword(c.accessCode).
 		SetTLSConfig(tlsConfig).
-		SetAutoReconnect(true).
+		SetAutoReconnect(false).
+		SetConnectRetry(false).
 		SetConnectTimeout(10 * time.Second).
 		SetWriteTimeout(10 * time.Second).
 		SetKeepAlive(30 * time.Second)
 
 	// Use DefaultPublishHandler for all incoming messages (matches community SDK pattern)
 	opts.SetDefaultPublishHandler(c.handleMessage)
-	opts.SetOnConnectHandler(c.onConnect)
+	// Subscription and initial telemetry are awaited synchronously below.
 	opts.SetConnectionLostHandler(c.onConnectionLost)
 	opts.SetReconnectingHandler(c.onReconnecting)
 
+	// The context reaches DNS, TCP, TLS and the MQTT CONNACK read. Wait
+	// for Paho's token to settle after cancellation; never abandon its dial.
+	var conn net.Conn
+	var connMu sync.Mutex
+	stop := context.AfterFunc(ctx, func() {
+		connMu.Lock()
+		defer connMu.Unlock()
+		if conn != nil {
+			_ = conn.Close()
+		}
+	})
+	defer stop()
+	opts.SetCustomOpenConnectionFn(func(uri *url.URL, options mqtt.ClientOptions) (net.Conn, error) {
+		d := tls.Dialer{NetDialer: &net.Dialer{}, Config: options.TLSConfig}
+		nc, err := d.DialContext(ctx, "tcp", uri.Host)
+		if err != nil {
+			return nil, err
+		}
+		connMu.Lock()
+		conn = nc
+		if ctx.Err() != nil {
+			_ = nc.Close()
+		}
+		connMu.Unlock()
+		return nc, nil
+	})
 	c.mqttClient = mqtt.NewClient(opts)
 
 	mode := "LAN"
@@ -172,38 +209,48 @@ func (c *BambuClient) Connect() error {
 		return fmt.Errorf("MQTT connection failed: %w", token.Error())
 	}
 
+	if err := ctx.Err(); err != nil {
+		c.mqttClient.Disconnect(0)
+		return err
+	}
+	c.mu.Lock()
 	c.connected = true
+	c.mu.Unlock()
+	topic := fmt.Sprintf("device/%s/report", c.serialNumber)
+	sub := c.mqttClient.Subscribe(topic, 0, nil)
+	select {
+	case <-ctx.Done():
+		c.mqttClient.Disconnect(0)
+		return ctx.Err()
+	case <-sub.Done():
+	}
+	if err := sub.Error(); err != nil {
+		return err
+	}
+	cmd, _ := json.Marshal(BambuCommand{Pushing: &BambuPushingCmd{Sequence: strconv.FormatInt(time.Now().UnixMilli(), 10), Command: "pushall"}})
+	pub := c.mqttClient.Publish(fmt.Sprintf("device/%s/request", c.serialNumber), 0, false, cmd)
+	select {
+	case <-ctx.Done():
+		c.mqttClient.Disconnect(0)
+		return ctx.Err()
+	case <-pub.Done():
+	}
+	if err := pub.Error(); err != nil {
+		return err
+	}
+	select {
+	case <-ctx.Done():
+		c.mqttClient.Disconnect(0)
+		return ctx.Err()
+	case <-c.telemetry:
+	}
+	if err := ctx.Err(); err != nil {
+		c.mqttClient.Disconnect(0)
+		return err
+	}
 	slog.Info("connected to Bambu printer", "mode", mode, "host", c.host, "printer_id", c.printerID)
 
 	return nil
-}
-
-// onConnect is called when MQTT connection is established.
-func (c *BambuClient) onConnect(client mqtt.Client) {
-	slog.Info("Bambu MQTT connected",
-		"printer_id", c.printerID,
-		"host", c.host,
-		"serial", c.serialNumber,
-		"has_access_code", c.accessCode != "",
-		"access_code_len", len(c.accessCode),
-	)
-
-	// Subscribe to report topic — matches community SDK pattern:
-	// QoS 0, nil handler (messages go through DefaultPublishHandler)
-	topic := fmt.Sprintf("device/%s/report", c.serialNumber)
-	token := client.Subscribe(topic, 0, nil)
-	if token.Wait() && token.Error() != nil {
-		slog.Error("failed to subscribe to Bambu report topic",
-			"error", token.Error(),
-			"topic", topic,
-			"serial", c.serialNumber,
-		)
-		return
-	}
-	slog.Info("subscribed to Bambu report topic", "topic", topic)
-
-	// Request initial status
-	c.requestPushAll()
 }
 
 // onConnectionLost is called when MQTT connection is lost.
@@ -212,9 +259,10 @@ func (c *BambuClient) onConnectionLost(client mqtt.Client, err error) {
 
 	c.mu.Lock()
 	c.connected = false
-	c.lastState.Status = model.PrinterStatusOffline
-	c.lastState.UpdatedAt = time.Now()
 	state := *c.lastState
+	state.Status = model.PrinterStatusOffline
+	state.UpdatedAt = time.Now()
+	c.lastState = &state
 	c.mu.Unlock()
 
 	if c.statusCallback != nil {
@@ -247,6 +295,12 @@ func (c *BambuClient) handleMessage(client mqtt.Client, msg mqtt.Message) {
 		state := c.mergePrintStatus(payload.Print)
 		c.lastState = state
 		c.mu.Unlock()
+		if state.Status != model.PrinterStatusOffline {
+			select {
+			case c.telemetry <- struct{}{}:
+			default:
+			}
+		}
 
 		if c.statusCallback != nil {
 			c.statusCallback(state)
@@ -305,7 +359,7 @@ func (c *BambuClient) Disconnect() error {
 	}
 
 	if c.mqttClient != nil && c.mqttClient.IsConnected() {
-		c.mqttClient.Disconnect(1000)
+		c.mqttClient.Disconnect(0)
 	}
 	c.connected = false
 

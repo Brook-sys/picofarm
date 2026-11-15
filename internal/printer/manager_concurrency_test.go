@@ -3,6 +3,7 @@ package printer
 import (
 	"net/http"
 	"net/http/httptest"
+	"nhooyr.io/websocket"
 	"testing"
 	"time"
 
@@ -15,6 +16,15 @@ import (
 func moonrakerServer(t *testing.T, hook func(w http.ResponseWriter, r *http.Request)) *httptest.Server {
 	t.Helper()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/websocket" {
+			conn, err := websocket.Accept(w, r, nil)
+			if err != nil {
+				return
+			}
+			defer conn.CloseNow()
+			_, _, _ = conn.Read(r.Context())
+			return
+		}
 		if hook != nil {
 			hook(w, r)
 		}

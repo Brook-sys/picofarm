@@ -42,6 +42,12 @@ Backend defaults are defined from `cmd/server/main.go` and database helpers:
 | `SLICER_CONNECTION_URL` | unset | Overrides the stored `slicer_connection_url` setting. Use it to pin the orca-slicer-api container address from the deployment (compose/systemd/k8s) instead of relying on what an earlier version wrote into the database. `GET /api/slicer/config` reports `connection_url_source` (`env` or `settings`) so the UI can explain why a saved URL has no effect |
 | `PICOFARM_SCAN_NETWORK` | unset | CIDR to scan for printers (`192.0.2.0/24` style value; use your own LAN subnet). Required whenever the backend runs in a container on a bridge network: the first non-loopback interface belongs to the container, not to the LAN where the printers live. Host networking is the alternative. Scans honor the real prefix length and are capped at 1024 hosts per pass, so pin a small subnet rather than a /8 |
 
+### Printer reconnection configuration
+
+`PRINTER_RECONNECT_INTERVAL=10s` sets the minimum interval between attempt starts for one printer. Attempt timeout is derived as interval minus one second (`9s` by default); minimum supported interval is `2s`. `PRINTER_RECONNECT_MAX_CONCURRENT=4` limits simultaneous attempts (accepted range `1`–`256`; upper bound is an allocation guard, not a measured safe capacity). Invalid configuration prevents server startup rather than silently using defaults. Values are read at startup; restart to apply changes.
+
+These values bound scheduling, not a promise of recovery within 10 seconds: booting devices, network availability and queued printers add latency. The concurrency default is conservative and has not been certified as a hardware-specific maximum. Reconnection must not replay start/resume commands. See the printer connection contract and regression matrix for behavior and validation limits.
+
 ### Etsy connection checklist
 
 The redirect URI is the only piece of the Etsy OAuth flow that lives outside this repository. In order to connect a shop:

@@ -270,17 +270,12 @@ Discovery is the one printer route whose cost depends on the network, not on the
 
 Automatic reconnect is background behavior with no route of its own:
 
-- The server keeps offline printers retrying in the background. A pass runs every 5s and only
-  books in-memory state; the per-printer retry rate decays from 5s to a 5 minute ceiling with ±20%
-  jitter, and a successful reconnect resets it.
-- `POST /api/printers/{id}/reconnect` is the manual path. It performs one attempt on demand and is
-  not subject to that backoff, but it does not interrupt an attempt already running for the same
-  printer.
+- Connection recovery uses startup configuration `PRINTER_RECONNECT_INTERVAL` (default `10s`, minimum `2s`) and `PRINTER_RECONNECT_MAX_CONCURRENT` (default `4`, integer `1`–`256`). Timeout is interval minus one second; invalid values prevent startup. More queued printers increase waiting time rather than active connection attempts.
+- `POST /api/printers/{id}/reconnect` is the manual path; it shares connection capacity and per-printer exclusion with automatic attempts. It must not interrupt an attempt already running for the same printer. See [PRINTER_RECONNECTION.md](PRINTER_RECONNECTION.md) for scheduling and recovery boundaries.
 - Printers in maintenance mode, `manual` printers, and connection types the manager cannot build a
   client for (`chitu` today) are never retried: they would fail on every attempt and only fill the
   log.
-- A printer reporting `printing`, `paused` or `idle` is left alone; only `offline`, `error` and
-  "no recorded state" are retried.
+- An operational `error` alone does not trigger reconnection. Automatic recovery targets communication loss (`offline` or no recorded state), not a connected printer reporting a machine error.
 - After `DisconnectAll` during shutdown, `Connect` refuses new connections instead of resurrecting a
   printer while the process is going away.
 

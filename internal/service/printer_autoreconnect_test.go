@@ -2,263 +2,221 @@ package service
 
 import (
 	"context"
-	"net/http"
-	"net/http/httptest"
-	"testing"
-	"time"
-
 	"github.com/Brook-sys/picofarm/internal/database"
 	"github.com/Brook-sys/picofarm/internal/model"
 	"github.com/Brook-sys/picofarm/internal/printer"
 	"github.com/Brook-sys/picofarm/internal/repository"
 	"github.com/google/uuid"
+	"net/http"
+	"net/http/httptest"
+	"sync/atomic"
+	"testing"
+	"time"
 )
 
 func newAutoReconnectService(t *testing.T) *PrinterService {
 	t.Helper()
 	db, err := database.Open(":memory:")
 	if err != nil {
-		t.Fatalf("open test database: %v", err)
+		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = db.Close() })
-	repos := repository.NewRepositories(db)
-	return &PrinterService{
-		repo:             repos.Printers,
-		manager:          printer.NewManager(),
-		reconnecting:     make(map[uuid.UUID]time.Time),
-		reconnectBackoff: make(map[uuid.UUID]reconnectBackoff),
-	}
+	s := &PrinterService{repo: repository.NewRepositories(db).Printers, manager: printer.NewManager()}
+	t.Cleanup(func() { s.StopReconnect(); s.manager.DisconnectAll(); _ = db.Close() })
+	return s
 }
-
-// A printer that reports itself alive must never be touched by auto reconnect:
-// disconnecting a printing printer to "fix" it would abort a real print.
 func TestNeedsReconnectLeavesLivePrintersAlone(t *testing.T) {
-	cases := []struct {
-		name  string
-		state *model.PrinterState
-		want  bool
-	}{
-		{"no state at all", nil, true},
-		{"offline", &model.PrinterState{Status: model.PrinterStatusOffline}, true},
-		{"error", &model.PrinterState{Status: model.PrinterStatusError}, true},
-		{"printing", &model.PrinterState{Status: model.PrinterStatusPrinting}, false},
-		{"paused", &model.PrinterState{Status: model.PrinterStatusPaused}, false},
-		{"idle", &model.PrinterState{Status: model.PrinterStatusIdle}, false},
-	}
-	for _, tc := range cases {
-		if got := needsReconnect(tc.state); got != tc.want {
-			t.Errorf("%s: needsReconnect = %v, want %v", tc.name, got, tc.want)
+	for _, status := range []model.PrinterStatus{model.PrinterStatusError, model.PrinterStatusPrinting, model.PrinterStatusPaused, model.PrinterStatusIdle} {
+		if needsReconnect(&model.PrinterState{Status: status}) {
+			t.Fatalf("must not reconnect %s", status)
 		}
 	}
+	if !needsReconnect(nil) || !needsReconnect(&model.PrinterState{Status: model.PrinterStatusOffline}) {
+		t.Fatal("must retry offline")
+	}
 }
-
-func TestReconnectDelayGrowsExponentiallyAndCaps(t *testing.T) {
-	base := float64(autoReconnectBaseDelay)
-	max := float64(autoReconnectMaxDelay)
-
-	for attempt := 1; attempt <= 20; attempt++ {
-		delay := reconnectDelay(attempt)
-		want := base
-		for i := 1; i < attempt; i++ {
-			want *= 2
-			if want > max {
-				want = max
+func TestReconnectConfig(t *testing.T) {
+	for _, tc := range []struct {
+		interval, max string
+		valid         bool
+	}{{"10s", "4", true}, {"2s", "1", true}, {"1.99s", "4", false}, {"no", "4", false}, {"10s", "0", false}, {"10s", "-1", false}, {"10s", "1.5", false}, {"", "4", false}} {
+		t.Run(tc.interval+tc.max, func(t *testing.T) {
+			t.Setenv("PRINTER_RECONNECT_INTERVAL", tc.interval)
+			t.Setenv("PRINTER_RECONNECT_MAX_CONCURRENT", tc.max)
+			_, err := PrinterReconnectConfigFromEnv()
+			if (err == nil) != tc.valid {
+				t.Fatal(err)
 			}
-		}
-		// autoReconnectJitter is a duration constant, so the jitter window has
-		// to be computed as floats before comparing.
-		low, high := want*(1-autoReconnectJitter), want*(1+autoReconnectJitter)
-		got := float64(delay)
-		if got < low || got > high {
-			t.Fatalf("attempt %d: delay %v outside jittered window [%v, %v]", attempt, delay, time.Duration(low), time.Duration(high))
-		}
-	}
-
-	// The jitter window must be computed in float64: the tuning constants are
-	// typed durations (integers in nanoseconds), so 0.8 cannot multiply one.
-	if float64(reconnectDelay(0)) < float64(autoReconnectBaseDelay)*(1-autoReconnectJitter) {
-		t.Fatalf("attempt 0 should behave like attempt 1, got %v", reconnectDelay(0))
-	}
-	if float64(reconnectDelay(100)) > float64(autoReconnectMaxDelay)*(1+autoReconnectJitter) {
-		t.Fatalf("delay must not exceed the cap, got %v", reconnectDelay(100))
+		})
 	}
 }
-
-// Printers that can never connect must be skipped, otherwise auto reconnect
-// burns a full client timeout on each of them every few seconds forever.
-func TestPrinterNeedsAutoReconnectSkipsImpossiblePrinters(t *testing.T) {
+func TestReconnectFairFIFOAndStartSpacing(t *testing.T) {
+	now := time.Unix(100, 0)
+	a, b, c := uuid.New(), uuid.New(), uuid.New()
+	q := &reconnectQueue{config: DefaultPrinterReconnectConfig(), lastStart: map[uuid.UUID]time.Time{a: now}, queue: []*reconnectRequest{{id: a}, {id: b}, {id: c}}}
+	if r := takeReconnect(q, now); r.id != b {
+		t.Fatal("cooling head blocked FIFO")
+	}
+	if r := takeReconnect(q, now); r.id != c {
+		t.Fatal("starved third printer")
+	}
+	if r := takeReconnect(q, now.Add(9*time.Second)); r != nil {
+		t.Fatal("started early")
+	}
+	if r := takeReconnect(q, now.Add(10*time.Second)); r == nil || r.id != a {
+		t.Fatal("deadline not eligible")
+	}
+}
+func TestReconnectBoundedAndManualAutoDeduplicated(t *testing.T) {
 	s := newAutoReconnectService(t)
-
-	impossible := []*model.Printer{
-		{ID: uuid.New(), ConnectionType: model.ConnectionTypeManual},
-		{ID: uuid.New(), ConnectionType: model.ConnectionTypeManual, MaintenanceMode: false},
-		{ID: uuid.New(), ConnectionType: model.ConnectionTypeMoonraker, MaintenanceMode: true},
-		{ID: uuid.New(), ConnectionType: model.ConnectionTypeChiTu},
-		{ID: uuid.New(), ConnectionType: "nonsense"},
+	if err := s.ConfigureReconnect(PrinterReconnectConfig{2 * time.Second, 2}); err != nil {
+		t.Fatal(err)
 	}
-	for _, p := range impossible {
-		if s.printerNeedsAutoReconnect(p, time.Now()) {
-			t.Errorf("printer type %q maintenance=%v should not be a reconnect candidate", p.ConnectionType, p.MaintenanceMode)
+	entered := make(chan struct{}, 10)
+	var active, peak atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		n := active.Add(1)
+		defer active.Add(-1)
+		for old := peak.Load(); n > old && !peak.CompareAndSwap(old, n); old = peak.Load() {
+		}
+		entered <- struct{}{}
+		<-r.Context().Done()
+	}))
+	defer server.Close()
+	var first uuid.UUID
+	for i := 0; i < 6; i++ {
+		p := &model.Printer{Name: "offline", ConnectionType: model.ConnectionTypeMoonraker, ConnectionURI: server.URL}
+		if err := s.repo.Create(context.Background(), p); err != nil {
+			t.Fatal(err)
+		}
+		if i == 0 {
+			first = p.ID
 		}
 	}
-
-	// A printer whose connection is possible and which has no state yet must be
-	// a candidate: that is the normal case right after startup.
-	ok := &model.Printer{ID: uuid.New(), ConnectionType: model.ConnectionTypeMoonraker}
-	if !s.printerNeedsAutoReconnect(ok, time.Now()) {
-		t.Error("expected a state-less moonraker printer to be a reconnect candidate")
+	s.ReconnectOfflinePrinters(context.Background())
+	for i := 0; i < 2; i++ {
+		select {
+		case <-entered:
+		case <-time.After(3 * time.Second):
+			t.Fatal("worker not started")
+		}
+	}
+	s.reconnectMu.Lock()
+	before := s.reconnectQueue.pending[first]
+	s.reconnectMu.Unlock()
+	r, err := s.enqueueReconnect(first, false)
+	if err != nil || r != before {
+		t.Fatal("manual duplicated auto")
+	}
+	s.StopReconnect()
+	if peak.Load() > 2 {
+		t.Fatalf("concurrency %d", peak.Load())
 	}
 }
-
-// A printer in the middle of a reconnect attempt must not get a second one.
-func TestPrinterNeedsAutoReconnectSkipsInFlightPrinters(t *testing.T) {
+func TestReconnectMaintenanceCheckedAtExecution(t *testing.T) {
 	s := newAutoReconnectService(t)
-	id := uuid.New()
-	s.reconnecting[id] = time.Now()
-
-	p := &model.Printer{ID: id, ConnectionType: model.ConnectionTypeMoonraker}
-	if s.printerNeedsAutoReconnect(p, time.Now()) {
-		t.Error("printer with a reconnect in flight must not be retried")
+	p := &model.Printer{Name: "maintenance", ConnectionType: model.ConnectionTypeMoonraker, MaintenanceMode: true, ConnectionURI: "http://127.0.0.1:1"}
+	if err := s.repo.Create(context.Background(), p); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.performReconnect(context.Background(), p.ID, false); err == nil {
+		t.Fatal("maintenance connected")
 	}
 }
 
-// A printer still inside its backoff window must not be retried: this is what
-// stops a printer that is simply switched off from being hammered every pass.
-func TestPrinterNeedsAutoReconnectHonoursBackoffDeadline(t *testing.T) {
+func TestAutoReconnectPowerCycleWithoutManualRequest(t *testing.T) {
 	s := newAutoReconnectService(t)
-	id := uuid.New()
-	s.reconnectBackoff[id] = reconnectBackoff{attempts: 3, nextAttempt: time.Now().Add(time.Minute)}
-
-	p := &model.Printer{ID: id, ConnectionType: model.ConnectionTypeMoonraker}
-	if s.printerNeedsAutoReconnect(p, time.Now()) {
-		t.Error("printer inside its backoff window must not be retried")
+	if err := s.ConfigureReconnect(PrinterReconnectConfig{2 * time.Second, 1}); err != nil {
+		t.Fatal(err)
 	}
-	if !s.printerNeedsAutoReconnect(p, time.Now().Add(2*time.Minute)) {
-		t.Error("printer past its backoff deadline should be retried")
-	}
-}
-
-// waitIdle blocks until no reconnect attempt is in flight.
-func waitIdle(t *testing.T, s *PrinterService) {
-	t.Helper()
-	deadline := time.Now().Add(10 * time.Second)
-	for time.Now().Before(deadline) {
-		s.reconnectMu.Lock()
-		busy := len(s.reconnecting) > 0
-		s.reconnectMu.Unlock()
-		if !busy {
+	var online atomic.Bool
+	var probes atomic.Int32
+	var actions atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "GET" {
+			actions.Add(1)
+		}
+		if r.URL.Path == "/api/version" {
+			probes.Add(1)
+		}
+		if !online.Load() {
+			http.Error(w, "off", http.StatusServiceUnavailable)
 			return
 		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	t.Fatal("reconnect attempts never settled")
-}
-
-func attempts(t *testing.T, s *PrinterService, id uuid.UUID) int {
-	t.Helper()
-	s.reconnectMu.Lock()
-	defer s.reconnectMu.Unlock()
-	return s.reconnectBackoff[id].attempts
-}
-
-// A failing printer must accumulate attempts and be deferred, not retried on
-// the next pass.
-func TestReconnectOfflinePrintersBacksOffAfterFailure(t *testing.T) {
-	ctx := context.Background()
-	s := newAutoReconnectService(t)
-
-	// A Moonraker URL that refuses connections: the attempt fails fast, but the
-	// backoff must still be recorded.
-	p := &model.Printer{Name: "down", ConnectionType: model.ConnectionTypeMoonraker, ConnectionURI: "http://127.0.0.1:1"}
-	if err := s.repo.Create(ctx, p); err != nil {
-		t.Fatalf("create printer: %v", err)
-	}
-
-	s.ReconnectOfflinePrinters(ctx)
-	waitIdle(t, s)
-	if got := attempts(t, s, p.ID); got != 1 {
-		t.Fatalf("expected one recorded failed attempt, got %d", got)
-	}
-
-	// Immediately running the pass again must not produce another attempt.
-	s.reconnectMu.Lock()
-	first := s.reconnectBackoff[p.ID].nextAttempt
-	s.reconnectMu.Unlock()
-	if !first.After(time.Now()) {
-		t.Fatal("expected the next attempt to be scheduled in the future")
-	}
-	s.ReconnectOfflinePrinters(ctx)
-	waitIdle(t, s)
-	if got := attempts(t, s, p.ID); got != 1 {
-		t.Fatalf("expected the backoff window to defer the retry, got %d attempts", got)
-	}
-
-	// Past the deadline the printer is tried again.
-	s.reconnectMu.Lock()
-	s.reconnectBackoff[p.ID] = reconnectBackoff{attempts: 1, nextAttempt: time.Now().Add(-time.Second)}
-	s.reconnectMu.Unlock()
-	s.ReconnectOfflinePrinters(ctx)
-	waitIdle(t, s)
-	if got := attempts(t, s, p.ID); got != 2 {
-		t.Fatalf("expected a second attempt once the deadline passed, got %d", got)
-	}
-}
-
-// A printer that comes back must have its backoff cleared, so a later outage
-// starts from the short delay again instead of waiting five minutes.
-func TestReconnectOfflinePrintersClearsBackoffOnSuccess(t *testing.T) {
-	ctx := context.Background()
-	s := newAutoReconnectService(t)
-
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"state":{"flags":{"operational":true}}}`))
 	}))
-	t.Cleanup(server.Close)
-
-	p := &model.Printer{Name: "back", ConnectionType: model.ConnectionTypeMoonraker, ConnectionURI: server.URL}
-	if err := s.repo.Create(ctx, p); err != nil {
-		t.Fatalf("create printer: %v", err)
+	defer server.Close()
+	p := &model.Printer{Name: "powercycle", ConnectionType: model.ConnectionTypeOctoPrint, ConnectionURI: server.URL}
+	if err := s.repo.Create(context.Background(), p); err != nil {
+		t.Fatal(err)
 	}
-	s.reconnectMu.Lock()
-	s.reconnectBackoff[p.ID] = reconnectBackoff{attempts: 5, nextAttempt: time.Now().Add(-time.Second)}
-	s.reconnectMu.Unlock()
-
-	s.ReconnectOfflinePrinters(ctx)
-	waitIdle(t, s)
-
-	s.reconnectMu.Lock()
-	_, stillBackedOff := s.reconnectBackoff[p.ID]
-	s.reconnectMu.Unlock()
-	if stillBackedOff {
-		t.Fatalf("expected the backoff to be cleared after a successful reconnect, attempts=%d", attempts(t, s, p.ID))
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	s.StartAutoReconnect(ctx)
+	deadline := time.After(4 * time.Second)
+	for probes.Load() == 0 {
+		select {
+		case <-deadline:
+			t.Fatal("automatic initial attempt missing")
+		case <-time.After(10 * time.Millisecond):
+		}
 	}
-	state, err := s.manager.GetState(p.ID)
-	if err != nil {
-		t.Fatalf("expected a state after a successful reconnect: %v", err)
+	online.Store(true)
+	deadline = time.After(5 * time.Second)
+	for {
+		state, err := s.manager.GetState(p.ID)
+		if err == nil && state.Status != model.PrinterStatusOffline {
+			break
+		}
+		select {
+		case <-deadline:
+			t.Fatal("power-on did not recover automatically")
+		case <-time.After(10 * time.Millisecond):
+		}
 	}
-	if state.Status == model.PrinterStatusOffline {
-		// GetStatus against a server that answers 200 with an empty body parses
-		// as offline; what matters is that the connection itself succeeded.
-		t.Log("state after reconnect:", state.Status)
+	if probes.Load() < 2 {
+		t.Fatal("recovery had no retry")
+	}
+	// Now exercise a real power cycle of the already-connected polling client.
+	online.Store(false)
+	deadline = time.After(7 * time.Second)
+	for {
+		state, err := s.manager.GetState(p.ID)
+		if err == nil && state.Status == model.PrinterStatusOffline {
+			break
+		}
+		select {
+		case <-deadline:
+			t.Fatal("poll did not detect power-off")
+		case <-time.After(10 * time.Millisecond):
+		}
+	}
+	online.Store(true)
+	deadline = time.After(6 * time.Second)
+	for {
+		state, err := s.manager.GetState(p.ID)
+		if err == nil && state.Status != model.PrinterStatusOffline {
+			break
+		}
+		select {
+		case <-deadline:
+			t.Fatal("connected printer did not recover after power cycle")
+		case <-time.After(10 * time.Millisecond):
+		}
+	}
+
+	if actions.Load() != 0 {
+		t.Fatal("reconnect sent an action")
 	}
 }
 
-// The loop must stop when its context is cancelled instead of leaking a
-// goroutine that outlives shutdown.
-func TestStartAutoReconnectStopsOnContextCancel(t *testing.T) {
+func TestAutomaticReconnectSkipRules(t *testing.T) {
 	s := newAutoReconnectService(t)
-	ctx, cancel := context.WithCancel(context.Background())
-
-	s.StartAutoReconnect(ctx)
-	s.StartAutoReconnect(ctx) // second call must not start another goroutine
-
-	cancel()
-	// The loop holds no lock while sleeping on the ticker, so this only has to
-	// terminate the loop; the assertion is that the second call was a no-op.
-	s.autoReconnectMu.Lock()
-	on := s.autoReconnectOn
-	s.autoReconnectMu.Unlock()
-	if !on {
-		t.Fatal("expected auto reconnect to be marked as started")
+	for _, p := range []*model.Printer{{ConnectionType: model.ConnectionTypeManual}, {ConnectionType: model.ConnectionTypeChiTu}, {ConnectionType: "unknown"}, {ConnectionType: model.ConnectionTypeMoonraker, MaintenanceMode: true}} {
+		if s.printerNeedsAutoReconnect(p, time.Now()) {
+			t.Fatalf("invalid candidate: %+v", p)
+		}
+	}
+	if !s.printerNeedsAutoReconnect(&model.Printer{ID: uuid.New(), ConnectionType: model.ConnectionTypeMoonraker}, time.Now()) {
+		t.Fatal("missing state must retry")
 	}
 }

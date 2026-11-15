@@ -4,6 +4,8 @@ PicoFarm is a print farm management and order fulfillment application. It combin
 
 Slicer worker, profile snapshots and viewer boundaries: [SLICER_REFINEMENTS.md](SLICER_REFINEMENTS.md#architecture-and-security).
 
+Printer connection recovery is coordinated in `internal/service/printer_autoreconnect.go`; startup validates its environment configuration before network work. See [PRINTER_RECONNECTION.md](PRINTER_RECONNECTION.md) for limits and recovery boundaries.
+
 ## High-level shape
 
 ```text

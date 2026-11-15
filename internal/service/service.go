@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 	"log/slog"
-	"time"
 
 	"github.com/Brook-sys/picofarm/internal/bambu"
 	"github.com/Brook-sys/picofarm/internal/model"
@@ -12,7 +11,6 @@ import (
 	"github.com/Brook-sys/picofarm/internal/repository"
 	"github.com/Brook-sys/picofarm/internal/saleschannel"
 	"github.com/Brook-sys/picofarm/internal/storage"
-	"github.com/google/uuid"
 )
 
 // Services holds all service instances.
@@ -86,7 +84,7 @@ func NewServices(repos *repository.Repositories, store storage.Storage, printerM
 		Projects:        &ProjectService{repo: repos.Projects, printJobRepo: repos.PrintJobs, printerRepo: repos.Printers, spoolRepo: repos.Spools, designRepo: repos.Designs, tagRepo: repos.Tags, saleRepo: repos.Sales, partRepo: repos.Parts, supplyRepo: repos.ProjectSupplies, repos: repos, printerMgr: printerMgr, hub: hub, storage: store},
 		Parts:           &PartService{repo: repos.Parts, designRepo: repos.Designs, projectRepo: repos.Projects, tagRepo: repos.Tags, stlRepo: repos.STLLibrary},
 		Designs:         &DesignService{repo: repos.Designs, partRepo: repos.Parts, projectRepo: repos.Projects, tagRepo: repos.Tags, fileRepo: repos.Files, gcodeRepo: repos.GCodeLibrary, stlRepo: repos.STLLibrary, storage: store},
-		Printers:        &PrinterService{repo: repos.Printers, settingsRepo: repos.Settings, printJobRepo: repos.PrintJobs, queueRepo: repos.QueueItems, saleRepo: repos.Sales, macroRepo: repos.PrinterMacros, manager: printerMgr, hub: hub, discovery: printer.NewDiscovery(), bambuCloudRepo: repos.BambuCloud, bambuCloud: bambuCloudClient, reconnecting: make(map[uuid.UUID]time.Time)},
+		Printers:        &PrinterService{repo: repos.Printers, settingsRepo: repos.Settings, printJobRepo: repos.PrintJobs, queueRepo: repos.QueueItems, saleRepo: repos.Sales, macroRepo: repos.PrinterMacros, manager: printerMgr, hub: hub, discovery: printer.NewDiscovery(), bambuCloudRepo: repos.BambuCloud, bambuCloud: bambuCloudClient},
 		Materials:       &MaterialService{repo: repos.Materials},
 		Spools:          &SpoolService{repo: repos.Spools},
 		PrintJobs:       &PrintJobService{repo: repos.PrintJobs, printerRepo: repos.Printers, designRepo: repos.Designs, spoolRepo: repos.Spools, materialRepo: repos.Materials, projectRepo: repos.Projects, queueRepo: repos.QueueItems, archiveRepo: repos.PrintArchives, printerMgr: printerMgr, hub: hub, storage: store},
@@ -167,6 +165,7 @@ func NewServices(repos *repository.Repositories, store storage.Storage, printerM
 	// Wire task repo to order service (needed for ProcessItem)
 	services.Orders.SetTaskRepo(repos.Tasks)
 
+	services.BambuCloud.reconnect = services.Printers.ReconnectAsync
 	return services
 }
 

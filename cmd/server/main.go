@@ -26,6 +26,12 @@ func main() {
 	// Load .env file if present
 	_ = godotenv.Load()
 
+	reconnectConfig, configErr := service.PrinterReconnectConfigFromEnv()
+	if configErr != nil {
+		slog.Error("invalid printer reconnect configuration", "error", configErr)
+		os.Exit(1)
+	}
+
 	// Initialize Sentry for crash reporting
 	if dsn := os.Getenv("SENTRY_DSN"); dsn != "" {
 		if err := sentry.Init(sentry.ClientOptions{
@@ -104,6 +110,11 @@ func main() {
 		},
 	}
 	services := service.NewServicesWithConfig(repos, fileStorage, printerManager, hub, servicesConfig)
+	if err := services.Printers.ConfigureReconnect(reconnectConfig); err != nil {
+		slog.Error("invalid reconnect configuration", "error", err)
+		os.Exit(1)
+	}
+	defer services.Printers.StopReconnect()
 	services.SlicerJobs, err = service.NewSlicerJobsService(context.Background(), services.Settings, services.Slicer)
 	if err != nil {
 		slog.Error("failed to initialize slicer jobs", "error", err)
@@ -197,6 +208,7 @@ func main() {
 	backupService.StopScheduler()
 
 	// Disconnect all printers (closes MQTT connections)
+	services.Printers.StopReconnect()
 	printerManager.DisconnectAll()
 
 	// Stop WebSocket hub (closes all client connections)

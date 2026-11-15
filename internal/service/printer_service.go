@@ -20,22 +20,22 @@ import (
 )
 
 type PrinterService struct {
-	repo             *repository.PrinterRepository
-	settingsRepo     *repository.SettingsRepository
-	printJobRepo     *repository.PrintJobRepository
-	queueRepo        *repository.QueueItemRepository
-	saleRepo         *repository.SaleRepository
-	macroRepo        *repository.PrinterMacroRepository
-	manager          *printer.Manager
-	hub              *realtime.Hub
-	discovery        *printer.Discovery
-	bambuCloudRepo   *repository.BambuCloudRepository
-	bambuCloud       *bambu.CloudClient
-	reconnectMu      sync.Mutex
-	reconnecting     map[uuid.UUID]time.Time
-	reconnectBackoff map[uuid.UUID]reconnectBackoff
-	autoReconnectMu  sync.Mutex
-	autoReconnectOn  bool
+	repo            *repository.PrinterRepository
+	settingsRepo    *repository.SettingsRepository
+	printJobRepo    *repository.PrintJobRepository
+	queueRepo       *repository.QueueItemRepository
+	saleRepo        *repository.SaleRepository
+	macroRepo       *repository.PrinterMacroRepository
+	manager         *printer.Manager
+	hub             *realtime.Hub
+	discovery       *printer.Discovery
+	bambuCloudRepo  *repository.BambuCloudRepository
+	bambuCloud      *bambu.CloudClient
+	reconnectMu     sync.Mutex
+	reconnectConfig PrinterReconnectConfig
+	reconnectQueue  *reconnectQueue
+	autoReconnectMu sync.Mutex
+	autoReconnectOn bool
 }
 
 // Create creates a new printer.
@@ -59,7 +59,7 @@ func (s *PrinterService) Create(ctx context.Context, p *model.Printer) error {
 
 	// Connect printer if not manual and not in maintenance mode
 	if p.ConnectionType != model.ConnectionTypeManual && !p.MaintenanceMode {
-		go s.manager.Connect(p)
+		_, _ = s.enqueueReconnect(p.ID, false)
 	}
 
 	return nil
@@ -176,12 +176,12 @@ func (s *PrinterService) Update(ctx context.Context, p *model.Printer) error {
 		return nil
 	}
 	if previous != nil && previous.MaintenanceMode && p.ConnectionType != model.ConnectionTypeManual {
-		go s.manager.Connect(p)
+		_, _ = s.enqueueReconnect(p.ID, false)
 	}
 	return nil
 }
 
-func (s *PrinterService) Reconnect(ctx context.Context, id uuid.UUID) error {
+func (s *PrinterService) performReconnect(ctx context.Context, id uuid.UUID, automatic bool) error {
 	p, err := s.repo.GetByID(ctx, id)
 	if err != nil {
 		return err
@@ -189,46 +189,50 @@ func (s *PrinterService) Reconnect(ctx context.Context, id uuid.UUID) error {
 	if p == nil {
 		return fmt.Errorf("printer not found")
 	}
-	if p.ConnectionType == model.ConnectionTypeManual {
-		return fmt.Errorf("manual printers do not support reconnection")
-	}
 	if p.MaintenanceMode {
 		return fmt.Errorf("printer is in maintenance mode")
 	}
-	s.manager.Disconnect(id)
-	return s.manager.Connect(p)
-}
-
-func (s *PrinterService) ReconnectAsync(ctx context.Context, id uuid.UUID) error {
-	s.reconnectMu.Lock()
-	if s.reconnecting == nil {
-		s.reconnecting = make(map[uuid.UUID]time.Time)
+	if !printer.SupportsConnectionType(p.ConnectionType) {
+		return fmt.Errorf("unsupported connection type: %s", p.ConnectionType)
 	}
-	if started, ok := s.reconnecting[id]; ok && time.Since(started) < 15*time.Second {
-		s.reconnectMu.Unlock()
+	if p.ConnectionType == model.ConnectionTypeBambuCloud && s.bambuCloudRepo != nil {
+		auth, err := s.bambuCloudRepo.Get(ctx)
+		if err != nil {
+			return err
+		}
+		if auth == nil || auth.IsExpired(0) {
+			return fmt.Errorf("Bambu Cloud authentication unavailable or expired")
+		}
+		p.ConnectionURI = auth.MQTTUsername
+		p.APIKey = auth.AccessToken
+	}
+	if automatic && !s.printerNeedsAutoReconnect(p, time.Now()) {
 		return nil
 	}
-	s.reconnecting[id] = time.Now()
-	s.reconnectMu.Unlock()
-
-	go func() {
-		defer func() {
-			s.reconnectMu.Lock()
-			delete(s.reconnecting, id)
-			s.reconnectMu.Unlock()
-		}()
-		if err := s.Reconnect(context.Background(), id); err != nil {
-			slog.Warn("printer reconnect failed", "printer_id", id, "error", err)
-		}
-	}()
-	return nil
+	return s.manager.ConnectContext(ctx, p)
+}
+func (s *PrinterService) Reconnect(ctx context.Context, id uuid.UUID) error {
+	r, err := s.enqueueReconnect(id, false)
+	if err != nil {
+		return err
+	}
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-r.done:
+		return r.err
+	}
+}
+func (s *PrinterService) ReconnectAsync(ctx context.Context, id uuid.UUID) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	_, err := s.enqueueReconnect(id, false)
+	return err
 }
 
-// ReconnectOfflinePrinters is one pass of the automatic reconnect: every
-// printer that is offline past its own backoff deadline gets a single attempt.
-// It is deliberately cheap — one repository list plus in-memory bookkeeping —
-// so it can run every few seconds on a farm with dozens of printers. The
-// retry rate decays instead of hammering a printer that is simply switched off.
+// ReconnectOfflinePrinters enqueues offline printers without performing network I/O.
+// The shared scheduler enforces spacing, deduplication and concurrency.
 // See printer_autoreconnect.go for the schedule.
 func (s *PrinterService) ReconnectOfflinePrinters(ctx context.Context) {
 	printers, err := s.repo.List(ctx)
@@ -242,7 +246,7 @@ func (s *PrinterService) ReconnectOfflinePrinters(ctx context.Context) {
 		if !s.printerNeedsAutoReconnect(p, now) {
 			continue
 		}
-		s.startAutoReconnect(ctx, p)
+		_, _ = s.enqueueReconnect(p.ID, true)
 	}
 }
 
@@ -699,7 +703,7 @@ func (s *PrinterService) ConnectAllPrinters(ctx context.Context) {
 		}
 
 		slog.Info("reconnecting printer", "id", p.ID, "name", p.Name, "type", p.ConnectionType)
-		go s.manager.Connect(p)
+		_, _ = s.enqueueReconnect(p.ID, false)
 	}
 }
 
@@ -738,6 +742,7 @@ func (s *PrinterService) refreshBambuToken(ctx context.Context, auth *model.Bamb
 
 // BambuCloudService handles Bambu Cloud authentication and device management.
 type BambuCloudService struct {
+	reconnect   func(context.Context, uuid.UUID) error
 	cloud       *bambu.CloudClient
 	repo        *repository.BambuCloudRepository
 	printerRepo *repository.PrinterRepository
@@ -929,7 +934,9 @@ func (s *BambuCloudService) AddDevice(ctx context.Context, devID string) (*model
 	}
 
 	// Connect via cloud MQTT
-	go s.printerMgr.Connect(p)
+	if s.reconnect != nil {
+		_ = s.reconnect(ctx, p.ID)
+	}
 
 	return p, nil
 }

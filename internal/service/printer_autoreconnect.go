@@ -2,9 +2,11 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
-	"math"
-	"math/rand/v2"
+	"os"
+	"strconv"
+	"sync"
 	"time"
 
 	"github.com/Brook-sys/picofarm/internal/model"
@@ -12,174 +14,210 @@ import (
 	"github.com/google/uuid"
 )
 
-// Automatic reconnect tuning.
-//
-// A farm contains printers that are switched off, unplugged or on a flaky
-// Wi-Fi, so every attempt costs a full client timeout (Bambu waits up to 10s on
-// MQTT, the HTTP clients 10s each). Retrying those every few seconds burns CPU,
-// fills the log and hammers a dead address for no gain. The poll therefore stays
-// cheap and constant, while the per-printer retry rate decays exponentially to
-// a five minute ceiling, with jitter so a whole rack of printers that went dark
-// together does not come back in one synchronized burst.
-const (
-	// autoReconnectPollInterval is the cadence of the bookkeeping pass. It does
-	// no network I/O beyond one repository list.
-	autoReconnectPollInterval = 5 * time.Second
-	// autoReconnectBaseDelay is the wait after the first failed attempt.
-	autoReconnectBaseDelay = 5 * time.Second
-	// autoReconnectMaxDelay caps the exponential growth.
-	autoReconnectMaxDelay = 5 * time.Minute
-	// autoReconnectJitter spreads retries by ±20% of the computed delay.
-	autoReconnectJitter = 0.2
-)
-
-// reconnectBackoff is the reconnect state of a single printer.
-type reconnectBackoff struct {
-	attempts    int
-	nextAttempt time.Time
+// PrinterReconnectConfig controls both automatic and operator-requested attempts.
+type PrinterReconnectConfig struct {
+	Interval      time.Duration
+	MaxConcurrent int
 }
 
-// autoReconnectLoop ticks until ctx is cancelled.
+func DefaultPrinterReconnectConfig() PrinterReconnectConfig {
+	return PrinterReconnectConfig{10 * time.Second, 4}
+}
+func (c PrinterReconnectConfig) Validate() error {
+	if c.Interval < 2*time.Second {
+		return fmt.Errorf("PRINTER_RECONNECT_INTERVAL must be a duration of at least 2s")
+	}
+	if c.MaxConcurrent < 1 || c.MaxConcurrent > 256 {
+		return fmt.Errorf("PRINTER_RECONNECT_MAX_CONCURRENT must be an integer between 1 and 256")
+	}
+	return nil
+}
+func PrinterReconnectConfigFromEnv() (PrinterReconnectConfig, error) {
+	c := DefaultPrinterReconnectConfig()
+	var err error
+	if v, ok := os.LookupEnv("PRINTER_RECONNECT_INTERVAL"); ok {
+		c.Interval, err = time.ParseDuration(v)
+		if err != nil {
+			return c, fmt.Errorf("invalid PRINTER_RECONNECT_INTERVAL: %w", err)
+		}
+	}
+	if v, ok := os.LookupEnv("PRINTER_RECONNECT_MAX_CONCURRENT"); ok {
+		c.MaxConcurrent, err = strconv.Atoi(v)
+		if err != nil {
+			return c, fmt.Errorf("invalid PRINTER_RECONNECT_MAX_CONCURRENT: %w", err)
+		}
+	}
+	return c, c.Validate()
+}
+func (s *PrinterService) ConfigureReconnect(c PrinterReconnectConfig) error {
+	if err := c.Validate(); err != nil {
+		return err
+	}
+	s.reconnectMu.Lock()
+	defer s.reconnectMu.Unlock()
+	if s.reconnectQueue != nil {
+		return fmt.Errorf("reconnect scheduler already started")
+	}
+	s.reconnectConfig = c
+	return nil
+}
+
+type reconnectRequest struct {
+	id        uuid.UUID
+	automatic bool
+	running   bool
+	done      chan struct{}
+	err       error
+}
+type reconnectQueue struct {
+	ctx       context.Context
+	cancel    context.CancelFunc
+	config    PrinterReconnectConfig
+	pending   map[uuid.UUID]*reconnectRequest
+	queue     []*reconnectRequest
+	lastStart map[uuid.UUID]time.Time
+	wake      chan struct{}
+	workers   sync.WaitGroup
+}
+
+// All queue operations, including dequeue/start accounting, hold reconnectMu.
+// A single pending entry covers queued AND running attempts; there is no expiry
+// that could admit a duplicate while a slow transport is still in progress.
+func (s *PrinterService) schedulerLocked() *reconnectQueue {
+	if s.reconnectQueue != nil {
+		return s.reconnectQueue
+	}
+	c := s.reconnectConfig
+	if c.Interval == 0 {
+		c = DefaultPrinterReconnectConfig()
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	q := &reconnectQueue{ctx: ctx, cancel: cancel, config: c, pending: map[uuid.UUID]*reconnectRequest{}, lastStart: map[uuid.UUID]time.Time{}, wake: make(chan struct{}, 1)}
+	s.reconnectQueue = q
+	for i := 0; i < c.MaxConcurrent; i++ {
+		q.workers.Add(1)
+		go s.reconnectWorker(q)
+	}
+	return q
+}
+func (s *PrinterService) enqueueReconnect(id uuid.UUID, automatic bool) (*reconnectRequest, error) {
+	s.reconnectMu.Lock()
+	defer s.reconnectMu.Unlock()
+	q := s.schedulerLocked()
+	if err := q.ctx.Err(); err != nil {
+		return nil, err
+	}
+	if r := q.pending[id]; r != nil {
+		if !automatic && !r.running {
+			r.automatic = false
+		}
+		return r, nil
+	}
+	r := &reconnectRequest{id: id, automatic: automatic, done: make(chan struct{})}
+	q.pending[id] = r
+	q.queue = append(q.queue, r)
+	select {
+	case q.wake <- struct{}{}:
+	default:
+	}
+	return r, nil
+}
+
+// takeReconnect scans FIFO order, skipping cooling printers without blocking
+// unrelated printers. Removing before starting and appending retries at the tail
+// prevents a repository's first few offline printers from starving the rest.
+func takeReconnect(q *reconnectQueue, now time.Time) *reconnectRequest {
+	for i, r := range q.queue {
+		if last := q.lastStart[r.id]; !last.IsZero() && now.Sub(last) < q.config.Interval {
+			continue
+		}
+		q.queue = append(q.queue[:i], q.queue[i+1:]...)
+		q.lastStart[r.id] = now
+		r.running = true
+		return r
+	}
+	return nil
+}
+func (s *PrinterService) reconnectWorker(q *reconnectQueue) {
+	defer q.workers.Done()
+	ticker := time.NewTicker(time.Second)
+	defer ticker.Stop()
+	for {
+		if q.ctx.Err() != nil {
+			return
+		}
+		s.reconnectMu.Lock()
+		r := takeReconnect(q, time.Now())
+		s.reconnectMu.Unlock()
+		if r == nil {
+			select {
+			case <-q.ctx.Done():
+				return
+			case <-q.wake:
+			case <-ticker.C:
+			}
+			continue
+		}
+		ctx, cancel := context.WithTimeout(q.ctx, q.config.Interval-time.Second)
+		err := s.performReconnect(ctx, r.id, r.automatic)
+		cancel()
+		s.reconnectMu.Lock()
+		r.err = err
+		delete(q.pending, r.id)
+		close(r.done)
+		s.reconnectMu.Unlock()
+		if err != nil && q.ctx.Err() == nil {
+			slog.Debug("printer reconnect failed", "printer_id", r.id, "error", err)
+		}
+	}
+}
+
+// StopReconnect cancels actual I/O and waits for workers; it must precede manager shutdown.
+func (s *PrinterService) StopReconnect() {
+	s.reconnectMu.Lock()
+	q := s.reconnectQueue
+	if q != nil {
+		q.cancel()
+	}
+	s.reconnectMu.Unlock()
+	if q == nil {
+		return
+	}
+	q.workers.Wait()
+	s.reconnectMu.Lock()
+	defer s.reconnectMu.Unlock()
+	for _, r := range q.queue {
+		r.err = context.Canceled
+		close(r.done)
+		delete(q.pending, r.id)
+	}
+	q.queue = nil
+}
+func needsReconnect(state *model.PrinterState) bool {
+	return state == nil || state.Status == model.PrinterStatusOffline
+}
+func (s *PrinterService) printerNeedsAutoReconnect(p *model.Printer, _ time.Time) bool {
+	if p.MaintenanceMode || !printer.SupportsConnectionType(p.ConnectionType) {
+		return false
+	}
+	state, err := s.manager.GetState(p.ID)
+	return err != nil || needsReconnect(state)
+}
 func (s *PrinterService) autoReconnectLoop(ctx context.Context) {
-	ticker := time.NewTicker(autoReconnectPollInterval)
+	s.reconnectMu.Lock()
+	q := s.schedulerLocked()
+	s.reconnectMu.Unlock()
+	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
 	for {
 		select {
+		case <-q.ctx.Done():
+			return
 		case <-ctx.Done():
-			slog.Debug("printer auto reconnect stopped", "reason", ctx.Err())
+			s.StopReconnect()
 			return
 		case <-ticker.C:
 			s.ReconnectOfflinePrinters(ctx)
 		}
 	}
-}
-
-// needsReconnect reports whether a printer state is worth another connection
-// attempt. A missing state counts: the manager only records a state after a
-// connection attempt, so "no state" means "never tried since startup". Any
-// status that suggests the printer is alive (printing, paused, idle) is left
-// alone — interrupting a running print to reconnect would be worse than the
-// outage.
-func needsReconnect(state *model.PrinterState) bool {
-	if state == nil {
-		return true
-	}
-	return state.Status == model.PrinterStatusOffline || state.Status == model.PrinterStatusError
-}
-
-// printerNeedsAutoReconnect reports whether a printer is a candidate for a
-// reconnect attempt right now. It reads the live state so a printer that is
-// actually printing is never touched.
-func (s *PrinterService) printerNeedsAutoReconnect(p *model.Printer, now time.Time) bool {
-	if p.ConnectionType == model.ConnectionTypeManual || p.MaintenanceMode {
-		return false
-	}
-	// chitu (and anything else the manager has no client for) would fail on
-	// every single attempt forever. Skipping it keeps the log readable and
-	// leaves the gap visible where it belongs: the missing client.
-	if !printer.SupportsConnectionType(p.ConnectionType) {
-		return false
-	}
-	state, err := s.manager.GetState(p.ID)
-	if err == nil && !needsReconnect(state) {
-		return false
-	}
-
-	s.reconnectMu.Lock()
-	defer s.reconnectMu.Unlock()
-	if _, inFlight := s.reconnecting[p.ID]; inFlight {
-		// A manual reconnect from the UI is already running for this printer.
-		return false
-	}
-	if backoff, ok := s.reconnectBackoff[p.ID]; ok && now.Before(backoff.nextAttempt) {
-		return false
-	}
-	return true
-}
-
-// startAutoReconnect reserves a slot for the printer and performs the reconnect
-// in the background. Reserving under the lock is what prevents the next pass
-// from starting a second attempt for the same printer.
-func (s *PrinterService) startAutoReconnect(ctx context.Context, p *model.Printer) {
-	s.reconnectMu.Lock()
-	if s.reconnecting == nil {
-		s.reconnecting = make(map[uuid.UUID]time.Time)
-	}
-	if s.reconnectBackoff == nil {
-		s.reconnectBackoff = make(map[uuid.UUID]reconnectBackoff)
-	}
-	s.reconnecting[p.ID] = time.Now()
-	s.reconnectMu.Unlock()
-
-	printerCopy := *p
-	go func() {
-		defer s.finishAutoReconnect(printerCopy.ID)
-		// Reconnect reloads the printer from the repository, so credentials
-		// edited in the meantime are picked up.
-		if err := s.Reconnect(ctx, printerCopy.ID); err != nil {
-			s.recordReconnectFailure(printerCopy.ID, err)
-			return
-		}
-		s.recordReconnectSuccess(printerCopy.ID)
-	}()
-}
-
-// finishAutoReconnect clears the in-flight marker.
-func (s *PrinterService) finishAutoReconnect(id uuid.UUID) {
-	s.reconnectMu.Lock()
-	defer s.reconnectMu.Unlock()
-	delete(s.reconnecting, id)
-}
-
-// recordReconnectFailure applies the exponential backoff for the next attempt.
-func (s *PrinterService) recordReconnectFailure(id uuid.UUID, err error) {
-	s.reconnectMu.Lock()
-	defer s.reconnectMu.Unlock()
-	if s.reconnectBackoff == nil {
-		s.reconnectBackoff = make(map[uuid.UUID]reconnectBackoff)
-	}
-	backoff := s.reconnectBackoff[id]
-	backoff.attempts++
-	delay := reconnectDelay(backoff.attempts)
-	backoff.nextAttempt = time.Now().Add(delay)
-	s.reconnectBackoff[id] = backoff
-
-	slog.Warn("printer auto reconnect failed",
-		"printer_id", id,
-		"attempt", backoff.attempts,
-		"retry_in", delay.Round(time.Second),
-		"error", err,
-	)
-}
-
-// recordReconnectSuccess clears the backoff so the next failure starts from the
-// short delay again.
-func (s *PrinterService) recordReconnectSuccess(id uuid.UUID) {
-	s.reconnectMu.Lock()
-	attempts := 0
-	if backoff, ok := s.reconnectBackoff[id]; ok {
-		attempts = backoff.attempts
-		delete(s.reconnectBackoff, id)
-	}
-	s.reconnectMu.Unlock()
-
-	if attempts > 0 {
-		slog.Info("printer reconnected after failures", "printer_id", id, "failed_attempts", attempts)
-	}
-}
-
-// reconnectDelay returns how long to wait before attempt number n, capped and
-// jittered. Attempt 1 waits the base delay.
-func reconnectDelay(attempt int) time.Duration {
-	if attempt < 1 {
-		attempt = 1
-	}
-	delay := float64(autoReconnectBaseDelay) * math.Pow(2, float64(attempt-1))
-	if delay > float64(autoReconnectMaxDelay) {
-		delay = float64(autoReconnectMaxDelay)
-	}
-	// Jitter both directions: without it, printers that went offline together
-	// retry together forever.
-	jitter := 1 + (rand.Float64()*2-1)*autoReconnectJitter
-	return time.Duration(delay * jitter)
 }
