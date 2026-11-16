@@ -214,6 +214,52 @@ library's host-only pattern form, so a change to either is caught by the other.
 - The mechanism is a single shared bearer token or a short opaque token: no per-user identity, no
   expiry, no rotation. Revoke-and-recreate is the rotation path.
 
+## Desktop shell exposure
+
+The desktop app (`desktop/`, see [DESKTOP.md](DESKTOP.md)) is not a network
+service: its gateway listens on `127.0.0.1` only, and the process never opens a
+LAN listener. The desktop threat model is local compromise of the user session
+and malicious upstream content, not remote network exposure.
+
+- **One instance, local mode exclusivity.** Wails' OS-backed single-instance
+  lock is acquired in `application.New`, before any database, key, service or
+  listener is created. Local and remote modes are mutually exclusive and the
+  remote mode never starts a local backend or local printers.
+- **Session bootstrap.** The webview loads
+  `/desktop/bootstrap?key=<single-use random>`; that route sets an `HttpOnly`,
+  `SameSite=Strict` session cookie and expires on first use (or after 60s).
+  The key is never logged. Every subsequent request must present the cookie,
+  match the exact `Host`, and carry an `Origin` exactly equal to the gateway
+  origin; cross-site and non-GET/HEAD/OPTIONS requests without an exact origin
+  are rejected.
+- **Token handling.** The backend token is generated per local run or
+  configured per remote server, lives only in the host process, and is injected
+  server-side (`Authorization: Bearer`, plus `?token=` for `/ws`). Browser
+  cookies, `Authorization`, `X-API-Key`, and forwarding headers are stripped
+  before proxying; upstream `Set-Cookie` is removed from responses. The frontend
+  bridge never sees a token, and a stored browser `API_TOKEN` is ignored.
+- **Remote content isolation.** Only the bundled frontend can execute: any
+  upstream response with an HTML/JavaScript/SVG content type is served as a
+  download under a `sandbox; default-src 'none'` CSP. Only same-origin
+  redirects are permitted (relative app paths and URLs pointing at the gateway
+  itself, collapsed to their path); redirects to any other host are refused.
+- **Native bridge surface.** `/desktop/open-external` accepts HTTP(S) URLs only
+  and rejects credentials/whitespace; `/desktop/notify` is gated by local
+  preferences; `POST /desktop/config` persists settings (autostart write rolls
+  back on failure) and requires an exact origin. GET `/desktop/config` never
+  returns the remote token.
+- **Local secrets.** Desktop settings and the encryption key are written
+  atomically with `0600` under the OS user config directory. The encryption key
+  is generated once per installation, persisted as a private file, and injected
+  before services construct — there is no machine-derived fallback. OS
+  credential stores are not used; that file is a documented limitation, not a
+  keychain claim.
+- **Updates.** Release checks are explicit user actions against the GitHub
+  latest-release API, never automatic, never downloaded or executed by the app.
+- **Etsy OAuth via the desktop gateway is unsupported.** Authorization must be
+  completed in the OS browser and the callback re-entered manually; same-origin
+  redirects alone cannot carry a callback registered against a server origin.
+
 ## Neighbor service exposure (orca-slicer-api)
 
 The slicer is a separate container that PicoFarm only proxies. It carries **no authentication of

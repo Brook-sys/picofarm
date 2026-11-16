@@ -80,16 +80,18 @@ The default database is `~/.picofarm/picofarm.db`; uploads default to `./uploads
 | Frontend | React 19, TypeScript 5.9, Vite 7, Tailwind CSS 4, TanStack Query |
 | Storage | SQLite with embedded schema and compatibility migrations; local file storage |
 | Realtime | WebSocket at `/ws` |
-| Packaging | Source build or multi-stage Docker image |
+| Packaging | Source build, multi-stage Docker image, or optional desktop app (`desktop/`, Wails v3) |
 
 ```text
 cmd/server/            Server entry point
+internal/appruntime/   Shared backend lifecycle used by server and desktop
 internal/api/          Routes, handlers, middleware
 internal/service/      Business workflows and integrations
 internal/repository/   SQLite data access
 internal/database/     Embedded schema and migrations
 internal/printer/      Printer protocol implementations
 internal/realtime/     WebSocket hub
+desktop/               Optional desktop app submodule (Wails v3), own go.mod
 web/                   Application frontend
 site/                  Separate marketing/documentation site
 ```

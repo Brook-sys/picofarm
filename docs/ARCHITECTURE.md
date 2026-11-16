@@ -33,7 +33,8 @@ The production frontend is served from `STATIC_DIR` (default `./web/dist`) on di
 
 | Path | Responsibility |
 | --- | --- |
-| `cmd/server/main.go` | Standalone server entry point, environment defaults, service wiring, scheduler/printer startup |
+| `cmd/server/main.go` | Standalone entry point: environment loading, logging, telemetry and OS signals |
+| `internal/appruntime/` | Shared backend configuration, synchronous listener binding, service wiring and coordinated start/stop lifecycle |
 | `internal/api/` | HTTP routes, request parsing, response formatting, middleware, static serving |
 | `internal/service/` | Business workflows and coordination across repositories/integrations |
 | `internal/repository/` | SQLite persistence and transactions |
@@ -70,6 +71,20 @@ Current complexity hotspots:
 - `web/src/api/client.ts` is large and should be split by domain while preserving imports through a compatibility barrel.
 - `web/src/pages/ProjectDetail.tsx` is very large and should be decomposed into section components gradually.
 - Several pages still use manual `useEffect` loading patterns; the project convention in `CLAUDE.md` prefers TanStack Query for server state.
+
+## Shared backend lifecycle
+
+`internal/appruntime.Start(ctx, Config)` owns the database, services, printer manager, background jobs, HTTP listener and realtime hub. Explicit configuration is independent of process environment; `ConfigFromEnv()` preserves standalone-server defaults. The listener is reserved before opening the database, and the router configures hub authorization before the hub starts. Hosts must close the runtime and wait for cleanup rather than independently rebuilding the services.
+
+`Close(ctx)` is idempotent and waits up to the caller's deadline. HTTP draining has a separate configured deadline; existing device disconnect and scheduler APIs do not all provide bounded cancellation. A caller deadline expiring does not prove cleanup has completed. `Done()`/`Wait()` observe actual completion.
+
+## Desktop shell
+
+The desktop product lives in `desktop/` as a separate Go module with its own `go.mod`; the root module stays free of native dependencies. `desktop/main.go` (build tag `desktop`) is the only native entry point and is built with `-tags desktop,production` after staging `web/dist` into `desktop/assets/web` (git-ignored).
+
+The desktop host serves the embedded frontend from a loopback-only HTTP gateway (`desktop/internal/shell`) and reverse-proxies `/api/*`, `/uploads/*`, `/ws`, `/health` to either the in-process `appruntime` local backend (`127.0.0.1:0`, generated token) or a validated remote origin. Bundle-only UI executes; upstream documents get a sandboxing CSP and forced download, and only same-origin redirects are allowed.
+
+Mode, remote target, tray behavior, notification preferences and autostart are desktop settings stored per installation; `desktop/internal/updates` only reports release information and never installs anything, and `desktop/internal/autostart` is opt-in. Full contract, endpoints and validation status: [Desktop app](DESKTOP.md). Module internals and build commands: `desktop/README.md`.
 
 ## Database and migrations
 

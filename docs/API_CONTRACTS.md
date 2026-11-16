@@ -493,6 +493,37 @@ Backups and settings are operationally sensitive; document validation in `docs/R
 - These routes live inside `/api`, so they require a credential exactly when the rest of the API
   does. Auth is enabled by `API_TOKEN` or `REQUIRE_API_TOKEN`; see `docs/SECURITY_MODEL.md`.
 
+## Desktop shell endpoints
+
+The desktop product does not add backend routes. Its shell
+(`desktop/internal/shell`) serves the same HTTP contract on a loopback origin
+and adds a small set of `/desktop/*` endpoints that are not part of the public
+API. These endpoints only exist inside the desktop app and require a session
+cookie obtained via a one-shot bootstrap URL.
+
+| Route | Method | Request | Response |
+| --- | --- | --- | --- |
+| `/desktop/bootstrap?key=<single-use>` | GET | — | `303` to `/`, sets the `pf_desktop` `HttpOnly` `SameSite=Strict` cookie; the key expires on first use or after 60s |
+| `/desktop/config` | GET | — | Desktop settings object; `remoteToken` is always blank |
+| `/desktop/config` | POST | Settings JSON (mode, remote URL/token, tray, notifications, autostart) | `{"restartRequired": true}` |
+| `/desktop/open-external` | POST | `{"url": "<http(s)>"}` | `{}`; opens the OS browser |
+| `/desktop/notify` | POST | `{"title","body","category"}` | `{}` or `{"suppressed":true}` when the category is disabled locally |
+| `/desktop/setup` | GET | — | Minimal settings HTML page |
+
+The shell also injects `window.__PICOFARM_DESKTOP__` before module boot with
+`apiBaseURL` (same origin), `wsBaseURL`, `openExternal(url)` and
+`notify({title, body, tag})`. No token or secret ever reaches the browser;
+requests from the bundled UI to `/api/*`, `/uploads/*`, `/ws` and `/health`
+are proxied with the configured backend token injected upstream. Browser
+cookies and authorization headers are dropped before proxying, upstream
+`Set-Cookie` is stripped, upstream documents are forced to download with a
+sandboxing CSP, and only same-origin redirects are allowed.
+
+Frontend helpers for URL construction live in `web/src/lib/platform.ts`;
+desktop notifications and their preferences live in
+`web/src/lib/desktopNotifications.ts`. A plain browser run has no bridge and
+keeps the previous behavior. Full contract and limits: [Desktop app](DESKTOP.md).
+
 ## Contract parity notes and known gaps
 
 - TypeScript `ConnectionType` includes the backend value `chitu`; this enum value does not imply that the printer manager implements a client for it.

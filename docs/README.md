@@ -7,6 +7,7 @@ This directory contains the operational documentation for PicoFarm. Prefer updat
 - [Camera wall](CAMERA_WALL.md) — multi-camera layout, local viewing controls and stream/performance limitations.
 
 - [Install with Docker Compose](INSTALL_DOCKER_COMPOSE.md) — recommended BETA end-user setup, persistence, safe access, upgrades and non-Docker installation backlog.
+- [Desktop app](DESKTOP.md) — optional Wails desktop product: modes, gateway contract, native features, build/test commands and validation limits.
 - [Public website](WEBSITE.md) — bilingual content, screenshot placeholders, validation and Vercel configuration.
 
 - [Getting started](GETTING_STARTED.md) — prerequisites, source/Docker setup, configuration, persistent data, validation, and troubleshooting.

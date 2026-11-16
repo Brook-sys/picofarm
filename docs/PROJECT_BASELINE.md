@@ -80,6 +80,20 @@ cd web && npm run build
 make build
 ```
 
+Desktop-specific validation (module internals are in `desktop/README.md`):
+
+```sh
+node scripts/desktop-build.mjs stage
+cd desktop && GOTOOLCHAIN=auto go test ./...
+cd desktop && GOTOOLCHAIN=auto go test -race ./...
+```
+
+Native desktop builds (`cd desktop && GOTOOLCHAIN=auto go build -tags desktop,production .`)
+require platform GUI dependencies (GTK4/WebKitGTK 6 on Linux, Xcode/WebKit on
+macOS, WebView2 runtime on Windows) and were not executed on the headless
+development host; use `make desktop-build` or the desktop CI workflow on native
+runners and do not claim native artifacts work without that evidence.
+
 When both backend and frontend can be affected, `make build` is the canonical build gate because it compiles the Go server and production frontend assets.
 
 When backend runtime behavior changes, also use the local helper when available:
@@ -117,6 +131,8 @@ Expected generated or local-only paths include:
 
 - `bin/`
 - `web/dist/`
+- `desktop/assets/web/` (staged copy of `web/dist` for the desktop embed)
+- `desktop/dist/` (native packaging output)
 - `uploads/`
 - `web/node_modules/`
 - `.hermes/` local plans/session artifacts
