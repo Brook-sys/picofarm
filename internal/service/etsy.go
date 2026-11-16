@@ -40,7 +40,7 @@ const EtsyRedirectURIKey = "etsy_redirect_uri"
 const EtsySharedSecretKey = "etsy_shared_secret"
 
 var ErrEtsySharedSecretRequired = errors.New("shared_secret is required; enter the Etsy app Shared Secret in Settings")
-var ErrInvalidEtsyCredentials = errors.New("Etsy credentials must be separate Keystring and Shared Secret values without colons, whitespace, or control characters")
+var ErrInvalidEtsyCredentials = errors.New("etsy credentials must be separate Keystring and Shared Secret values without colons, whitespace, or control characters")
 
 func validEtsyCredential(value string) bool {
 	return value != "" && !strings.ContainsFunc(value, func(r rune) bool {
