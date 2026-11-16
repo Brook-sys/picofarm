@@ -1,0 +1,111 @@
+name: Desktop preview artifacts
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'desktop/**'
+      - 'internal/**'
+      - 'web/**'
+      - 'go.mod'
+      - 'go.sum'
+      - 'VERSION'
+      - 'Makefile'
+      - 'scripts/desktop-build.*'
+      - '.github/workflows/desktop.yml'
+
+# Artifact upload only: no registry, release, signing credentials, or deployment.
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  core-tests:
+    name: Headless desktop core
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: desktop/go.mod
+          cache-dependency-path: |
+            go.sum
+            desktop/go.sum
+      # main.go is excluded without the desktop tag; no native GUI dependency.
+      - name: Test desktop core
+        working-directory: desktop
+        run: go test -mod=readonly ./...
+      - name: Test shared runtime
+        run: go test -mod=readonly ./internal/appruntime/...
+
+  native:
+    name: Native ${{ matrix.platform }}-${{ matrix.arch }}
+    needs: core-tests
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            platform: linux
+            arch: amd64
+          - runner: windows-2022
+            platform: windows
+            arch: amd64
+          - runner: macos-15-intel
+            platform: darwin
+            arch: amd64
+          - runner: macos-15
+            platform: darwin
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: desktop/go.mod
+          cache-dependency-path: |
+            go.sum
+            desktop/go.sum
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Install Linux native build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends build-essential pkg-config libgtk-4-dev libwebkitgtk-6.0-dev libsoup-3.0-dev libx11-dev
+      - name: Verify native runner architecture
+        shell: bash
+        run: |
+          test "$(go env GOHOSTOS)" = '${{ matrix.platform }}'
+          test "$(go env GOHOSTARCH)" = '${{ matrix.arch }}'
+      - name: Install frontend dependencies
+        working-directory: web
+        run: npm ci
+      - name: Build and package native desktop
+        run: node scripts/desktop-build.mjs build
+      - name: Record Linux linked dependencies
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          binary=$(find bin/desktop -type f -name PicoFarm -print -quit)
+          test -n "$binary"
+          ldd "$binary" | tee bin/desktop/linux-linked-libraries.txt
+          if grep -q 'not found' bin/desktop/linux-linked-libraries.txt; then exit 1; fi
+      - name: Upload preview archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: picofarm-desktop-${{ matrix.platform }}-${{ matrix.arch }}
+          path: |
+            bin/desktop/*.zip
+            bin/desktop/*.tar.gz
+            bin/desktop/linux-linked-libraries.txt
+          if-no-files-found: error
+          retention-days: 14

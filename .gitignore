@@ -35,6 +35,10 @@ build/
 
 .claude/
 
+# Desktop frontend staging and distribution artifacts
+/desktop/assets/web/
+/desktop/dist/
+
 # Site (Next.js)
 site/.next/
 site/out/

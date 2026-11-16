@@ -1,4 +1,4 @@
-.PHONY: help dev build build-backend build-frontend test test-coverage lint lint-go lint-web clean deps frontend backend show-version bump-patch bump-minor bump-major release site site-build
+.PHONY: help dev build build-backend build-frontend test test-coverage lint lint-go lint-web clean deps frontend backend show-version bump-patch bump-minor bump-major release site site-build desktop-build desktop-test desktop-stage
 
 # Version
 VERSION := $(shell cat VERSION | tr -d 'v\n')
@@ -22,6 +22,9 @@ help:
 	@echo "  make backend    - Run Go backend only"
 	@echo "  make frontend   - Run React frontend only"
 	@echo "  make build      - Build production binaries"
+	@echo "  make desktop-build - Build native desktop preview archive (Go, Node, native GUI SDK required)"
+	@echo "  make desktop-test  - Run headless desktop core tests"
+	@echo "  make desktop-stage - Build frontend and stage desktop embedded assets"
 	@echo "  make test       - Run tests"
 	@echo "  make lint       - Run all linters"
 	@echo "  make lint-go    - Run Go linter (golangci-lint)"
@@ -62,6 +65,17 @@ build-backend:
 build-frontend:
 	@echo "Building React frontend..."
 	cd web && npm run build
+
+# Desktop is an isolated Go module; these targets do not affect server/Docker builds.
+# Install frontend dependencies first: cd web && npm ci.
+desktop-build:
+	node scripts/desktop-build.mjs build
+
+desktop-stage:
+	node scripts/desktop-build.mjs stage
+
+desktop-test:
+	node scripts/desktop-build.mjs test
 
 # Testing
 test:
