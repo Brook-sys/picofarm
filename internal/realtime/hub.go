@@ -33,7 +33,7 @@ type Hub struct {
 	register   chan *Client
 	unregister chan *Client
 	stop       chan struct{}
-	stopped    bool
+	stopOnce   sync.Once
 
 	// AuthToken is the shared API_TOKEN. When empty, the handshake does not ask
 	// for a token (local development). When set, /ws is closed unless the client
@@ -76,7 +76,6 @@ func (h *Hub) Run() {
 				client.conn.Close(websocket.StatusGoingAway, "server shutting down") //nolint:errcheck // best-effort shutdown
 				delete(h.clients, client)
 			}
-			h.stopped = true
 			h.mu.Unlock()
 			slog.Info("websocket hub stopped")
 			return
@@ -342,7 +341,14 @@ func (h *Hub) writePump(client *Client) {
 // readPump reads messages from the WebSocket connection.
 func (h *Hub) readPump(client *Client) {
 	defer func() {
-		h.unregister <- client
+		// After Stop, Run has already removed and closed every client and no
+		// longer receives from unregister: a blocking send would park this
+		// goroutine forever, which an embedded host (desktop, repeated
+		// Start/Stop in tests) would observe as a leak.
+		select {
+		case h.unregister <- client:
+		case <-h.stop:
+		}
 		client.conn.Close(websocket.StatusNormalClosure, "") //nolint:errcheck // best-effort cleanup
 	}()
 
@@ -366,14 +372,8 @@ func (h *Hub) readPump(client *Client) {
 	}
 }
 
-// Stop gracefully shuts down the hub, closing all client connections.
+// Stop gracefully shuts down the hub, closing all client connections. It is
+// safe to call more than once and from multiple goroutines.
 func (h *Hub) Stop() {
-	h.mu.RLock()
-	if h.stopped {
-		h.mu.RUnlock()
-		return
-	}
-	h.mu.RUnlock()
-
-	close(h.stop)
+	h.stopOnce.Do(func() { close(h.stop) })
 }

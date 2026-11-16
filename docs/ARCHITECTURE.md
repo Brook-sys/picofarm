@@ -76,7 +76,7 @@ Current complexity hotspots:
 
 `internal/appruntime.Start(ctx, Config)` owns the database, services, printer manager, background jobs, HTTP listener and realtime hub. Explicit configuration is independent of process environment; `ConfigFromEnv()` preserves standalone-server defaults. The listener is reserved before opening the database, and the router configures hub authorization before the hub starts. Hosts must close the runtime and wait for cleanup rather than independently rebuilding the services.
 
-`Close(ctx)` is idempotent and waits up to the caller's deadline. HTTP draining has a separate configured deadline; existing device disconnect and scheduler APIs do not all provide bounded cancellation. A caller deadline expiring does not prove cleanup has completed. `Done()`/`Wait()` observe actual completion.
+`Close(ctx)` is idempotent and waits up to the caller's deadline. HTTP draining has a separate configured deadline, and every post-HTTP cleanup stage (backup scheduler, printer reconnect, device disconnects, queue dispatcher, slicer jobs, WebSocket hub) shares a single hard budget: a stage that cannot return in time is logged and abandoned, because third-party stages are not deadline-aware and a stuck one would otherwise hang the host forever. A database close failure is logged, not returned: the original server ignored it, and a busy database during shutdown must not turn a clean shutdown into a failed exit.
 
 ## Desktop shell
 
