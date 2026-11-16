@@ -1,3 +1,4 @@
+import { resourceURL } from '../lib/platform'
 import { useState, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { Plus, FolderKanban, Calendar, Tag, LayoutGrid, Table, ArrowUpDown, Trash2, Play, Link as LinkIcon } from 'lucide-react'
@@ -355,7 +356,7 @@ export default function Projects() {
               to={`/projects/${project.id}`}
               className="card p-5 hover:border-surface-700 transition-colors group"
             >
-              {project.cover_file_id && <img src={`/api/files/${project.cover_file_id}`} className="mb-4 h-40 w-full rounded-xl object-cover bg-surface-800" />}
+              {project.cover_file_id && <img src={resourceURL(`/api/files/${project.cover_file_id}`)} className="mb-4 h-40 w-full rounded-xl object-cover bg-surface-800" />}
               <div className="flex items-start justify-between gap-3 mb-3">
                 <h3 className="font-semibold text-surface-100 group-hover:text-accent-400 transition-colors">
                   {project.name}

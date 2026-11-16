@@ -1,3 +1,4 @@
+import { externalLinkClick, resourceURL } from '../../lib/platform'
 import { useEffect, useId, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Link } from 'react-router-dom'
@@ -14,7 +15,7 @@ function CameraImage({ url, name, snapshot, onError }: { url: string; name: stri
   useEffect(() => {
     const image = ref.current
     if (!image) return
-    image.src = url
+    image.src = resourceURL(url)
     return () => { image.removeAttribute('src') }
   }, [url])
   return <><img ref={ref} alt={`${name} camera preview`} onLoad={() => setLoaded(true)} onError={onError} className="absolute inset-0 h-full w-full object-contain" /><div className="absolute left-2 top-2 rounded bg-black/80 px-2 py-1 text-xs text-surface-200" role="status">{loaded ? snapshot ? 'Snapshot · not live' : 'Stream connected' : 'Connecting…'}</div></>
@@ -98,7 +99,7 @@ export function CameraWallCard({ camera, printer, state, favorite, paused, allPa
         <summary className="cursor-pointer">Diagnostics</summary>
         <dl className="mt-3 space-y-2 break-all"><div><dt className="text-surface-500">Type</dt><dd>{camera.type}</dd></div><div><dt className="text-surface-500">Stream URL</dt><dd>{camera.url || 'Not configured'}</dd></div><div><dt className="text-surface-500">Updated</dt><dd>{formatRelativeTime(camera.updated_at)}</dd></div></dl>
         <div className="mt-3 flex flex-wrap gap-4">
-          {camera.url && <a className="text-accent-300 underline" href={camera.url} target="_blank" rel="noreferrer">Open source externally</a>}
+          {camera.url && <a className="text-accent-300 underline" href={camera.url} onClick={externalLinkClick} target="_blank" rel="noreferrer">Open source externally</a>}
           {printer && <Link className="text-accent-300 underline" to={`/printers/${printer.id}`}>Open printer</Link>}
         </div>
         <p className="mt-3">Browser-managed previews. MJPEG may keep reporting connecting until the browser emits a load event. No automatic retries; use Retry preview after a failure. Snapshots are not refreshed automatically.</p>

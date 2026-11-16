@@ -1,3 +1,4 @@
+import { externalLinkClick, resourceURL } from '../lib/platform'
 import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
@@ -329,7 +330,7 @@ export default function PrinterDetail() {
               {cameras.map(camera => (
                 <div key={camera.id} className="overflow-hidden rounded-xl border border-surface-800 bg-surface-950/80">
                   {camera.type === 'mjpeg' || camera.type === 'snapshot' ? (
-                    <img src={camera.url} alt={camera.name} className="aspect-video w-full bg-black object-contain" />
+                    <img src={resourceURL(camera.url)} alt={camera.name} className="aspect-video w-full bg-black object-contain" />
                   ) : (
                     <div className="flex aspect-video items-center justify-center bg-black/40 p-4 text-center text-sm text-surface-500">
                       Preview unavailable for {camera.type.toUpperCase()} streams.
@@ -409,7 +410,7 @@ export default function PrinterDetail() {
                 <div className="flex items-center justify-between gap-4"><span className="text-surface-400">Pasta padrão de impressão</span><span className="font-mono text-xs text-surface-200">{printer.default_print_folder ? `/${printer.default_print_folder}` : '/ (raiz)'}</span></div>
               )}
               {printer.fluidd_url && (
-                <a href={printer.fluidd_url} target="_blank" rel="noreferrer" className="inline-flex w-fit cursor-pointer items-center rounded-lg border border-blue-500/50 bg-blue-500/20 px-3 py-1.5 text-xs font-semibold text-blue-300 hover:bg-blue-500/30">
+                <a href={printer.fluidd_url} onClick={externalLinkClick} target="_blank" rel="noreferrer" className="inline-flex w-fit cursor-pointer items-center rounded-lg border border-blue-500/50 bg-blue-500/20 px-3 py-1.5 text-xs font-semibold text-blue-300 hover:bg-blue-500/30">
                   <ExternalLink className="h-3.5 w-3.5 mr-1" /> Fluidd
                 </a>
               )}

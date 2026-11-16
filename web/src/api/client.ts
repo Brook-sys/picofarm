@@ -1,11 +1,11 @@
-const API_URL = import.meta.env.VITE_API_URL ?? (typeof window !== 'undefined' ? `${window.location.protocol}//${window.location.host}` : 'http://localhost:8084')
+import { resourceURL, webSocketURL } from '../lib/platform'
 
 // Generic fetch wrapper with error handling.
 async function fetchApi<T>(
   path: string,
   options: RequestInit = {}
 ): Promise<T> {
-  const url = `${API_URL}/api${path}`
+  const url = resourceURL(`/api${path}`)
 
   console.log(`[API] ${options.method || 'GET'} ${url}`)
 
@@ -245,7 +245,7 @@ export const partsApi = {
     formData.append('file', file)
     if (notes) formData.append('notes', notes)
 
-    const response = await fetch(`${API_URL}/api/projects/${projectId}/parts`, {
+    const response = await fetch(resourceURL(`/api/projects/${projectId}/parts`), {
       method: 'POST',
       body: formData,
     })
@@ -299,7 +299,7 @@ export const designsApi = {
     formData.append('file', file)
     if (notes) formData.append('notes', notes)
 
-    const response = await fetch(`${API_URL}/api/parts/${partId}/designs`, {
+    const response = await fetch(resourceURL(`/api/parts/${partId}/designs`), {
       method: 'POST',
       body: formData,
     })
@@ -314,7 +314,7 @@ export const designsApi = {
 
   delete: (id: string) => fetchApi<void>(`/designs/${id}`, { method: 'DELETE' }),
 
-  downloadUrl: (id: string) => `${API_URL}/api/designs/${id}/download`,
+  downloadUrl: (id: string) => resourceURL(`/api/designs/${id}/download`),
 
   listPrintJobs: (designId: string) =>
     fetchApi<import('../types').PrintJob[]>(`/designs/${designId}/print-jobs`),
@@ -589,13 +589,13 @@ export const printersApi = {
     fetchApi<void>(`/printers/${id}/files/move`, { method: 'POST', body: JSON.stringify({ path, new_path: newPath }) }),
 
   downloadFileUrl: (id: string, path: string) =>
-    `${API_URL}/api/printers/${id}/files/download?path=${encodeURIComponent(path)}`,
+    resourceURL(`/api/printers/${id}/files/download?path=${encodeURIComponent(path)}`),
 
   getFileMetadata: (id: string, path: string) =>
     fetchApi<import('../types').PrinterFileMetadata>(`/printers/${id}/files/metadata?path=${encodeURIComponent(path)}`),
 
   thumbnailUrl: (id: string, path: string) =>
-    `${API_URL}/api/printers/${id}/files/thumbnail?path=${encodeURIComponent(path)}`,
+    resourceURL(`/api/printers/${id}/files/thumbnail?path=${encodeURIComponent(path)}`),
 
   printFile: (id: string, path: string) =>
     fetchApi<void>(`/printers/${id}/files/print`, { method: 'POST', body: JSON.stringify({ path }) }),
@@ -657,7 +657,7 @@ export const archivesApi = {
   // because the API may live on another origin than the app (VITE_API_URL).
   // The old body returned a bare "/archives/log/export", missing the /api
   // prefix, so it never pointed at the real route.
-  exportCSV: () => `${API_URL}/api/archives/log/export`,
+  exportCSV: () => resourceURL(`/api/archives/log/export`),
 }
 
 // Materials API
@@ -883,7 +883,7 @@ export const gcodeLibraryApi = {
     const formData = new FormData()
     formData.append('file', file)
     if (parentSTLId) formData.append('parent_stl_id', parentSTLId)
-    const response = await fetch(`${API_URL}/api/gcode-library/upload`, { method: 'POST', body: formData })
+    const response = await fetch(resourceURL(`/api/gcode-library/upload`), { method: 'POST', body: formData })
     if (!response.ok) {
       const error = await response.json().catch(() => ({ error: 'Upload failed' }))
       throw new Error(error.error)
@@ -930,7 +930,7 @@ export const fileApi = {
   upload: async (file: File) => {
     const formData = new FormData()
     formData.append('file', file)
-    const response = await fetch(`${API_URL}/api/files`, { method: 'POST', body: formData })
+    const response = await fetch(resourceURL(`/api/files`), { method: 'POST', body: formData })
     if (!response.ok) {
       const error = await response.json().catch(() => ({ error: 'Upload failed' }))
       throw new Error(error.error)
@@ -959,7 +959,7 @@ export const stlLibraryApi = {
     const formData = new FormData()
     formData.append('file', file)
     if (thumbnail) formData.append('thumbnail', thumbnail, `${file.name}.png`)
-    const response = await fetch(`${API_URL}/api/stl-library/upload`, { method: 'POST', body: formData })
+    const response = await fetch(resourceURL(`/api/stl-library/upload`), { method: 'POST', body: formData })
     if (!response.ok) {
       const error = await response.json().catch(() => ({ error: 'Upload failed' }))
       throw new Error(error.error)
@@ -973,7 +973,7 @@ export const stlLibraryApi = {
   updateThumbnail: async (id: string, thumbnail: Blob) => {
     const formData = new FormData()
     formData.append('thumbnail', thumbnail, `${id}.png`)
-    const response = await fetch(`${API_URL}/api/stl-library/${id}/thumbnail`, { method: 'POST', body: formData })
+    const response = await fetch(resourceURL(`/api/stl-library/${id}/thumbnail`), { method: 'POST', body: formData })
     if (!response.ok) {
       const error = await response.json().catch(() => ({ error: 'Thumbnail upload failed' }))
       throw new Error(error.error)
@@ -999,7 +999,7 @@ export const queueApi = {
     Object.entries(data).forEach(([key, value]) => {
       if (value) formData.append(key, value)
     })
-    const response = await fetch(`${API_URL}/api/queue/upload`, { method: 'POST', body: formData })
+    const response = await fetch(resourceURL(`/api/queue/upload`), { method: 'POST', body: formData })
     if (!response.ok) {
       const error = await response.json().catch(() => ({ error: 'Upload failed' }))
       throw new Error(error.error)
@@ -1048,7 +1048,7 @@ export const expensesApi = {
     const formData = new FormData()
     formData.append('file', file)
 
-    const response = await fetch(`${API_URL}/api/expenses/receipt`, {
+    const response = await fetch(resourceURL(`/api/expenses/receipt`), {
       method: 'POST',
       body: formData,
     })
@@ -1652,7 +1652,7 @@ export const timelineApi = {
 
 // WebSocket connection for real-time updates
 export function createWebSocket(onMessage: (event: { type: string; data: unknown }) => void) {
-  const wsUrl = API_URL.replace('http', 'ws') + '/ws'
+  const wsUrl = webSocketURL()
   const ws = new WebSocket(wsUrl)
 
   ws.onmessage = (event) => {
@@ -1785,10 +1785,9 @@ export const quotesApi = {
 }
 
 // Public API (no auth, for shareable pages)
-const PUBLIC_API_URL = import.meta.env.VITE_API_URL ?? (typeof window !== 'undefined' ? `${window.location.protocol}//${window.location.host}` : 'http://localhost:8084')
 
 async function fetchPublicApi<T>(path: string): Promise<T> {
-  const url = `${PUBLIC_API_URL}/api/public${path}`
+  const url = resourceURL(`/api/public${path}`)
   const response = await fetch(url, {
     headers: { 'Content-Type': 'application/json' },
   })

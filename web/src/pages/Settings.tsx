@@ -1,3 +1,5 @@
+import { openExternal } from '../lib/platform'
+import { DesktopNotificationSettings } from '../components/DesktopNotificationSettings'
 import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -318,7 +320,7 @@ export default function Settings() {
       setError(null)
       const { url } = await etsyApi.getAuthUrl()
       // Redirect to Etsy OAuth page
-      window.location.href = url
+      await openExternal(url)
     } catch (err) {
       console.error('Failed to start Etsy OAuth:', err)
       setError(err instanceof Error ? err.message : 'Failed to start Etsy connection')
@@ -1151,6 +1153,7 @@ export default function Settings() {
                 {/* General display and business information */}
                 {activeTab === 'other' && (
                   <>
+                    <DesktopNotificationSettings />
                     <CurrencySettings />
                     <FilamentTypeColorSettings />
                     <BusinessInfoSettings />

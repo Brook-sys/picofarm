@@ -1,3 +1,4 @@
+import { resourceURL } from '../lib/platform'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createRequestGate, paginateLibrary, slicePreviewKey, sortLibraryItems, type LibraryItem, type LibrarySortMode as SortMode } from '../lib/gcodeLibraryView'
 import { GCodeVariantComparison } from '../components/GCodeVariantComparison'
@@ -323,7 +324,7 @@ export default function GCodeFiles() {
     setBusy(file.id)
     setError('')
     try {
-      const response = await fetch(`/api/files/${file.file_id}`)
+      const response = await fetch(resourceURL(`/api/files/${file.file_id}`))
       if (!response.ok) throw new Error('Failed to load STL file')
       const blob = await response.blob()
       const stlFile = new File([blob], file.file_name || `${file.display_name}.stl`, { type: 'model/stl' })
@@ -701,7 +702,7 @@ function STLDetailsModal({ file, tags, onCreateTag, onAddTag, onRemoveTag, onClo
         </div>
         <div className="grid gap-5 md:grid-cols-[280px_1fr]">
           <div className="h-72 rounded-xl border border-surface-800 bg-surface-800 flex flex-col overflow-hidden">
-            <STLViewer3D url={`/api/files/${file.file_id}`} />
+            <STLViewer3D url={resourceURL(`/api/files/${file.file_id}`)} />
           </div>
           <div className="space-y-4">
             <div><span className="text-xs text-surface-500">Display name</span><div className="text-surface-100 text-lg font-medium">{file.display_name}</div></div>
@@ -715,7 +716,7 @@ function STLDetailsModal({ file, tags, onCreateTag, onAddTag, onRemoveTag, onClo
             <FileTagManager itemId={file.id} currentTags={file.tags} tags={tags} onCreateTag={onCreateTag} onAddTag={onAddTag} onRemoveTag={onRemoveTag} />
             <div className="flex gap-2">
               <button onClick={onSlice} className="btn btn-primary w-fit">Fatiar</button>
-              <a href={`/api/files/${file.file_id}`} target="_blank" rel="noreferrer" className="btn btn-secondary w-fit">Open STL</a>
+              <a href={resourceURL(`/api/files/${file.file_id}`)} target="_blank" rel="noreferrer" className="btn btn-secondary w-fit">Open STL</a>
             </div>
           </div>
         </div>
@@ -740,7 +741,7 @@ function STLFileCard({ file, busy, confirmDelete, onRename, onDelete, onDropGCod
     <div onDragOver={e => { e.preventDefault(); setDragOver(true) }} onDragLeave={() => setDragOver(false)} onDrop={e => { e.preventDefault(); e.stopPropagation(); setDragOver(false); const id = e.dataTransfer.getData('text/gcode-id'); if (id) onDropGCode(id) }} className={cn('card relative overflow-hidden p-4 border-sky-500/45 bg-sky-500/[0.075] shadow-[0_0_0_1px_rgba(14,165,233,0.08)] hover:border-sky-400/75 hover:bg-sky-500/[0.11] transition-colors before:absolute before:inset-y-0 before:left-0 before:w-1 before:bg-sky-400', dragOver && 'border-sky-400/90 bg-sky-500/15')}>
       <div className="flex gap-3 mb-3 pl-1">
         <div className="w-16 h-16 rounded-lg border border-sky-400/35 bg-sky-500/10 flex items-center justify-center shrink-0 overflow-hidden">
-          {file.thumbnail_file_id ? <img src={`/api/files/${file.thumbnail_file_id}`} alt="STL preview" className="h-full w-full object-contain" /> : <button type="button" disabled={busy} onClick={onRetryThumbnail} className="flex h-full w-full flex-col items-center justify-center text-[10px] text-sky-300 hover:bg-sky-500/10 disabled:opacity-60"><Upload className="mb-1 h-4 w-4" />Retry</button>}
+          {file.thumbnail_file_id ? <img src={resourceURL(`/api/files/${file.thumbnail_file_id}`)} alt="STL preview" className="h-full w-full object-contain" /> : <button type="button" disabled={busy} onClick={onRetryThumbnail} className="flex h-full w-full flex-col items-center justify-center text-[10px] text-sky-300 hover:bg-sky-500/10 disabled:opacity-60"><Upload className="mb-1 h-4 w-4" />Retry</button>}
         </div>
         <div className="min-w-0 flex-1">
           {editingName ? (
@@ -768,7 +769,7 @@ function STLFileCard({ file, busy, confirmDelete, onRename, onDelete, onDropGCod
       <div className="flex gap-2">
         <button onClick={onViewSTL} className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-surface-700 bg-surface-800 text-surface-200 hover:border-accent-500/60 hover:bg-accent-500/15 hover:text-accent-200" title="Details"><InfoIcon className="h-4 w-4" /></button>
         <button onClick={onSlice} className="btn btn-primary text-sm">Fatiar</button>
-        <a href={`/api/files/${file.file_id}`} target="_blank" rel="noreferrer" className="btn btn-secondary text-sm flex-1">Open STL</a>
+        <a href={resourceURL(`/api/files/${file.file_id}`)} target="_blank" rel="noreferrer" className="btn btn-secondary text-sm flex-1">Open STL</a>
         <button disabled={busy} onClick={onDelete} className={cn('btn text-sm', confirmDelete ? 'border-red-500/50 bg-red-500/20 text-red-200' : 'btn-ghost text-red-400')}>{confirmDelete ? 'Confirm?' : 'Delete'}</button>
       </div>
     </div>
@@ -784,7 +785,7 @@ function LinkedGCodeRow({ file, matched, onView, onRename, onAdd, onSend, onUnli
   }
   const actionClass = 'inline-flex h-8 w-8 items-center justify-center rounded-lg border border-surface-700/80 bg-surface-900/80 text-surface-300 transition hover:border-accent-500/60 hover:bg-accent-500/15 hover:text-accent-200'
   return <div draggable={!editingName} onDragStart={e => e.dataTransfer.setData('text/gcode-id', file.id)} className={cn('group flex items-center gap-3 rounded-xl border border-accent-500/25 border-l-4 border-l-accent-400 bg-gradient-to-r from-accent-500/[0.12] to-surface-900/75 p-3 text-xs shadow-sm transition hover:border-accent-400/45 hover:from-accent-500/[0.16] cursor-grab', editingName && 'cursor-default', matched && 'ring-1 ring-emerald-400/60 from-emerald-500/15')}>
-    <div className="h-10 w-10 rounded-lg border border-surface-700 bg-surface-800 overflow-hidden shrink-0 flex items-center justify-center shadow-inner">{file.thumbnail_file_id ? <img src={`/api/files/${file.thumbnail_file_id}`} className="h-full w-full object-cover" /> : <FileCode className="h-5 w-5 text-accent-300" />}</div>
+    <div className="h-10 w-10 rounded-lg border border-surface-700 bg-surface-800 overflow-hidden shrink-0 flex items-center justify-center shadow-inner">{file.thumbnail_file_id ? <img src={resourceURL(`/api/files/${file.thumbnail_file_id}`)} className="h-full w-full object-cover" /> : <FileCode className="h-5 w-5 text-accent-300" />}</div>
     <div className="min-w-0 flex-1">
       {editingName ? <input value={name} autoFocus onChange={e => setName(e.target.value)} onBlur={saveName} onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); if (e.key === 'Escape') { setName(file.display_name); setEditingName(false) } }} className="input py-1 text-xs" /> : <div className="flex items-center gap-2"><button type="button" onClick={() => setEditingName(true)} className="max-w-full truncate text-left font-medium text-surface-100 hover:text-accent-300" title="Rename G-code">{file.display_name}</button>{file.default_for_stl && <span className="rounded-full border border-emerald-500/40 bg-emerald-500/15 px-2 py-0.5 text-[10px] font-bold uppercase text-emerald-300">Default</span>}{matched && <span className="rounded-full border border-emerald-500/30 bg-emerald-500/15 px-2 py-0.5 text-[10px] font-semibold uppercase text-emerald-300">Match</span>}</div>}
       <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-surface-500">
@@ -976,7 +977,7 @@ function FileCard({ file, colors, busy, confirmDelete, onView, onRename, onAdd, 
     <div draggable onDragStart={e => e.dataTransfer.setData('text/gcode-id', file.id)} className="card relative overflow-hidden p-4 border-accent-500/45 bg-accent-500/[0.075] shadow-[0_0_0_1px_rgba(249,115,22,0.08)] hover:border-accent-400/75 hover:bg-accent-500/[0.11] transition-colors cursor-grab before:absolute before:inset-y-0 before:left-0 before:w-1 before:bg-accent-400">
       <div className="flex gap-3 mb-3 pl-1">
         <div className="w-16 h-16 rounded-lg border border-accent-400/35 bg-accent-500/10 flex items-center justify-center shrink-0 overflow-hidden">
-          {file.thumbnail_file_id ? <img src={`/api/files/${file.thumbnail_file_id}`} alt="G-code preview" className="w-full h-full object-cover" /> : <FileCode className="h-8 w-8 text-accent-300" />}
+          {file.thumbnail_file_id ? <img src={resourceURL(`/api/files/${file.thumbnail_file_id}`)} alt="G-code preview" className="w-full h-full object-cover" /> : <FileCode className="h-8 w-8 text-accent-300" />}
         </div>
         <div className="min-w-0 flex-1">
           {editingName ? (
@@ -1022,7 +1023,7 @@ function STLFileRow({ file, busy, confirmDelete, onView, onRename, onDelete, onR
   return (
     <div onDragOver={e => { e.preventDefault(); setDragOver(true) }} onDragLeave={() => setDragOver(false)} onDrop={e => { e.preventDefault(); e.stopPropagation(); setDragOver(false); const id = e.dataTransfer.getData('text/gcode-id'); if (id) onDropGCode(id) }} className={cn('grid grid-cols-[56px_minmax(220px,1.7fr)_0.7fr_minmax(120px,1fr)_minmax(130px,1fr)_0.8fr_0.7fr_220px] gap-3 items-center border-l-4 border-l-sky-400 px-4 py-3 border-b border-sky-500/20 last:border-b-0 bg-sky-500/[0.065] hover:bg-sky-500/[0.11]', dragOver && 'bg-sky-500/15 border-sky-400/60')}>
       <div className="w-10 h-10 rounded-lg bg-sky-500/10 border border-sky-500/25 flex items-center justify-center overflow-hidden">
-        {file.thumbnail_file_id ? <img src={`/api/files/${file.thumbnail_file_id}`} alt="STL preview" className="w-full h-full object-contain" /> : <button type="button" disabled={busy} onClick={onRetryThumbnail} className="text-[9px] text-sky-300 disabled:opacity-60">Retry</button>}
+        {file.thumbnail_file_id ? <img src={resourceURL(`/api/files/${file.thumbnail_file_id}`)} alt="STL preview" className="w-full h-full object-contain" /> : <button type="button" disabled={busy} onClick={onRetryThumbnail} className="text-[9px] text-sky-300 disabled:opacity-60">Retry</button>}
       </div>
       <div className="min-w-0">
         {editingName ? <input value={name} autoFocus onChange={e => setName(e.target.value)} onBlur={saveName} onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); if (e.key === 'Escape') { setName(file.display_name); setEditingName(false) } }} className="input py-1 text-sm" /> : <button type="button" onClick={() => setEditingName(true)} className="text-left text-surface-100 hover:text-sky-300 truncate max-w-full">{file.display_name}</button>}
@@ -1037,7 +1038,7 @@ function STLFileRow({ file, busy, confirmDelete, onView, onRename, onDelete, onR
       <div className="flex gap-2 justify-end">
         <button onClick={onView} className="btn btn-secondary text-xs"><InfoIcon className="h-3.5 w-3.5" /></button>
         <button onClick={onSlice} className="btn btn-primary text-xs">Fatiar</button>
-        <a href={`/api/files/${file.file_id}`} target="_blank" rel="noreferrer" className="btn btn-secondary text-xs">Open</a>
+        <a href={resourceURL(`/api/files/${file.file_id}`)} target="_blank" rel="noreferrer" className="btn btn-secondary text-xs">Open</a>
         <button onClick={onDelete} disabled={busy} className={cn('btn text-xs', confirmDelete ? 'btn-secondary text-red-400' : 'btn-ghost text-red-400')}>{confirmDelete ? 'Confirm' : 'Delete'}</button>
       </div>
     </div>
@@ -1054,7 +1055,7 @@ function FileRow({ file, colors, busy, confirmDelete, indented = false, matched 
   return (
     <div draggable onDragStart={e => e.dataTransfer.setData('text/gcode-id', file.id)} className={cn('grid grid-cols-[56px_minmax(220px,1.7fr)_0.7fr_minmax(120px,1fr)_minmax(130px,1fr)_0.8fr_0.7fr_220px] gap-3 items-center border-l-4 border-l-accent-400 px-4 py-3 border-b border-accent-500/20 last:border-b-0 bg-accent-500/[0.055] hover:bg-accent-500/[0.1] cursor-grab', indented && 'ml-8 border-l-sky-500/35 bg-accent-500/[0.07]', matched && 'ring-1 ring-emerald-400/60 bg-emerald-500/[0.08]')}>
       <div className="w-10 h-10 rounded-lg bg-surface-800 flex items-center justify-center overflow-hidden">
-        {file.thumbnail_file_id ? <img src={`/api/files/${file.thumbnail_file_id}`} alt="G-code preview" className="w-full h-full object-cover" /> : <FileCode className="h-5 w-5 text-surface-500" />}
+        {file.thumbnail_file_id ? <img src={resourceURL(`/api/files/${file.thumbnail_file_id}`)} alt="G-code preview" className="w-full h-full object-cover" /> : <FileCode className="h-5 w-5 text-surface-500" />}
       </div>
       <div className="min-w-0">
         {editingName ? <input value={name} autoFocus onChange={e => setName(e.target.value)} onBlur={saveName} onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); if (e.key === 'Escape') { setName(file.display_name); setEditingName(false) } }} className="input py-1 text-sm" /> : <button type="button" onClick={() => setEditingName(true)} className="text-left text-surface-100 hover:text-accent-300 truncate max-w-full">{file.display_name}</button>}
@@ -1092,7 +1093,7 @@ function FileDetailsModal({ file, colors, tags, onCreateTag, onAddTag, onRemoveT
           <button onClick={onClose} className="btn btn-ghost text-sm">Close</button>
         </div>
         <div className="space-y-4">
-          {file.thumbnail_file_id && <img src={`/api/files/${file.thumbnail_file_id}`} alt="G-code preview" className="w-28 h-28 rounded-xl object-cover bg-surface-800" />}
+          {file.thumbnail_file_id && <img src={resourceURL(`/api/files/${file.thumbnail_file_id}`)} alt="G-code preview" className="w-28 h-28 rounded-xl object-cover bg-surface-800" />}
            <div className="font-medium text-surface-100 text-lg">{file.display_name}</div>
            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <label className="block"><span className="text-xs text-surface-500 mb-1 block">Perfil de Impressão</span><input value={file.metadata?.print_settings_id || 'Não encontrado'} disabled className="input opacity-70" /></label>

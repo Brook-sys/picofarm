@@ -1,3 +1,4 @@
+import { resourceURL } from '../lib/platform'
 import { useMemo, useState } from 'react'
 import { FileCode, Search, X } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
@@ -90,7 +91,7 @@ export default function GCodeFilePicker({ onSelect, onSelectMany, multiple = fal
                     {multiple && <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded border ${isSelected(item) ? 'border-accent-500 bg-accent-500 text-white' : 'border-surface-700 bg-surface-900'}`}>{isSelected(item) ? '✓' : ''}</span>}
                     <div className="w-14 h-14 flex-shrink-0 rounded-lg bg-surface-800 overflow-hidden flex items-center justify-center">
                       {item.file.thumbnail_file_id ? (
-                        <img src={`/api/files/${item.file.thumbnail_file_id}`} alt="" className="w-full h-full object-cover" />
+                        <img src={resourceURL(`/api/files/${item.file.thumbnail_file_id}`)} alt="" className="w-full h-full object-cover" />
                       ) : (
                         <FileCode className="h-6 w-6 text-surface-600" />
                       )}

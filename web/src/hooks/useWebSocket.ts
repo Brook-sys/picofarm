@@ -1,34 +1,8 @@
+import { webSocketURL } from '../lib/platform'
+import { notifyDesktopEvent } from '../lib/desktopNotifications'
 import { useEffect, useRef, useCallback, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import type { PrinterState, DispatchRequest } from '../types'
-
-// Build WebSocket URL - use relative path or configurable host
-function getWsUrl(): string {
-  // Allow override via env (for external access)
-  const envUrl = import.meta.env.VITE_WS_URL
-  if (envUrl) return envUrl
-  if (import.meta.env.DEV) {
-    // In dev, use the current host so external machines can connect
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    const host = window.location.host || 'localhost:5174'
-    return `${protocol}//${host}/ws`
-  }
-  // In production, use current host with appropriate protocol
-  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-  return `${protocol}//${window.location.host}/ws`
-}
-const WS_URL = getWsUrl()
-
-// The browser WebSocket API cannot send an Authorization header, so the token
-// the /api client already stores goes in the query string. It is read at
-// connect time, not at module load: the token may arrive later via the 401
-// prompt on the REST client.
-function wsUrlWithToken(): string {
-  if (typeof window === 'undefined') return WS_URL
-  const token = window.localStorage.getItem('API_TOKEN')
-  if (!token) return WS_URL
-  return `${WS_URL}${WS_URL.includes('?') ? '&' : '?'}token=${encodeURIComponent(token)}`
-}
 
 // Reconnection config
 const RECONNECT_INITIAL_DELAY = 1000
@@ -70,6 +44,7 @@ export function useWebSocket() {
   const connectRef = useRef<() => void>(() => {})
 
   const handleMessage = useCallback((event: WebSocketEvent) => {
+    notifyDesktopEvent(event)
     switch (event.type) {
       case 'printer_state_updated': {
         const state = event.data as PrinterState
@@ -143,12 +118,12 @@ export function useWebSocket() {
   }, [queryClient])
 
   const connect = useCallback(() => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
+    if (wsRef.current && wsRef.current.readyState !== WebSocket.CLOSED) {
       return
     }
 
     setStatus('connecting')
-    const wsUrl = wsUrlWithToken()
+    const wsUrl = webSocketURL()
     // Never log the full URL: it carries the token as a query parameter.
     console.log('[WebSocket] Connecting to', wsUrl.replace(/token=[^&]*/, 'token=***'))
 
@@ -206,6 +181,10 @@ export function useWebSocket() {
       reconnectTimeoutRef.current = null
     }
     if (wsRef.current) {
+      wsRef.current.onclose = null
+      wsRef.current.onmessage = null
+      wsRef.current.onerror = null
+      wsRef.current.onopen = null
       wsRef.current.close(1000, 'User disconnect')
       wsRef.current = null
     }

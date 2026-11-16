@@ -1,3 +1,4 @@
+import { externalLinkClick } from '../lib/platform'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
@@ -414,7 +415,7 @@ export default function Printers() {
                         <XCircle className="h-3.5 w-3.5 mr-1" /> Emergência
                       </button>
                       {printer.fluidd_url && (
-                        <a href={printer.fluidd_url} target="_blank" rel="noreferrer" className="inline-flex cursor-pointer items-center rounded-lg border border-blue-500/50 bg-blue-500/20 px-2.5 py-1 text-xs font-semibold text-blue-300 hover:bg-blue-500/30">
+                        <a href={printer.fluidd_url} onClick={externalLinkClick} target="_blank" rel="noreferrer" className="inline-flex cursor-pointer items-center rounded-lg border border-blue-500/50 bg-blue-500/20 px-2.5 py-1 text-xs font-semibold text-blue-300 hover:bg-blue-500/30">
                           <ExternalLink className="h-3.5 w-3.5 mr-1" /> Fluidd
                         </a>
                       )}

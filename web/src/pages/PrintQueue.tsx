@@ -1,3 +1,4 @@
+import { resourceURL } from '../lib/platform'
 import { useEffect, useMemo, useState } from 'react'
 import { AlertTriangle, CheckCircle, Clock, FileCode, Gauge, History, Info, Layers, Play, Printer, RefreshCw, Search, SlidersHorizontal, Trash2, Upload, XCircle } from 'lucide-react'
 import { queueApi } from '../api/client'
@@ -300,7 +301,7 @@ function RecentCompleted({ items, onOpen }: { items: QueueItem[]; onOpen: (item:
         {items.map(item => (
           <button key={item.item.id} type="button" onClick={() => onOpen(item)} className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-surface-800/50">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-surface-800">
-              {item.item.thumbnail_file_id ? <img src={`/api/files/${item.item.thumbnail_file_id}`} alt="G-code preview" className="h-full w-full object-cover" /> : <CheckCircle className="h-5 w-5 text-emerald-400" />}
+              {item.item.thumbnail_file_id ? <img src={resourceURL(`/api/files/${item.item.thumbnail_file_id}`)} alt="G-code preview" className="h-full w-full object-cover" /> : <CheckCircle className="h-5 w-5 text-emerald-400" />}
             </div>
             <div className="min-w-0 flex-1">
               <div className="truncate font-medium text-surface-100">{item.item.display_name || item.item.file_name}</div>
@@ -442,7 +443,7 @@ function QueueCard({ item, queuePosition, busy, dragging, dragOver, onDragStart,
       <div draggable onDragStart={onDragStart} onDragOver={e => { e.preventDefault(); onDragOver() }} onDrop={e => { e.preventDefault(); onDrop() }} onDragEnd={onDragEnd} className={cn('cursor-grab rounded-xl border border-surface-800 bg-surface-950/60 p-2.5 transition-colors hover:border-surface-700 active:cursor-grabbing', dragging && 'opacity-50', dragOver && !dragging && 'ring-2 ring-accent-500/60')}>
         <div className="flex items-center gap-2.5">
           <div className="w-16 h-12 rounded-lg bg-surface-800 flex items-center justify-center shrink-0 overflow-hidden">
-            {queueItem.thumbnail_file_id ? <img src={`/api/files/${queueItem.thumbnail_file_id}`} alt="G-code preview" className="w-full h-full object-cover" /> : <FileCode className="h-6 w-6 text-surface-500" />}
+            {queueItem.thumbnail_file_id ? <img src={resourceURL(`/api/files/${queueItem.thumbnail_file_id}`)} alt="G-code preview" className="w-full h-full object-cover" /> : <FileCode className="h-6 w-6 text-surface-500" />}
           </div>
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-1.5 mb-1">
@@ -501,7 +502,7 @@ function QueueCard({ item, queuePosition, busy, dragging, dragOver, onDragStart,
     return (
       <div draggable onDragStart={onDragStart} onDragOver={e => { e.preventDefault(); onDragOver() }} onDrop={e => { e.preventDefault(); onDrop() }} onDragEnd={onDragEnd} className={cn('relative h-80 cursor-grab overflow-hidden rounded-xl border border-surface-800 bg-surface-950 transition-colors hover:border-surface-700 active:cursor-grabbing', dragging && 'opacity-50', dragOver && !dragging && 'ring-2 ring-accent-500/60')}>
         {queueItem.thumbnail_file_id ? (
-          <img src={`/api/files/${queueItem.thumbnail_file_id}`} alt="G-code preview" className="absolute inset-0 h-full w-full object-cover" />
+          <img src={resourceURL(`/api/files/${queueItem.thumbnail_file_id}`)} alt="G-code preview" className="absolute inset-0 h-full w-full object-cover" />
         ) : (
           <div className="absolute inset-0 flex items-center justify-center bg-surface-900"><FileCode className="h-20 w-20 text-surface-600" /></div>
         )}
@@ -566,7 +567,7 @@ function QueueCard({ item, queuePosition, busy, dragging, dragOver, onDragStart,
     <div draggable onDragStart={onDragStart} onDragOver={e => { e.preventDefault(); onDragOver() }} onDrop={e => { e.preventDefault(); onDrop() }} onDragEnd={onDragEnd} className={cn('cursor-grab rounded-xl border border-surface-800 bg-surface-950/60 transition-colors hover:border-surface-700 active:cursor-grabbing', dragging && 'opacity-50', dragOver && !dragging && 'ring-2 ring-accent-500/60', compact ? 'p-2.5' : thumb ? 'p-3' : 'p-4')}>
       <div className={cn(thumb ? 'space-y-3 mb-3' : 'flex items-start gap-3', compact ? 'mb-2' : 'mb-3')}>
         <div className={cn('rounded-lg bg-surface-800 flex items-center justify-center shrink-0 overflow-hidden', compact ? 'w-16 h-12' : thumb ? 'w-full h-52' : 'w-14 h-14')}>
-          {queueItem.thumbnail_file_id ? <img src={`/api/files/${queueItem.thumbnail_file_id}`} alt="G-code preview" className="w-full h-full object-cover" /> : <FileCode className="h-7 w-7 text-surface-500" />}
+          {queueItem.thumbnail_file_id ? <img src={resourceURL(`/api/files/${queueItem.thumbnail_file_id}`)} alt="G-code preview" className="w-full h-full object-cover" /> : <FileCode className="h-7 w-7 text-surface-500" />}
         </div>
         <div className="min-w-0 flex-1">
           <div className={cn('flex items-center gap-2', compact ? 'mb-0.5' : 'mb-1')}>

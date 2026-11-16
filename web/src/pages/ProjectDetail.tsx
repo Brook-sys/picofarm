@@ -1,3 +1,5 @@
+import { externalLinkClick } from '../lib/platform'
+import { resourceURL } from '../lib/platform'
 import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import {
@@ -243,7 +245,7 @@ export default function ProjectDetail() {
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                       {projectForm.image_file_ids.map(fileId => (
                         <div key={fileId} className={cn('relative overflow-hidden rounded-xl border bg-surface-900', projectForm.cover_file_id === fileId ? 'border-accent-500' : 'border-surface-800')}>
-                          <img src={`/api/files/${fileId}`} className="h-28 w-full object-cover" />
+                          <img src={resourceURL(`/api/files/${fileId}`)} className="h-28 w-full object-cover" />
                           <div className="absolute inset-x-0 bottom-0 flex gap-1 bg-black/70 p-1">
                             <button type="button" onClick={() => setProjectForm(prev => ({ ...prev, cover_file_id: fileId }))} className="flex-1 rounded bg-surface-800/80 px-2 py-1 text-[10px] text-surface-200 hover:bg-accent-600">
                               {projectForm.cover_file_id === fileId ? 'Capa' : 'Definir capa'}
@@ -273,7 +275,7 @@ export default function ProjectDetail() {
                   </h1>
                   {(project.source_url || project.source_license || project.source_author || project.source_provider) && (
                     <div className="mt-3 flex flex-wrap gap-2 text-xs text-surface-500">
-                      {project.source_url && <a href={project.source_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-accent-400 hover:underline"><ExternalLink className="h-3 w-3" />Source</a>}
+                      {project.source_url && <a href={project.source_url} onClick={externalLinkClick} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-accent-400 hover:underline"><ExternalLink className="h-3 w-3" />Source</a>}
                       {project.source_license && <span className="rounded-full border border-surface-700 px-2 py-0.5">License: {project.source_license}</span>}
                       {project.source_author && <span className="rounded-full border border-surface-700 px-2 py-0.5">By {project.source_author}</span>}
                       {project.source_provider && <span className="rounded-full border border-surface-700 px-2 py-0.5">{project.source_provider}</span>}
@@ -295,11 +297,11 @@ export default function ProjectDetail() {
                 </div>
                 <div className="space-y-3">
                   <div className="overflow-hidden rounded-2xl border border-surface-800 bg-surface-900/70">
-                    {project.cover_file_id ? <img src={`/api/files/${project.cover_file_id}`} className="h-56 w-full object-cover" /> : <div className="flex h-56 items-center justify-center text-surface-600"><Box className="h-10 w-10" /></div>}
+                    {project.cover_file_id ? <img src={resourceURL(`/api/files/${project.cover_file_id}`)} className="h-56 w-full object-cover" /> : <div className="flex h-56 items-center justify-center text-surface-600"><Box className="h-10 w-10" /></div>}
                   </div>
                   {projectImages.length > 1 && (
                     <div className="grid grid-cols-4 gap-2">
-                      {projectImages.map(fileId => <img key={fileId} src={`/api/files/${fileId}`} className={cn('h-16 w-full rounded-lg object-cover border', project.cover_file_id === fileId ? 'border-accent-500' : 'border-surface-800')} />)}
+                      {projectImages.map(fileId => <img key={fileId} src={resourceURL(`/api/files/${fileId}`)} className={cn('h-16 w-full rounded-lg object-cover border', project.cover_file_id === fileId ? 'border-accent-500' : 'border-surface-800')} />)}
                     </div>
                   )}
                 </div>
@@ -843,7 +845,7 @@ function PartCard({
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3 min-w-0">
                       <div className="h-10 w-10 rounded-lg bg-surface-900 overflow-hidden flex items-center justify-center">
-                        {stl?.thumbnail_file_id ? <img src={`/api/files/${stl.thumbnail_file_id}`} className="h-full w-full object-contain" /> : <FileCode className="h-5 w-5 text-surface-500" />}
+                        {stl?.thumbnail_file_id ? <img src={resourceURL(`/api/files/${stl.thumbnail_file_id}`)} className="h-full w-full object-contain" /> : <FileCode className="h-5 w-5 text-surface-500" />}
                       </div>
                       <div className="min-w-0">
                         <div className="text-sm font-medium text-surface-200 truncate">
@@ -896,7 +898,7 @@ function PartCard({
       {viewingSTL && (
         <Modal title="STL Viewer" onClose={() => setViewingSTL(null)}>
           <div className="space-y-4">
-            <STLViewer3D url={`/api/files/${viewingSTL.file_id}`} />
+            <STLViewer3D url={resourceURL(`/api/files/${viewingSTL.file_id}`)} />
             <div className="grid grid-cols-2 gap-4 text-sm bg-surface-900/50 p-3 rounded-lg">
               <div>
                 <div className="text-surface-500 mb-1">Title</div>
@@ -921,7 +923,7 @@ function PartCard({
       {viewingGCode && (
         <Modal title="G-code info" onClose={() => setViewingGCode(null)}>
           <div className="space-y-3 text-sm">
-            {viewingGCode.thumbnail_file_id && <img src={`/api/files/${viewingGCode.thumbnail_file_id}`} className="h-48 w-full rounded-lg bg-surface-900 object-contain" />}
+            {viewingGCode.thumbnail_file_id && <img src={resourceURL(`/api/files/${viewingGCode.thumbnail_file_id}`)} className="h-48 w-full rounded-lg bg-surface-900 object-contain" />}
             <InfoRow label="Title" value={viewingGCode.display_name || viewingGCode.file_name} />
             <InfoRow label="File" value={viewingGCode.file_name} />
             <InfoRow label="Perfil de Impressão" value={viewingGCode.metadata?.print_settings_id || '-'} />
@@ -1957,7 +1959,7 @@ function UploadDesignModal({
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded bg-surface-800 overflow-hidden">
                     {selectedGCodeFile.file.thumbnail_file_id ? (
-                      <img src={`/api/files/${selectedGCodeFile.file.thumbnail_file_id}`} className="w-full h-full object-cover" />
+                      <img src={resourceURL(`/api/files/${selectedGCodeFile.file.thumbnail_file_id}`)} className="w-full h-full object-cover" />
                     ) : (
                       <FileCode className="h-5 w-5 m-2.5 text-surface-500" />
                     )}
