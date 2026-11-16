@@ -21,6 +21,9 @@ import (
 // RouterOptions controls HTTP middleware behavior that differs between local
 // development and self-hosted deployments.
 type RouterOptions struct {
+	// StaticDir overrides STATIC_DIR for embedded hosts without mutating the
+	// process environment. Empty retains the environment/default behavior.
+	StaticDir      string
 	AllowedOrigins []string
 	ApiToken       string
 	// RequireApiToken forces authentication even when ApiToken is empty, which
@@ -838,7 +841,10 @@ func NewRouterWithOptions(services *service.Services, hub *realtime.Hub, opts Ro
 	})
 
 	// Serve static frontend files in production
-	staticDir := os.Getenv("STATIC_DIR")
+	staticDir := opts.StaticDir
+	if staticDir == "" {
+		staticDir = os.Getenv("STATIC_DIR")
+	}
 	if staticDir == "" {
 		staticDir = "./web/dist"
 	}
