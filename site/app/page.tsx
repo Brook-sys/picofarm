@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowRight, Bell, Camera, CheckCircle2, Container, FileText, FlaskConical, FolderOpen, Github, Layers, ListOrdered, Menu, Package, Printer, ScanLine, Settings2, TriangleAlert, X } from "lucide-react";
+import { ArrowRight, Bell, Camera, CheckCircle2, Container, FileText, FlaskConical, FolderOpen, Github, Layers, ListOrdered, Menu, Package, Printer, Settings2, TriangleAlert, X } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { LanguageSwitch, useLocale } from "./components/locale";
 import { landingContent } from "./components/landing-content";
@@ -71,13 +71,12 @@ function Heading({ badge, title, description }: { badge: string; title: string; 
   return <AnimatedSection className="mx-auto mb-12 max-w-2xl text-center"><p className="mb-4 text-xs font-semibold uppercase tracking-widest text-accent-400">{badge}</p><h2 className="mb-4 text-3xl font-bold tracking-tight text-surface-50 sm:text-4xl">{title}</h2><p className="leading-relaxed text-surface-400 sm:text-lg">{description}</p></AnimatedSection>;
 }
 
-function ScreenshotPlaceholder({ title }: { title: string }) {
-  const { locale } = useLocale();
-  const t = landingContent[locale];
+function Screenshot({ file, title, eager = false }: { file: string; title: string; eager?: boolean }) {
   return <figure className="overflow-hidden rounded-2xl border border-surface-700 bg-surface-900 shadow-2xl">
-    <div aria-hidden="true" className="flex items-center gap-2 border-b border-surface-700 bg-surface-800/50 px-4 py-3">{[0, 1, 2].map((n) => <span key={n} className="h-2 w-2 rounded-full bg-surface-600" />)}<span className="ml-3 truncate font-mono text-xs text-surface-400">PicoFarm / {title}</span></div>
-    <div className="flex aspect-video min-h-44 flex-col items-center justify-center gap-3 bg-surface-800/40 px-5 text-center"><ScanLine aria-hidden="true" className="h-10 w-10 text-surface-500" /><p className="text-sm font-medium text-surface-300 sm:text-lg">{title}</p><p className="font-mono text-xs text-surface-400">{t.placeholder}</p></div>
-    <figcaption className="border-t border-surface-700 px-4 py-3 text-center text-xs text-surface-400">{t.notScreenshot}</figcaption>
+    <a href={`/screenshots/${file}.webp`} className="block rounded-t-2xl focus-visible:outline-2 focus-visible:outline-accent-400">
+      <img src={`/screenshots/${file}.webp`} alt={title} width={1600} height={file === "tela_printerfiles" ? 899 : file === "tela_filamentos" ? 899 : file === "tela_fatiamento" || file === "tela_template_notifications" ? 901 : 897} loading={eager ? "eager" : "lazy"} decoding="async" className="h-auto w-full" />
+    </a>
+    <figcaption className="border-t border-surface-700 px-4 py-3 text-center text-xs text-surface-400">{title}</figcaption>
   </figure>;
 }
 
@@ -102,7 +101,7 @@ export default function Home() {
             <div className="flex flex-col justify-center gap-3 sm:flex-row"><a href="/docs#installation" className={primary}><Container aria-hidden="true" className="h-4 w-4" />{t.install}</a><a href="/docs" className={secondary}>{t.docs}<ArrowRight aria-hidden="true" className="h-4 w-4" /></a></div>
             <a href={REPO} className="mt-5 inline-flex items-center gap-2 rounded py-2 text-sm text-surface-300 underline-offset-4 hover:underline"><Github aria-hidden="true" className="h-4 w-4" />{t.github}</a>
           </AnimatedSection>
-          <AnimatedSection className="glow-accent mt-12 rounded-2xl"><ScreenshotPlaceholder title={t.preview} /></AnimatedSection>
+          <AnimatedSection className="glow-accent mt-12 rounded-2xl"><Screenshot file="tela_geral_dashboardprincipal" title={t.preview} eager /></AnimatedSection>
         </div>
       </section>
 
@@ -113,7 +112,17 @@ export default function Home() {
 
       <section className="border-t border-surface-800/50 py-20 sm:py-28"><div className="mx-auto grid max-w-6xl items-center gap-12 px-6 lg:grid-cols-2">
         <AnimatedSection><h2 className="mb-4 text-3xl font-bold text-surface-50">{t.workflowTitle}</h2><p className="mb-6 leading-relaxed text-surface-400">{t.workflowIntro}</p><ul className="space-y-4">{t.workflowBullets.map((item) => <li key={item} className="flex items-start gap-3 text-sm text-surface-300"><CheckCircle2 aria-hidden="true" className="h-5 w-5 shrink-0 text-accent-500" />{item}</li>)}</ul></AnimatedSection>
-        <AnimatedSection><ScreenshotPlaceholder title={t.libraryPreview} /></AnimatedSection>
+        <AnimatedSection><Screenshot file="tela_files" title={t.libraryPreview} /></AnimatedSection>
+      </div></section>
+
+      <section className="border-t border-surface-800/50 py-20 sm:py-28"><div className="mx-auto max-w-6xl px-6">
+        <Heading badge={t.cameraBadge} title={t.cameraTitle} description={t.cameraIntro} />
+        <AnimatedSection><Screenshot file="tela_cameras" title={t.cameraCaption} /></AnimatedSection>
+      </div></section>
+
+      <section className="border-t border-surface-800/50 py-20 sm:py-28"><div className="mx-auto max-w-6xl px-6">
+        <Heading badge={t.detailsBadge} title={t.detailsTitle} description={t.detailsIntro} />
+        <div className="grid gap-10 lg:grid-cols-2">{t.gallery.map(([file, title, description]) => <AnimatedSection key={file}><article><h3 className="mb-3 text-xl font-semibold text-surface-50">{title}</h3><p className="mb-5 text-sm leading-relaxed text-surface-400">{description}</p><Screenshot file={file} title={title} /></article></AnimatedSection>)}</div>
       </div></section>
 
       <section id="experimental" className="scroll-mt-24 border-y border-surface-800 bg-surface-900/30 py-20 sm:py-28"><div className="mx-auto max-w-6xl px-6">

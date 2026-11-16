@@ -9,7 +9,8 @@ The presentation/documentation website is the separate Next.js project in `site/
 - Prominent disclosure: originated as a [Daedalus](https://github.com/philjestin/Daedalus) fork; development of this fork is entirely AI-driven (vibe coding).
 - Show queue, printer management, STL/G-code organization, optional on-demand slicing, printer files, notifications, cameras, filament inventory and consumption as primary capabilities. Protocol/service limitations still apply.
 - Semi-automatic printing, commercial management and marketplace integrations belong to an explicitly experimental/testing-only section. Provider names are not claims of working synchronization.
-- Screenshots are neutral gray placeholders until reviewed PicoFarm screenshots are available. Remove credentials, customer data and private infrastructure information from real captures before committing them.
+- Reviewed PicoFarm captures live in `site/public/screenshots/`: `tela_*.png` sources and optimized 1600px-wide WebP versions used by the landing page. The dashboard and materials guides reuse the matching captures; guides without a relevant capture omit the image rather than showing a placeholder. Legacy Daedalus captures are removed.
+- Review both source and optimized images for credentials, customer data and private infrastructure information before committing. The printer-files connection address is removed at pixel level in both formats. Screenshot UI language is fixed at capture time; captions and surrounding copy are bilingual. Dashboard and camera-wall captions identify demo data and the optional experimental financial area.
 
 ## Languages
 

@@ -51,10 +51,11 @@ volumes:
           <p><a href={`${repository}/blob/main/compose.yaml`}>compose.yaml</a>{" · "}<a href={`${repository}/blob/main/.env.compose.example`}>.env.compose.example</a>{" · "}<a href={`${repository}/blob/main/docs/GETTING_STARTED.md`}>{pt ? "Desenvolvimento a partir do código" : "Source development"}</a></p>
         </>
       )}
-      {!guide.experimental && (
-        <div className="not-prose my-8 flex min-h-40 items-center justify-center rounded-xl border border-surface-700 bg-surface-800 p-6 text-center text-sm text-surface-300" role="img" aria-label={pt ? "Espaço reservado cinza; não é uma captura do aplicativo" : "Gray placeholder; not an application screenshot"}>
-          {pt ? "Captura atual ainda não publicada. Este espaço reservado não representa a interface." : "Current screenshot not published yet. This placeholder does not represent the interface."}
-        </div>
+      {(id === "dashboard" || id === "materials") && (
+        <figure className="not-prose my-8 overflow-hidden rounded-xl border border-surface-700">
+          <img src={`/screenshots/${id === "dashboard" ? "tela_geral_dashboardprincipal" : "tela_filamentos"}.webp`} alt={guide.title} width={1600} height={id === "dashboard" ? 897 : 899} loading="lazy" decoding="async" className="h-auto w-full" />
+          <figcaption className="p-3 text-center text-xs text-surface-400">{pt ? "Captura real do beta com dados de demonstração." : "Real beta screenshot with demo data."}</figcaption>
+        </figure>
       )}
       {id === "start" && (
         <>
