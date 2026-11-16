@@ -8,6 +8,12 @@ Self-hosted print farm management and order fulfillment for makers and small 3D 
 
 PicoFarm brings a product catalog, customer orders, production tasks, print queues, and printer status into a browser-based application. A Go server provides the API and serves the production frontend; SQLite stores application data, while uploaded files remain on disk.
 
+[Install with Docker Compose](docs/INSTALL_DOCKER_COMPOSE.md) · [Getting started](docs/GETTING_STARTED.md) · [Screenshots](#a-look-inside)
+
+[![PicoFarm dashboard showing printer status, print statistics, and a fleet overview](site/public/screenshots/tela_geral_dashboardprincipal.webp)](site/public/screenshots/tela_geral_dashboardprincipal.png)
+
+*Your printers at a glance — from a single machine to a small farm.*
+
 ## What it does
 
 - **Catalog and production:** projects, parts, design versions, 3MF metadata, tasks, checklists, print jobs, and queues.
@@ -43,6 +49,22 @@ make build
 Open **http://localhost:8084**. Run from the repository root so the server can find `web/dist`. The binary does **not** embed frontend assets.
 
 Read [Getting started](docs/GETTING_STARTED.md) for Docker, configuration, persistent data, troubleshooting, and safe first steps.
+
+## A look inside
+
+A few views of everyday printing workflows. Select any screenshot to open the full-resolution image.
+
+| Camera wall | File library |
+| :---: | :---: |
+| [![PicoFarm camera wall with multiple printer camera views](site/public/screenshots/tela_cameras.webp)](site/public/screenshots/tela_cameras.png) | [![PicoFarm file library with model thumbnails](site/public/screenshots/tela_files.webp)](site/public/screenshots/tela_files.png) |
+| Keep printer camera views together in one place. | Browse and organize your printable files. |
+
+| Slicer integration | Filament inventory |
+| :---: | :---: |
+| [![PicoFarm external slicer settings with connection status and printer, preset, and filament profiles](site/public/screenshots/tela_fatiamento.webp)](site/public/screenshots/tela_fatiamento.png) | [![PicoFarm filament inventory showing spools and material details](site/public/screenshots/tela_filamentos.webp)](site/public/screenshots/tela_filamentos.png) |
+| Prepare models with the optional external slicer service. | Keep track of spools and materials. |
+
+*PicoFarm is in BETA. Screenshots illustrate the interface, not a guarantee of printer compatibility or production reliability.*
 
 ## Security and data
 
