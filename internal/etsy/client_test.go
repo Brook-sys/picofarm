@@ -3,6 +3,7 @@ package etsy
 import (
 	"context"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -238,7 +239,7 @@ func TestListingQueryOptions_ToURLParams(t *testing.T) {
 }
 
 func TestGenerateAuthURL(t *testing.T) {
-	client := NewClient("test-client-id", "http://localhost:8080/callback")
+	client := NewClient("test-client-id", "test-shared-secret", "http://localhost:8080/callback")
 
 	state := "test-state-123"
 	codeChallenge := "test-challenge-456"
@@ -424,7 +425,7 @@ func TestExchangeCode_parsesEtsyOAuthError(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := NewClient("test-client-id", "http://localhost:8084/api/integrations/etsy/callback")
+	client := NewClient("test-client-id", "test-shared-secret", "http://localhost:8084/api/integrations/etsy/callback")
 	client.tokenURL = srv.URL + "/v3/public/oauth/token"
 
 	_, err := client.ExchangeCode(context.Background(), "bad-code", "verifier")
@@ -452,7 +453,7 @@ func TestExchangeCode_nonJSONErrorKeepsResponseBody(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := NewClient("test-client-id", "http://localhost:8084/api/integrations/etsy/callback")
+	client := NewClient("test-client-id", "test-shared-secret", "http://localhost:8084/api/integrations/etsy/callback")
 	client.tokenURL = srv.URL + "/v3/public/oauth/token"
 
 	_, err := client.ExchangeCode(context.Background(), "code", "verifier")
@@ -462,5 +463,125 @@ func TestExchangeCode_nonJSONErrorKeepsResponseBody(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "upstream says nope") {
 		t.Errorf("expected the raw body to be preserved, got %v", err)
+	}
+}
+
+// etsyHeaderTransport intercepts requests without contacting Etsy.
+type etsyHeaderTransport func(*http.Request) (*http.Response, error)
+
+func (f etsyHeaderTransport) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
+
+func TestApplicationRequestsIncludeSharedSecret(t *testing.T) {
+	calls := []struct {
+		name string
+		call func(*Client) error
+	}{
+		{"shop", func(c *Client) error { _, err := c.GetShop(context.Background(), "123.token"); return err }},
+		{"receipts", func(c *Client) error {
+			_, err := c.GetReceipts(context.Background(), "123.token", 1, ReceiptQueryOptions{})
+			return err
+		}},
+		{"receipt", func(c *Client) error { _, err := c.GetReceipt(context.Background(), "123.token", 1, 2); return err }},
+		{"listings", func(c *Client) error {
+			_, err := c.GetActiveListings(context.Background(), "123.token", 1, ListingQueryOptions{})
+			return err
+		}},
+		{"listing", func(c *Client) error { _, err := c.GetListing(context.Background(), "123.token", 1); return err }},
+		{"inventory", func(c *Client) error {
+			_, err := c.GetListingInventory(context.Background(), "123.token", 1)
+			return err
+		}},
+		{"inventory update", func(c *Client) error { return c.UpdateListingInventory(context.Background(), "123.token", 1, nil) }},
+	}
+	for _, tc := range calls {
+		t.Run(tc.name, func(t *testing.T) {
+			client := NewClient("app-key", "fake-secret", DefaultRedirectURI)
+			client.httpClient.Transport = etsyHeaderTransport(func(r *http.Request) (*http.Response, error) {
+				if r.Header.Get("x-api-key") != "app-key:fake-secret" {
+					t.Fatal("missing combined API key header")
+				}
+				if r.Header.Get("Authorization") != "Bearer 123.token" {
+					t.Fatal("missing OAuth token")
+				}
+				if strings.Contains(r.URL.String(), "fake-secret") {
+					t.Fatal("secret in URL")
+				}
+				return &http.Response{StatusCode: 403, Status: "403 Forbidden", Body: io.NopCloser(strings.NewReader(`{"error":"echo fake-secret"}`)), Header: make(http.Header)}, nil
+			})
+			err := tc.call(client)
+			if err == nil || strings.Contains(err.Error(), "fake-secret") || !strings.Contains(err.Error(), "[REDACTED]") {
+				t.Fatalf("expected redacted upstream failure, got %v", err)
+			}
+		})
+	}
+}
+
+func TestOAuthUsesKeystringWithoutSharedSecret(t *testing.T) {
+	client := NewClient("app-key", "fake-secret", DefaultRedirectURI)
+	u, err := url.Parse(client.GenerateAuthURL("state", "challenge"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if u.Query().Get("client_id") != "app-key" || strings.Contains(u.String(), "fake-secret") {
+		t.Fatal("OAuth URL must only contain keystring")
+	}
+	client.httpClient.Transport = etsyHeaderTransport(func(r *http.Request) (*http.Response, error) {
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		form, err := url.ParseQuery(string(body))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if form.Get("client_id") != "app-key" || r.Header.Get("x-api-key") != "" {
+			t.Fatal("OAuth token request contains incorrect app credentials")
+		}
+		if strings.Contains(string(body), "fake-secret") {
+			t.Fatal("secret in OAuth payload")
+		}
+		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(`{"access_token":"123.token","refresh_token":"refresh","expires_in":3600}`)), Header: make(http.Header)}, nil
+	})
+	if _, err := client.ExchangeCode(context.Background(), "code", "verifier"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := client.RefreshToken(context.Background(), "refresh"); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestTokenErrorsRedactSharedSecret(t *testing.T) {
+	for _, body := range []string{`{"error":"invalid_grant","error_description":"fake-secret"}`, `upstream echoed fake-secret`} {
+		client := NewClient("app-key", "fake-secret", DefaultRedirectURI)
+		client.httpClient.Transport = etsyHeaderTransport(func(r *http.Request) (*http.Response, error) {
+			return &http.Response{StatusCode: 400, Status: "400 Bad Request", Body: io.NopCloser(strings.NewReader(body)), Header: make(http.Header)}, nil
+		})
+		_, err := client.ExchangeCode(context.Background(), "code", "verifier")
+		if err == nil || strings.Contains(err.Error(), "fake-secret") {
+			t.Fatalf("unredacted exchange error: %v", err)
+		}
+		_, err = client.RefreshToken(context.Background(), "refresh")
+		if err == nil || strings.Contains(err.Error(), "fake-secret") {
+			t.Fatalf("unredacted refresh error: %v", err)
+		}
+	}
+}
+
+func TestClientDoesNotFollowRedirects(t *testing.T) {
+	followed := false
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/redirect" {
+			http.Redirect(w, r, "/destination", http.StatusTemporaryRedirect)
+			return
+		}
+		followed = true
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+	client := NewClient("app-key", "fake-secret", DefaultRedirectURI)
+	client.tokenURL = server.URL + "/redirect"
+	_, err := client.ExchangeCode(context.Background(), "code", "verifier")
+	if err == nil || followed {
+		t.Fatalf("OAuth request followed redirect: followed=%v, err=%v", followed, err)
 	}
 }

@@ -32,13 +32,13 @@ func TestEtsyService_Configure_valid(t *testing.T) {
 	settingsRepo := repos.Settings
 
 	settingsSvc := &SettingsService{repo: settingsRepo}
-	svc := NewEtsyService(etsyRepo, "", "", settingsSvc)
+	svc := NewEtsyService(etsyRepo, "", "", "", settingsSvc)
 
 	if svc.IsConfigured() {
 		t.Fatal("expected service to not be configured initially")
 	}
 
-	err := svc.Configure(context.Background(), "test-client-id", "http://localhost:8080/callback")
+	err := svc.Configure(context.Background(), "test-client-id", "test-shared-secret", "http://localhost:8080/callback")
 	if err != nil {
 		t.Fatalf("Configure returned error: %v", err)
 	}
@@ -70,9 +70,9 @@ func TestEtsyService_Configure_emptyClientID(t *testing.T) {
 	repos := repository.NewRepositories(db)
 
 	settingsSvc := &SettingsService{repo: repos.Settings}
-	svc := NewEtsyService(repos.Etsy, "", "", settingsSvc)
+	svc := NewEtsyService(repos.Etsy, "", "", "", settingsSvc)
 
-	err := svc.Configure(context.Background(), "", "http://localhost:8080/callback")
+	err := svc.Configure(context.Background(), "", "test-shared-secret", "http://localhost:8080/callback")
 	if err == nil {
 		t.Fatal("expected error for empty client_id")
 	}
@@ -87,9 +87,9 @@ func TestEtsyService_Configure_defaultRedirectURI(t *testing.T) {
 	repos := repository.NewRepositories(db)
 
 	settingsSvc := &SettingsService{repo: repos.Settings}
-	svc := NewEtsyService(repos.Etsy, "", "", settingsSvc)
+	svc := NewEtsyService(repos.Etsy, "", "", "", settingsSvc)
 
-	err := svc.Configure(context.Background(), "test-client-id", "")
+	err := svc.Configure(context.Background(), "test-client-id", "test-shared-secret", "")
 	if err != nil {
 		t.Fatalf("Configure returned error: %v", err)
 	}
@@ -115,7 +115,7 @@ func TestEtsyService_Configure_invalidRedirectURI(t *testing.T) {
 	db := openEtsyTestDB(t)
 	repos := repository.NewRepositories(db)
 	settingsSvc := &SettingsService{repo: repos.Settings}
-	svc := NewEtsyService(repos.Etsy, "", "", settingsSvc)
+	svc := NewEtsyService(repos.Etsy, "", "", "", settingsSvc)
 
 	cases := []struct {
 		name string
@@ -129,7 +129,7 @@ func TestEtsyService_Configure_invalidRedirectURI(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			err := svc.Configure(context.Background(), "test-client-id", tc.uri)
+			err := svc.Configure(context.Background(), "test-client-id", "test-shared-secret", tc.uri)
 			if !errors.Is(err, ErrInvalidRedirectURI) {
 				t.Fatalf("expected ErrInvalidRedirectURI for %q, got %v", tc.uri, err)
 			}
@@ -155,12 +155,12 @@ func TestEtsyService_Configure_replacesPreviousValues(t *testing.T) {
 	db := openEtsyTestDB(t)
 	repos := repository.NewRepositories(db)
 	settingsSvc := &SettingsService{repo: repos.Settings}
-	svc := NewEtsyService(repos.Etsy, "", "", settingsSvc)
+	svc := NewEtsyService(repos.Etsy, "", "", "", settingsSvc)
 
-	if err := svc.Configure(context.Background(), "old-key", etsy.DefaultRedirectURI); err != nil {
+	if err := svc.Configure(context.Background(), "old-key", "test-shared-secret", etsy.DefaultRedirectURI); err != nil {
 		t.Fatalf("initial Configure: %v", err)
 	}
-	if err := svc.Configure(context.Background(), "new-key", "http://localhost:9099/api/integrations/etsy/callback"); err != nil {
+	if err := svc.Configure(context.Background(), "new-key", "new-shared-secret", "http://localhost:9099/api/integrations/etsy/callback"); err != nil {
 		t.Fatalf("second Configure: %v", err)
 	}
 
@@ -195,7 +195,7 @@ func TestEtsyService_RepairLegacyRedirectURI(t *testing.T) {
 		db := openEtsyTestDB(t)
 		repos := repository.NewRepositories(db)
 		settingsSvc := &SettingsService{repo: repos.Settings}
-		svc := NewEtsyService(repos.Etsy, "", "", settingsSvc)
+		svc := NewEtsyService(repos.Etsy, "", "", "", settingsSvc)
 		if err := settingsSvc.Set(context.Background(), EtsyRedirectURIKey, legacy); err != nil {
 			t.Fatalf("Set: %v", err)
 		}
@@ -213,7 +213,7 @@ func TestEtsyService_RepairLegacyRedirectURI(t *testing.T) {
 		db := openEtsyTestDB(t)
 		repos := repository.NewRepositories(db)
 		settingsSvc := &SettingsService{repo: repos.Settings}
-		svc := NewEtsyService(repos.Etsy, "", "", settingsSvc)
+		svc := NewEtsyService(repos.Etsy, "", "", "", settingsSvc)
 		custom := "http://192.0.2.10:8084/api/integrations/etsy/callback"
 		if err := settingsSvc.Set(context.Background(), EtsyRedirectURIKey, custom); err != nil {
 			t.Fatalf("Set: %v", err)
@@ -232,7 +232,7 @@ func TestEtsyService_RepairLegacyRedirectURI(t *testing.T) {
 		db := openEtsyTestDB(t)
 		repos := repository.NewRepositories(db)
 		settingsSvc := &SettingsService{repo: repos.Settings}
-		svc := NewEtsyService(repos.Etsy, "", "", settingsSvc)
+		svc := NewEtsyService(repos.Etsy, "", "", "", settingsSvc)
 
 		if err := svc.RepairLegacyRedirectURI(context.Background()); err != nil {
 			t.Fatalf("RepairLegacyRedirectURI with no setting: %v", err)
@@ -257,10 +257,10 @@ func TestEtsyService_StartOAuth_recordsRedirectURIInState(t *testing.T) {
 	db := openEtsyTestDB(t)
 	repos := repository.NewRepositories(db)
 	settingsSvc := &SettingsService{repo: repos.Settings}
-	svc := NewEtsyService(repos.Etsy, "", "", settingsSvc)
+	svc := NewEtsyService(repos.Etsy, "", "", "", settingsSvc)
 
 	redirect := "http://localhost:9099/api/integrations/etsy/callback"
-	if err := svc.Configure(context.Background(), "test-client-id", redirect); err != nil {
+	if err := svc.Configure(context.Background(), "test-client-id", "test-shared-secret", redirect); err != nil {
 		t.Fatalf("Configure: %v", err)
 	}
 
@@ -295,10 +295,10 @@ func TestEtsyService_HandleCallback_redirectURIMismatch(t *testing.T) {
 	db := openEtsyTestDB(t)
 	repos := repository.NewRepositories(db)
 	settingsSvc := &SettingsService{repo: repos.Settings}
-	svc := NewEtsyService(repos.Etsy, "", "", settingsSvc)
+	svc := NewEtsyService(repos.Etsy, "", "", "", settingsSvc)
 
 	current := etsy.DefaultRedirectURI
-	if err := svc.Configure(context.Background(), "test-client-id", current); err != nil {
+	if err := svc.Configure(context.Background(), "test-client-id", "test-shared-secret", current); err != nil {
 		t.Fatalf("Configure: %v", err)
 	}
 
@@ -329,14 +329,56 @@ func TestEtsyService_HandleCallback_redirectURIMismatch(t *testing.T) {
 }
 
 func TestEtsyService_Configure_noSettingsService(t *testing.T) {
-	svc := NewEtsyService(nil, "", "", nil)
+	svc := NewEtsyService(nil, "", "", "", nil)
 
-	err := svc.Configure(context.Background(), "test-client-id", "http://localhost:8080/callback")
+	err := svc.Configure(context.Background(), "test-client-id", "test-shared-secret", "http://localhost:8080/callback")
 	if err != nil {
 		t.Fatalf("Configure without settingsSvc returned error: %v", err)
 	}
 
 	if !svc.IsConfigured() {
 		t.Fatal("expected service to be configured even without settingsSvc")
+	}
+}
+
+func TestEtsyService_SharedSecretPersistence(t *testing.T) {
+	repos := repository.NewRepositories(openEtsyTestDB(t))
+	settings := &SettingsService{repo: repos.Settings}
+	ctx := t.Context()
+	svc := NewEtsyService(repos.Etsy, "legacy-key", "", "", settings)
+	if svc.IsConfigured() {
+		t.Fatal("legacy key without secret must not be configured")
+	}
+	if err := svc.Configure(ctx, "test-key", "", ""); !errors.Is(err, ErrEtsySharedSecretRequired) {
+		t.Fatalf("missing secret: %v", err)
+	}
+	if err := svc.Configure(ctx, "test-key", "test-secret", ""); err != nil {
+		t.Fatal(err)
+	}
+	stored, err := repos.Settings.Get(ctx, EtsySharedSecretKey)
+	if err != nil || stored == nil || !strings.HasPrefix(stored.Value, "enc:v1:") || strings.Contains(stored.Value, "test-secret") {
+		t.Fatal("secret was not encrypted at rest")
+	}
+	restarted := NewEtsyService(repos.Etsy, "", "", "", settings)
+	if err := restarted.Configure(ctx, "test-key", "", ""); err != nil {
+		t.Fatal(err)
+	}
+	if !restarted.IsConfigured() {
+		t.Fatal("persisted secret not restored")
+	}
+	if err := restarted.Configure(ctx, "other-key", "", ""); !errors.Is(err, ErrEtsySharedSecretRequired) {
+		t.Fatalf("mixed credentials: %v", err)
+	}
+	for _, invalid := range []string{"key:secret", " leading", "trailing ", "line\nbreak", "tab\tkey"} {
+		if err := restarted.Configure(ctx, invalid, "test-secret", ""); !errors.Is(err, ErrInvalidEtsyCredentials) {
+			t.Fatalf("invalid key accepted: %v", err)
+		}
+		if err := restarted.Configure(ctx, "test-key", invalid, ""); !errors.Is(err, ErrInvalidEtsyCredentials) {
+			t.Fatalf("invalid secret accepted: %v", err)
+		}
+	}
+	saved, err := settings.Get(ctx, EtsySharedSecretKey)
+	if err != nil || saved == nil || saved.Value != "test-secret" {
+		t.Fatal("rejected config changed secret")
 	}
 }

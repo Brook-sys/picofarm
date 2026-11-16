@@ -59,6 +59,7 @@ func main() {
 
 	// Etsy OAuth configuration (optional)
 	etsyClientID := os.Getenv("ETSY_CLIENT_ID")
+	etsySharedSecret := os.Getenv("ETSY_SHARED_SECRET")
 	// Same single source of truth the service uses (etsy.DefaultRedirectURI):
 	// two hardcoded defaults drifted apart in the past and the service shipped
 	// port 8080, which is not the port this app listens on.
@@ -105,6 +106,7 @@ func main() {
 	servicesConfig := service.ServicesConfig{
 		Etsy: service.EtsyConfig{
 			ClientID:      etsyClientID,
+			SharedSecret:  etsySharedSecret,
 			RedirectURI:   etsyRedirectURI,
 			WebhookSecret: etsyWebhookSecret,
 		},
@@ -139,8 +141,10 @@ func main() {
 	// its initial connection stayed offline until manually reconnected.
 	services.Printers.StartAutoReconnect(context.Background())
 
-	if etsyClientID != "" {
+	if etsyClientID != "" && etsySharedSecret != "" {
 		slog.Info("Etsy integration enabled", "redirect_uri", etsyRedirectURI)
+	} else if etsyClientID != "" || etsySharedSecret != "" {
+		slog.Warn("Etsy environment configuration incomplete; both ETSY_CLIENT_ID and ETSY_SHARED_SECRET are required")
 	} else {
 		// Try loading Etsy config from database settings
 		if setting, err := services.Settings.Get(context.Background(), "etsy_client_id"); err == nil && setting != nil && setting.Value != "" {
@@ -155,7 +159,7 @@ func main() {
 			if uriSetting, err := services.Settings.Get(context.Background(), service.EtsyRedirectURIKey); err == nil && uriSetting != nil && uriSetting.Value != "" {
 				redirectURI = uriSetting.Value
 			}
-			if err := services.Etsy.Configure(context.Background(), setting.Value, redirectURI); err != nil {
+			if err := services.Etsy.Configure(context.Background(), setting.Value, "", redirectURI); err != nil {
 				slog.Warn("failed to load Etsy config from database", "error", err)
 			} else {
 				slog.Info("Etsy integration enabled from stored config", "redirect_uri", services.Etsy.RedirectURI())

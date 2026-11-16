@@ -62,6 +62,7 @@ export default function Settings() {
 
   // Etsy Client ID configuration
   const [etsyClientId, setEtsyClientId] = useState('')
+  const [etsySharedSecret, setEtsySharedSecret] = useState('')
   const [configuringEtsy, setConfiguringEtsy] = useState(false)
   // Editable on an already-configured integration: before this existed, a wrong
   // keystring or redirect URI could only be fixed by hand-editing the database,
@@ -351,9 +352,11 @@ export default function Settings() {
       const wasConfigured = etsyStatus?.configured === true
       await etsyApi.configure({
         client_id: etsyClientId,
+        ...(etsySharedSecret ? { shared_secret: etsySharedSecret } : {}),
         // Omitted when blank so the backend applies its own default (port 8084).
         ...(etsyRedirectUri.trim() ? { redirect_uri: etsyRedirectUri.trim() } : {}),
       })
+      setEtsySharedSecret('')
       const status = await etsyApi.getStatus()
       setEtsyStatus(status)
       if (status.redirect_uri) {
@@ -780,6 +783,21 @@ export default function Settings() {
                       </p>
                     </div>
                     <div>
+                      <label htmlFor="etsy-shared-secret" className="block text-sm text-surface-400 mb-1">Etsy Shared Secret</label>
+                      <input
+                        id="etsy-shared-secret"
+                        type="password"
+                        autoComplete="new-password"
+                        value={etsySharedSecret}
+                        onChange={e => setEtsySharedSecret(e.target.value)}
+                        placeholder={etsyStatus?.configured ? 'Leave blank to keep the existing secret' : "Paste your Etsy app's Shared Secret"}
+                        className="input w-full"
+                      />
+                      <p className="text-xs text-surface-500 mt-1">
+                        From the Etsy Developer Portal, alongside your Keystring. This is not the webhook signing secret. Leave blank only to keep a previously saved value.
+                      </p>
+                    </div>
+                    <div>
                       <label className="block text-sm text-surface-400 mb-1">Redirect URI</label>
                       <input
                         type="text"
@@ -797,7 +815,7 @@ export default function Settings() {
                     <div className="flex items-center gap-2">
                       <button
                         onClick={handleConfigureEtsy}
-                        disabled={!etsyClientId.trim() || configuringEtsy}
+                        disabled={!etsyClientId.trim() || (!etsyStatus?.configured && !etsySharedSecret.trim()) || configuringEtsy}
                         className="btn btn-primary"
                       >
                         {configuringEtsy ? 'Saving...' : 'Save & Connect'}

@@ -1268,7 +1268,7 @@ export const salesChannelsApi = {
 
 // Etsy API
 export const etsyApi = {
-  configure: (data: { client_id: string; redirect_uri?: string }) =>
+  configure: (data: { client_id: string; shared_secret?: string; redirect_uri?: string }) =>
     fetchApi<{ status: string }>('/integrations/etsy/configure', {
       method: 'PUT',
       body: JSON.stringify(data),

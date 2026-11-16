@@ -51,6 +51,12 @@ Current provider-specific route groups remain supported during migration:
 
 The generic route group starts at `/api/sales-channels/*`.
 
+## Etsy application credentials
+
+Etsy v3 application requests require `x-api-key: <keystring>:<shared_secret>` in addition to the OAuth bearer token where required. OAuth authorization and token exchange still use the keystring alone as `client_id`; never paste a combined key/secret into Client ID. Configure the Shared Secret separately in Settings → Integrations → Etsy. Existing installations with only a keystring must add the secret before reconnecting.
+
+The shared secret is stored through the encrypted settings path and is write-only through the configuration API. Blank secret updates preserve an existing value; status exposes whether the client is configured with both credentials, not the secret value. Application request failures redact literal occurrences of the secret from upstream response bodies. Tests use fake credentials and intercepted HTTP requests, not live shops. This does not certify live OAuth, scopes, shop access or inventory writes.
+
 ## Target backend shape
 
 Provider-neutral contracts live in:

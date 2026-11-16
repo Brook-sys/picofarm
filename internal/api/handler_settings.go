@@ -30,7 +30,7 @@ func (h *SettingsHandler) List(w http.ResponseWriter, r *http.Request) {
 	}
 	result := make([]maskedSetting, 0, len(settings))
 	for _, s := range settings {
-		if s.Key == "slicer_jobs_v1" {
+		if s.Key == "slicer_jobs_v1" || s.Key == service.EtsySharedSecretKey {
 			continue
 		}
 		val := s.Value
@@ -50,7 +50,7 @@ func (h *SettingsHandler) List(w http.ResponseWriter, r *http.Request) {
 // Get returns a single setting (with sensitive values masked).
 func (h *SettingsHandler) Get(w http.ResponseWriter, r *http.Request) {
 	key := chi.URLParam(r, "key")
-	if key == "slicer_jobs_v1" {
+	if key == "slicer_jobs_v1" || key == service.EtsySharedSecretKey {
 		respondError(w, http.StatusForbidden, "service-owned setting")
 		return
 	}
@@ -84,7 +84,7 @@ func (h *SettingsHandler) Get(w http.ResponseWriter, r *http.Request) {
 // Set creates or updates a setting.
 func (h *SettingsHandler) Set(w http.ResponseWriter, r *http.Request) {
 	key := chi.URLParam(r, "key")
-	if key == "slicer_jobs_v1" {
+	if key == "slicer_jobs_v1" || key == service.EtsySharedSecretKey {
 		respondError(w, http.StatusForbidden, "service-owned setting")
 		return
 	}
@@ -117,7 +117,7 @@ func (h *SettingsHandler) Set(w http.ResponseWriter, r *http.Request) {
 // Delete removes a setting.
 func (h *SettingsHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	key := chi.URLParam(r, "key")
-	if key == "slicer_jobs_v1" {
+	if key == "slicer_jobs_v1" || key == service.EtsySharedSecretKey {
 		respondError(w, http.StatusForbidden, "service-owned setting")
 		return
 	}

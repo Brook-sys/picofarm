@@ -36,7 +36,8 @@ Backend defaults are defined from `cmd/server/main.go` and database helpers:
 | `API_TOKEN` | unset | Optional shared token for `/api/*`; when set, requests need `Authorization: Bearer <token>`. Named tokens can be managed at runtime via `/api/api-tokens` |
 | `REQUIRE_API_TOKEN` | unset | Enables authentication without a shared token (`1`/`true`/`yes`/`on`/`enabled`). Fails open with a log warning if no token service is available |
 | `SENTRY_DSN` | unset | Optional error reporting |
-| `ETSY_CLIENT_ID` | unset | Optional Etsy integration |
+| `ETSY_CLIENT_ID` | unset | Optional Etsy keystring; requires `ETSY_SHARED_SECRET` for environment-based configuration |
+| `ETSY_SHARED_SECRET` | unset | Etsy application shared secret; distinct from the webhook signing secret; stored encrypted when configured |
 | `ETSY_WEBHOOK_SECRET` | unset | Optional Etsy webhook signing secret. When set, events with a missing or invalid `X-Etsy-Signature` are rejected with `401` instead of accepted |
 | `ETSY_REDIRECT_URI` | `http://localhost:8084/api/integrations/etsy/callback` | Same single default the backend uses (`etsy.DefaultRedirectURI`). The value must also be registered as a Callback URL on the Etsy app, or Etsy refuses the authorization with `The requested redirect URL is not permitted.`; override it for any host, port, or reverse-proxy path difference |
 | `SLICER_CONNECTION_URL` | unset | Overrides the stored `slicer_connection_url` setting. Use it to pin the orca-slicer-api container address from the deployment (compose/systemd/k8s) instead of relying on what an earlier version wrote into the database. `GET /api/slicer/config` reports `connection_url_source` (`env` or `settings`) so the UI can explain why a saved URL has no effect |
@@ -50,10 +51,10 @@ These values bound scheduling, not a promise of recovery within 10 seconds: boot
 
 ### Etsy connection checklist
 
-The redirect URI is the only piece of the Etsy OAuth flow that lives outside this repository. In order to connect a shop:
+The Etsy application credentials and registered callback URLs are managed in the Etsy Developer Portal. In order to connect a shop:
 
 1. Register the exact URI (scheme, host, port, and path) of your deployment as a **Callback URL** on the app in the Etsy Developer Portal. The default is `http://localhost:8084/api/integrations/etsy/callback`; anything reachable through a proxy or another port must be registered too.
-2. Set the Client ID (Keystring) either through `ETSY_CLIENT_ID` or in **Settings → Integrations → Etsy**. When it is configured but wrong, the form can be reopened with *Edit credentials* — the keystring and the redirect URI are both editable after configuration.
+2. Set the Client ID (Keystring) and separate Shared Secret either through `ETSY_CLIENT_ID`/`ETSY_SHARED_SECRET` or in **Settings → Integrations → Etsy**. Older installations must add the Shared Secret before reconnecting; never put it in Client ID. When it is configured but wrong, the form can be reopened with *Edit credentials* — the keystring and the redirect URI are both editable after configuration.
 3. Start the connection and authorize on Etsy. If Etsy refuses, the Settings page now shows its own `error_description`, which names the URI that was rejected.
 4. When stored settings exist and `ETSY_CLIENT_ID` is empty, they take precedence over the environment at startup; a redirect URI persisted by an older build (port 8080) is rewritten automatically on boot and logged as `repaired legacy Etsy redirect URI`.
 

@@ -62,8 +62,9 @@ type Services struct {
 
 // EtsyConfig holds Etsy OAuth configuration.
 type EtsyConfig struct {
-	ClientID    string
-	RedirectURI string
+	SharedSecret string
+	ClientID     string
+	RedirectURI  string
 	// WebhookSecret enforces signature verification on incoming Etsy webhooks.
 	// Leave empty to read the secret from the etsy_webhook_secret setting.
 	WebhookSecret string
@@ -172,7 +173,7 @@ func NewServices(repos *repository.Repositories, store storage.Storage, printerM
 // NewServicesWithEtsy creates all service instances including Etsy integration.
 func NewServicesWithEtsy(repos *repository.Repositories, store storage.Storage, printerMgr *printer.Manager, hub *realtime.Hub, etsyConfig EtsyConfig) *Services {
 	services := NewServices(repos, store, printerMgr, hub)
-	services.Etsy = NewEtsyService(repos.Etsy, etsyConfig.ClientID, etsyConfig.RedirectURI, services.Settings)
+	services.Etsy = NewEtsyService(repos.Etsy, etsyConfig.ClientID, etsyConfig.SharedSecret, etsyConfig.RedirectURI, services.Settings)
 	services.SalesChannels = mustNewSalesChannelRegistry(services)
 	return services
 }
@@ -180,7 +181,7 @@ func NewServicesWithEtsy(repos *repository.Repositories, store storage.Storage, 
 // NewServicesWithConfig creates all service instances with full configuration.
 func NewServicesWithConfig(repos *repository.Repositories, store storage.Storage, printerMgr *printer.Manager, hub *realtime.Hub, config ServicesConfig) *Services {
 	services := NewServices(repos, store, printerMgr, hub)
-	services.Etsy = NewEtsyService(repos.Etsy, config.Etsy.ClientID, config.Etsy.RedirectURI, services.Settings)
+	services.Etsy = NewEtsyService(repos.Etsy, config.Etsy.ClientID, config.Etsy.SharedSecret, config.Etsy.RedirectURI, services.Settings)
 	services.Etsy.SetWebhookSecret(config.Etsy.WebhookSecret)
 	services.SalesChannels = mustNewSalesChannelRegistry(services)
 	return services

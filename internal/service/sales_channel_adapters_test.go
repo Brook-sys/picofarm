@@ -24,7 +24,7 @@ func TestSalesChannelAdapters_DescriptorsExposeCapabilities(t *testing.T) {
 	repos := openSalesChannelAdapterRepos(t)
 
 	providers := []saleschannel.Provider{
-		NewEtsySalesChannelProvider(NewEtsyService(repos.Etsy, "client-id", "http://localhost/callback", &SettingsService{repo: repos.Settings})),
+		NewEtsySalesChannelProvider(NewEtsyService(repos.Etsy, "client-id", "test-shared-secret", "http://localhost/callback", &SettingsService{repo: repos.Settings})),
 		NewSquarespaceSalesChannelProvider(NewSquarespaceService(repos.Squarespace)),
 		NewShopifySalesChannelProvider(NewShopifyService(repos.Shopify, nil, nil)),
 		NewMercadoLivreSalesChannelProvider(),
@@ -91,7 +91,7 @@ func TestSalesChannelAdapters_StatusMapsLegacyIntegrations(t *testing.T) {
 	repos := openSalesChannelAdapterRepos(t)
 	settings := &SettingsService{repo: repos.Settings}
 
-	etsyProvider := NewEtsySalesChannelProvider(NewEtsyService(repos.Etsy, "client-id", "http://localhost/callback", settings))
+	etsyProvider := NewEtsySalesChannelProvider(NewEtsyService(repos.Etsy, "client-id", "test-shared-secret", "http://localhost/callback", settings))
 	squarespaceProvider := NewSquarespaceSalesChannelProvider(NewSquarespaceService(repos.Squarespace))
 	shopifyProvider := NewShopifySalesChannelProvider(NewShopifyService(repos.Shopify, nil, nil))
 

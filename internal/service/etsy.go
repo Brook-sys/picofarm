@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/Brook-sys/picofarm/internal/etsy"
 	"github.com/Brook-sys/picofarm/internal/model"
@@ -18,9 +19,11 @@ import (
 
 // EtsyService handles Etsy OAuth and integration business logic.
 type EtsyService struct {
-	repo        *repository.EtsyRepository
-	client      *etsy.Client
-	settingsSvc *SettingsService
+	repo         *repository.EtsyRepository
+	client       *etsy.Client
+	settingsSvc  *SettingsService
+	sharedSecret string
+	clientID     string
 
 	// webhookSecret is the signing secret supplied at startup (environment).
 	// When empty the secret is read from settings on each request.
@@ -33,6 +36,18 @@ const EtsyWebhookSecretKey = "etsy_webhook_secret"
 // EtsyRedirectURIKey is the settings key that stores the OAuth redirect URI.
 const EtsyRedirectURIKey = "etsy_redirect_uri"
 
+// EtsySharedSecretKey stores the app shared secret, never the webhook signing secret.
+const EtsySharedSecretKey = "etsy_shared_secret"
+
+var ErrEtsySharedSecretRequired = errors.New("shared_secret is required; enter the Etsy app Shared Secret in Settings")
+var ErrInvalidEtsyCredentials = errors.New("Etsy credentials must be separate Keystring and Shared Secret values without colons, whitespace, or control characters")
+
+func validEtsyCredential(value string) bool {
+	return value != "" && !strings.ContainsFunc(value, func(r rune) bool {
+		return r == ':' || unicode.IsSpace(r) || unicode.IsControl(r)
+	})
+}
+
 // ErrInvalidRedirectURI is returned when the operator supplies a redirect URI
 // that cannot be used in an OAuth request. Rejecting it here gives a 400 in the
 // API and a message in the UI, instead of a rejected authorization later, with
@@ -40,15 +55,17 @@ const EtsyRedirectURIKey = "etsy_redirect_uri"
 var ErrInvalidRedirectURI = errors.New("redirect URI must be an absolute http(s) URL")
 
 // NewEtsyService creates a new EtsyService.
-func NewEtsyService(repo *repository.EtsyRepository, clientID, redirectURI string, settingsSvc *SettingsService) *EtsyService {
+func NewEtsyService(repo *repository.EtsyRepository, clientID, sharedSecret, redirectURI string, settingsSvc *SettingsService) *EtsyService {
 	var client *etsy.Client
-	if clientID != "" {
-		client = etsy.NewClient(clientID, redirectURI)
+	if validEtsyCredential(clientID) && validEtsyCredential(sharedSecret) {
+		client = etsy.NewClient(clientID, sharedSecret, redirectURI)
 	}
 	return &EtsyService{
-		repo:        repo,
-		client:      client,
-		settingsSvc: settingsSvc,
+		repo:         repo,
+		client:       client,
+		settingsSvc:  settingsSvc,
+		sharedSecret: sharedSecret,
+		clientID:     clientID,
 	}
 }
 
@@ -85,15 +102,16 @@ func (s *EtsyService) GetWebhookSecret(ctx context.Context) (string, error) {
 	return setting.Value, nil
 }
 
-// Configure sets the Etsy client ID at runtime and persists it to settings.
+// Configure sets the Etsy app credentials at runtime and persists them encrypted.
+// A blank shared secret preserves the saved value only for the same client ID.
 // An empty redirect URI falls back to etsy.DefaultRedirectURI (port 8084, the
 // documented default port) instead of the port 8080 value older builds used.
 // Configure is intentionally callable again on an already configured
 // integration: it is the only way for the operator to fix a keystring or a
 // redirect URI after the fact.
-func (s *EtsyService) Configure(ctx context.Context, clientID, redirectURI string) error {
-	if clientID == "" {
-		return fmt.Errorf("client_id is required")
+func (s *EtsyService) Configure(ctx context.Context, clientID, sharedSecret, redirectURI string) error {
+	if !validEtsyCredential(clientID) {
+		return ErrInvalidEtsyCredentials
 	}
 	if redirectURI == "" {
 		redirectURI = etsy.DefaultRedirectURI
@@ -107,9 +125,43 @@ func (s *EtsyService) Configure(ctx context.Context, clientID, redirectURI strin
 		slog.Warn("Etsy redirect URI matches the legacy default; only use this if it is registered in the Etsy developer console",
 			"redirect_uri", redirectURI)
 	}
-	s.client = etsy.NewClient(clientID, redirectURI)
+	// A blank password field means keep the existing secret, including on restart.
+	if sharedSecret == "" {
+		existingClientID := s.clientID
+		if existingClientID == "" && s.settingsSvc != nil {
+			setting, err := s.settingsSvc.Get(ctx, "etsy_client_id")
+			if err != nil {
+				return fmt.Errorf("reading Etsy client ID: %w", err)
+			}
+			if setting != nil {
+				existingClientID = setting.Value
+			}
+		}
+		if existingClientID != clientID {
+			return ErrEtsySharedSecretRequired
+		}
+		sharedSecret = s.sharedSecret
+		if sharedSecret == "" && s.settingsSvc != nil {
+			setting, err := s.settingsSvc.Get(ctx, EtsySharedSecretKey)
+			if err != nil {
+				return fmt.Errorf("reading Etsy shared secret: %w", err)
+			}
+			if setting != nil {
+				sharedSecret = setting.Value
+			}
+		}
+	}
+	if sharedSecret == "" {
+		return ErrEtsySharedSecretRequired
+	}
+	if !validEtsyCredential(sharedSecret) {
+		return ErrInvalidEtsyCredentials
+	}
 
 	if s.settingsSvc != nil {
+		if err := s.settingsSvc.Set(ctx, EtsySharedSecretKey, sharedSecret); err != nil {
+			return fmt.Errorf("saving shared secret: %w", err)
+		}
 		if err := s.settingsSvc.Set(ctx, "etsy_client_id", clientID); err != nil {
 			return fmt.Errorf("saving client ID: %w", err)
 		}
@@ -117,6 +169,9 @@ func (s *EtsyService) Configure(ctx context.Context, clientID, redirectURI strin
 			return fmt.Errorf("saving redirect URI: %w", err)
 		}
 	}
+	s.client = etsy.NewClient(clientID, sharedSecret, redirectURI)
+	s.sharedSecret = sharedSecret
+	s.clientID = clientID
 	return nil
 }
 

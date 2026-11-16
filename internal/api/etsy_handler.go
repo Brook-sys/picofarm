@@ -55,8 +55,9 @@ func (h *EtsyHandler) resolveWebhookSecret(ctx context.Context) string {
 
 // ConfigureEtsyRequest represents the request body for configuring the Etsy integration.
 type ConfigureEtsyRequest struct {
-	ClientID    string `json:"client_id"`
-	RedirectURI string `json:"redirect_uri,omitempty"`
+	ClientID     string `json:"client_id"`
+	SharedSecret string `json:"shared_secret,omitempty"`
+	RedirectURI  string `json:"redirect_uri,omitempty"`
 }
 
 // Configure saves the Etsy Client ID and activates the integration.
@@ -71,8 +72,8 @@ func (h *EtsyHandler) Configure(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusBadRequest, "client_id is required")
 		return
 	}
-	if err := h.service.Configure(r.Context(), req.ClientID, req.RedirectURI); err != nil {
-		if errors.Is(err, service.ErrInvalidRedirectURI) {
+	if err := h.service.Configure(r.Context(), req.ClientID, req.SharedSecret, req.RedirectURI); err != nil {
+		if errors.Is(err, service.ErrInvalidRedirectURI) || errors.Is(err, service.ErrEtsySharedSecretRequired) || errors.Is(err, service.ErrInvalidEtsyCredentials) {
 			// Operator mistake: a 400 tells the UI which value is wrong instead of
 			// a 500 that looks like a server problem.
 			respondError(w, http.StatusBadRequest, err.Error())
@@ -88,7 +89,7 @@ func (h *EtsyHandler) Configure(w http.ResponseWriter, r *http.Request) {
 // GET /api/integrations/etsy/auth
 func (h *EtsyHandler) StartAuth(w http.ResponseWriter, r *http.Request) {
 	if !h.service.IsConfigured() {
-		respondError(w, http.StatusServiceUnavailable, "Etsy integration not configured. Set ETSY_CLIENT_ID environment variable.")
+		respondError(w, http.StatusServiceUnavailable, "Etsy integration not configured. Set the Keystring and Shared Secret in Settings, or ETSY_CLIENT_ID and ETSY_SHARED_SECRET.")
 		return
 	}
 
@@ -133,7 +134,7 @@ func redirectEtsyCallback(w http.ResponseWriter, r *http.Request, params url.Val
 // GET /api/integrations/etsy/callback
 func (h *EtsyHandler) Callback(w http.ResponseWriter, r *http.Request) {
 	if !h.service.IsConfigured() {
-		redirectEtsyCallback(w, r, url.Values{"etsy": {"error"}, "message": {"not_configured"}})
+		redirectEtsyCallback(w, r, url.Values{"etsy": {"error"}, "message": {"not_configured"}, "reason": {"Configure the Etsy Keystring and Shared Secret in Settings before connecting."}})
 		return
 	}
 

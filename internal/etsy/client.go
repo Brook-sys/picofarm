@@ -44,8 +44,9 @@ var DefaultScopes = []string{
 
 // Client handles Etsy API communication.
 type Client struct {
-	clientID    string
-	redirectURI string
+	clientID     string
+	sharedSecret string
+	redirectURI  string
 	// tokenURL is EtsyTokenURL in production. It is a field so tests can point
 	// the token exchange at a local server without a global variable.
 	tokenURL   string
@@ -53,15 +54,29 @@ type Client struct {
 }
 
 // NewClient creates a new Etsy API client.
-func NewClient(clientID, redirectURI string) *Client {
+func NewClient(clientID, sharedSecret, redirectURI string) *Client {
 	return &Client{
-		clientID:    clientID,
-		redirectURI: redirectURI,
-		tokenURL:    EtsyTokenURL,
+		clientID:     clientID,
+		sharedSecret: sharedSecret,
+		redirectURI:  redirectURI,
+		tokenURL:     EtsyTokenURL,
 		httpClient: &http.Client{
 			Timeout: 30 * time.Second,
+			// Never forward app credentials or OAuth payloads through redirects.
+			CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+				return http.ErrUseLastResponse
+			},
 		},
 	}
+}
+
+// redactErrorBody prevents an upstream error echo from exposing app credentials.
+func (c *Client) redactErrorBody(body []byte) string {
+	text := string(body)
+	if c.sharedSecret != "" {
+		text = strings.ReplaceAll(text, c.sharedSecret, "[REDACTED]")
+	}
+	return text
 }
 
 // RedirectURI returns the OAuth redirect URI this client sends to Etsy. It is
@@ -149,10 +164,10 @@ func (c *Client) ExchangeCode(ctx context.Context, code, codeVerifier string) (*
 
 	if resp.StatusCode != http.StatusOK {
 		var oauthErr EtsyOAuthError
-		if err := json.Unmarshal(body, &oauthErr); err == nil && oauthErr.Code != "" {
+		if err := json.Unmarshal([]byte(c.redactErrorBody(body)), &oauthErr); err == nil && oauthErr.Code != "" {
 			return nil, &oauthErr
 		}
-		return nil, fmt.Errorf("token exchange failed: %s - %s", resp.Status, string(body))
+		return nil, fmt.Errorf("token exchange failed: %s - %s", resp.Status, c.redactErrorBody(body))
 	}
 
 	var tokenResp TokenResponse
@@ -186,7 +201,7 @@ func (c *Client) RefreshToken(ctx context.Context, refreshToken string) (*TokenR
 	body, _ := io.ReadAll(resp.Body)
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("token refresh failed: %s - %s", resp.Status, string(body))
+		return nil, fmt.Errorf("token refresh failed: %s - %s", resp.Status, c.redactErrorBody(body))
 	}
 
 	var tokenResp TokenResponse
@@ -215,7 +230,7 @@ func (c *Client) GetShop(ctx context.Context, accessToken string) (*Shop, error)
 		return nil, fmt.Errorf("creating request: %w", err)
 	}
 	req.Header.Set("Authorization", "Bearer "+accessToken)
-	req.Header.Set("x-api-key", c.clientID)
+	req.Header.Set("x-api-key", c.clientID+":"+c.sharedSecret)
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -226,7 +241,7 @@ func (c *Client) GetShop(ctx context.Context, accessToken string) (*Shop, error)
 	body, _ := io.ReadAll(resp.Body)
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("get shop failed: %s - %s", resp.Status, string(body))
+		return nil, fmt.Errorf("get shop failed: %s - %s", resp.Status, c.redactErrorBody(body))
 	}
 
 	// Response contains array of shops, user typically has one
@@ -389,7 +404,7 @@ func (c *Client) GetReceipts(ctx context.Context, accessToken string, shopID int
 		return nil, fmt.Errorf("creating request: %w", err)
 	}
 	req.Header.Set("Authorization", "Bearer "+accessToken)
-	req.Header.Set("x-api-key", c.clientID)
+	req.Header.Set("x-api-key", c.clientID+":"+c.sharedSecret)
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -400,7 +415,7 @@ func (c *Client) GetReceipts(ctx context.Context, accessToken string, shopID int
 	body, _ := io.ReadAll(resp.Body)
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("get receipts failed: %s - %s", resp.Status, string(body))
+		return nil, fmt.Errorf("get receipts failed: %s - %s", resp.Status, c.redactErrorBody(body))
 	}
 
 	var result struct {
@@ -423,7 +438,7 @@ func (c *Client) GetReceipt(ctx context.Context, accessToken string, shopID, rec
 		return nil, fmt.Errorf("creating request: %w", err)
 	}
 	req.Header.Set("Authorization", "Bearer "+accessToken)
-	req.Header.Set("x-api-key", c.clientID)
+	req.Header.Set("x-api-key", c.clientID+":"+c.sharedSecret)
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -434,7 +449,7 @@ func (c *Client) GetReceipt(ctx context.Context, accessToken string, shopID, rec
 	body, _ := io.ReadAll(resp.Body)
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("get receipt failed: %s - %s", resp.Status, string(body))
+		return nil, fmt.Errorf("get receipt failed: %s - %s", resp.Status, c.redactErrorBody(body))
 	}
 
 	var receipt APIReceipt
@@ -536,7 +551,7 @@ func (c *Client) GetActiveListings(ctx context.Context, accessToken string, shop
 		return nil, fmt.Errorf("creating request: %w", err)
 	}
 	req.Header.Set("Authorization", "Bearer "+accessToken)
-	req.Header.Set("x-api-key", c.clientID)
+	req.Header.Set("x-api-key", c.clientID+":"+c.sharedSecret)
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -547,7 +562,7 @@ func (c *Client) GetActiveListings(ctx context.Context, accessToken string, shop
 	body, _ := io.ReadAll(resp.Body)
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("get listings failed: %s - %s", resp.Status, string(body))
+		return nil, fmt.Errorf("get listings failed: %s - %s", resp.Status, c.redactErrorBody(body))
 	}
 
 	var result struct {
@@ -570,7 +585,7 @@ func (c *Client) GetListing(ctx context.Context, accessToken string, listingID i
 		return nil, fmt.Errorf("creating request: %w", err)
 	}
 	req.Header.Set("Authorization", "Bearer "+accessToken)
-	req.Header.Set("x-api-key", c.clientID)
+	req.Header.Set("x-api-key", c.clientID+":"+c.sharedSecret)
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -581,7 +596,7 @@ func (c *Client) GetListing(ctx context.Context, accessToken string, listingID i
 	body, _ := io.ReadAll(resp.Body)
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("get listing failed: %s - %s", resp.Status, string(body))
+		return nil, fmt.Errorf("get listing failed: %s - %s", resp.Status, c.redactErrorBody(body))
 	}
 
 	var listing APIListing
@@ -637,7 +652,7 @@ func (c *Client) GetListingInventory(ctx context.Context, accessToken string, li
 		return nil, fmt.Errorf("creating request: %w", err)
 	}
 	req.Header.Set("Authorization", "Bearer "+accessToken)
-	req.Header.Set("x-api-key", c.clientID)
+	req.Header.Set("x-api-key", c.clientID+":"+c.sharedSecret)
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -648,7 +663,7 @@ func (c *Client) GetListingInventory(ctx context.Context, accessToken string, li
 	body, _ := io.ReadAll(resp.Body)
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("get inventory failed: %s - %s", resp.Status, string(body))
+		return nil, fmt.Errorf("get inventory failed: %s - %s", resp.Status, c.redactErrorBody(body))
 	}
 
 	var inventory APIInventory
@@ -691,7 +706,7 @@ func (c *Client) UpdateListingInventory(ctx context.Context, accessToken string,
 		return fmt.Errorf("creating request: %w", err)
 	}
 	req.Header.Set("Authorization", "Bearer "+accessToken)
-	req.Header.Set("x-api-key", c.clientID)
+	req.Header.Set("x-api-key", c.clientID+":"+c.sharedSecret)
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := c.httpClient.Do(req)
@@ -703,7 +718,7 @@ func (c *Client) UpdateListingInventory(ctx context.Context, accessToken string,
 	body, _ := io.ReadAll(resp.Body)
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("update inventory failed: %s - %s", resp.Status, string(body))
+		return fmt.Errorf("update inventory failed: %s - %s", resp.Status, c.redactErrorBody(body))
 	}
 
 	return nil

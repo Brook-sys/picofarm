@@ -30,6 +30,7 @@ var supportedCurrencies = map[string]struct{}{
 var sensitiveKeys = map[string]bool{
 	"anthropic_api_key":     true,
 	"etsy_client_id":        true,
+	EtsySharedSecretKey:     true,
 	"etsy_access_token":     true,
 	"etsy_refresh_token":    true,
 	"etsy_webhook_secret":   true,
@@ -55,6 +56,9 @@ func (s *SettingsService) Get(ctx context.Context, key string) (*repository.Sett
 	if isSensitive(key) && crypto.IsEncrypted(setting.Value) {
 		decrypted, err := crypto.Decrypt(setting.Value)
 		if err != nil {
+			if key == EtsySharedSecretKey {
+				return nil, fmt.Errorf("decrypting Etsy shared secret: %w", err)
+			}
 			slog.Warn("failed to decrypt setting", "key", key, "error", err)
 			// Return original value if decryption fails (might be unencrypted legacy data)
 			return setting, nil
@@ -85,6 +89,9 @@ func (s *SettingsService) Set(ctx context.Context, key, value string) error {
 	if isSensitive(key) && value != "" {
 		encrypted, err := crypto.Encrypt(value)
 		if err != nil {
+			if key == EtsySharedSecretKey {
+				return fmt.Errorf("encrypting Etsy shared secret: %w", err)
+			}
 			slog.Warn("failed to encrypt setting, storing unencrypted", "key", key, "error", err)
 			// Fall back to storing unencrypted if encryption fails
 		} else {
