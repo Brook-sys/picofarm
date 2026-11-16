@@ -1,5 +1,9 @@
 # PicoFarm
 
+<img width="2172" height="724" alt="picofarm_banner" src="https://github.com/user-attachments/assets/1c2b29d9-3cb5-45a4-9047-e984c6ab4546" />
+
+
+
 Self-hosted print farm management and order fulfillment for makers and small 3D printing businesses.
 
 PicoFarm brings a product catalog, customer orders, production tasks, print queues, and printer status into a browser-based application. A Go server provides the API and serves the production frontend; SQLite stores application data, while uploaded files remain on disk.
