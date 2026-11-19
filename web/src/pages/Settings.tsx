@@ -35,6 +35,12 @@ export default function Settings() {
   const [searchParams, setSearchParams] = useSearchParams()
   const [activeTab, setActiveTab] = useState<SettingsTab>('integrations')
   const [etsyStatus, setEtsyStatus] = useState<EtsyIntegration | null>(null)
+  const [tokenCheckTime, setTokenCheckTime] = useState(() => Date.now())
+
+  useEffect(() => {
+    const interval = setInterval(() => setTokenCheckTime(Date.now()), 60_000)
+    return () => clearInterval(interval)
+  }, [])
   const [squarespaceStatus, setSquarespaceStatus] = useState<SquarespaceIntegration | null>(null)
   const [loading, setLoading] = useState(true)
   const [connecting, setConnecting] = useState(false)
@@ -441,7 +447,7 @@ export default function Settings() {
   const isTokenExpiringSoon = () => {
     if (!etsyStatus?.token_expires_at) return false
     const expiresAt = new Date(etsyStatus.token_expires_at)
-    const hoursUntilExpiry = (expiresAt.getTime() - Date.now()) / (1000 * 60 * 60)
+    const hoursUntilExpiry = (expiresAt.getTime() - tokenCheckTime) / (1000 * 60 * 60)
     return hoursUntilExpiry < 24
   }
 

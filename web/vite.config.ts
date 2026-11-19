@@ -5,13 +5,15 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   plugins: [react()],
   build: {
-    rollupOptions: {
+    rolldownOptions: {
       output: {
-        manualChunks: {
-          vendor: ['react', 'react-dom', 'react-router-dom'],
-          ui: ['lucide-react', 'clsx', 'tailwind-merge'],
-          three: ['three'],
-          chart: ['chart.js', 'react-chartjs-2'],
+        codeSplitting: {
+          groups: [
+            { name: 'vendor', test: /\/node_modules\/(react|react-dom|react-router|react-router-dom|scheduler)\// },
+            { name: 'ui', test: /\/node_modules\/(lucide-react|clsx|tailwind-merge)\// },
+            { name: 'three', test: /\/node_modules\/three\// },
+            { name: 'chart', test: /\/node_modules\/(chart.js|react-chartjs-2)\// },
+          ],
         },
       },
     },

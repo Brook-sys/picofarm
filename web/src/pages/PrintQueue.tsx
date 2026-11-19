@@ -260,7 +260,7 @@ export default function PrintQueue() {
                     await queueApi.start(item.item.id)
                   } catch (err) {
                     const msg = err instanceof Error ? err.message : 'Preflight failed'
-                    throw new Error(msg)
+                    throw new Error(msg, { cause: err })
                   }
                 })}
                 onReorder={reorderItems}

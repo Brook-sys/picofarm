@@ -17,7 +17,7 @@ This document defines the current operational baseline for PicoFarm. Use it befo
 | Backend | Go module `github.com/Brook-sys/picofarm`, Go `1.26.11` in `go.mod` (mínimo: stdlib corrigida para GO-2026-6859/GO-2026-6809) |
 | HTTP API | `go-chi/chi` router in `internal/api` |
 | Database | SQLite via `github.com/glebarez/go-sqlite`, with the schema embedded in the binary (`internal/database/schema.sql`) applied on startup, plus idempotent in-Go compatibility migrations for older databases |
-| Frontend | React 19, TypeScript 5.9, Vite 7, Tailwind CSS 4 |
+| Frontend | React 19, TypeScript 6.0, Vite 8 (Rolldown), Tailwind CSS 4 |
 | Realtime | WebSocket hub in `internal/realtime`; browser hook in `web/src/hooks/useWebSocket.ts` |
 | Integrations | Etsy, Squarespace, Bambu Lab, OctoPrint, Moonraker/Klipper |
 | Build | `Makefile`, `web/package.json`, `Dockerfile` |
@@ -118,10 +118,12 @@ On the baseline collection pass for this plan:
 - `make build` passed.
 - `cd web && npm run lint` passed with zero errors.
 
-Known validation warnings to burn down in follow-up cycles:
+Known validation warnings after the dependency compatibility update:
 
-- `cd web && npm run build` reports stale Browserslist/caniuse-lite data.
-- The production frontend bundle is still larger than Vite's default warning threshold.
+- `cd web && npm run lint` passes with 27 React Hooks warnings; these remain follow-up work, not a clean lint baseline.
+- The production frontend main bundle is approximately 786 kB minified (162 kB gzip), above the configured 600 kB warning threshold.
+- TypeScript is held at `~6.0.3`: `typescript-eslint@8.73.0` requires TypeScript `<6.1.0`, so the proposed TypeScript 7 update cannot yet be adopted without an unsupported peer combination.
+- Vite 8 chunk groups use `rolldownOptions.output.codeSplitting.groups`; the former object-form `manualChunks` is not supported.
 
 Do not silence warnings without fixing or documenting the underlying reason.
 

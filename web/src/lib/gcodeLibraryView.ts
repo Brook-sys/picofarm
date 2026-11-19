@@ -12,7 +12,7 @@ export function sortLibraryItems(items: LibraryItem[], mode: LibrarySortMode): L
     return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : undefined
   }
   return [...items].sort((a, b) => {
-    let result = 0
+    let result: number
     if (mode.startsWith('name_')) result = a.file.display_name.localeCompare(b.file.display_name) * (mode === 'name_desc' ? -1 : 1)
     else if (mode.startsWith('created_')) result = ((Date.parse(a.file.created_at) || 0) - (Date.parse(b.file.created_at) || 0)) * (mode === 'created_desc' ? -1 : 1)
     else {

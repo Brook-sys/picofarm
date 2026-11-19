@@ -90,6 +90,8 @@ export default function Channels() {
   // the neutral model (gated by the channel filter).
   const etsyStatus = salesChannels.find(({ descriptor }) => descriptor.id === 'etsy')?.status
   const squarespaceStatus = salesChannels.find(({ descriptor }) => descriptor.id === 'squarespace')?.status
+  const etsyConnected = etsyStatus?.connected
+  const squarespaceConnected = squarespaceStatus?.connected
 
   // Load provider-neutral connection status
   const loadSalesChannelStatus = useCallback(async () => {
@@ -115,7 +117,7 @@ export default function Channels() {
       const processed = orderFilter === 'all' ? undefined : orderFilter === 'processed'
 
       // Etsy receipts — legacy storage; the neutral read model has no Etsy rows
-      if ((channel === 'all' || channel === 'etsy') && etsyStatus?.connected) {
+      if ((channel === 'all' || channel === 'etsy') && etsyConnected) {
         try {
           const etsyOrders = await etsyApi.listReceipts({ processed })
           for (const r of etsyOrders) {
@@ -147,7 +149,7 @@ export default function Channels() {
       }
 
       // Squarespace orders — same situation: legacy storage only
-      if ((channel === 'all' || channel === 'squarespace') && squarespaceStatus?.connected) {
+      if ((channel === 'all' || channel === 'squarespace') && squarespaceConnected) {
         try {
           const sqOrders = await squarespaceApi.listOrders({ processed })
           for (const o of sqOrders) {
@@ -215,7 +217,7 @@ export default function Channels() {
     } finally {
       setLoading(false)
     }
-  }, [channel, orderFilter, etsyStatus?.connected, squarespaceStatus?.connected])
+  }, [channel, orderFilter, etsyConnected, squarespaceConnected])
 
   // Load products
   const loadProducts = useCallback(async () => {
@@ -232,7 +234,7 @@ export default function Channels() {
       setProjects(projectList)
 
       // Etsy listings — legacy storage; the neutral read model has no Etsy rows
-      if ((channel === 'all' || channel === 'etsy') && etsyStatus?.connected) {
+      if ((channel === 'all' || channel === 'etsy') && etsyConnected) {
         try {
           const listings = await etsyApi.listListings()
           for (const l of listings) {
@@ -255,7 +257,7 @@ export default function Channels() {
       }
 
       // Squarespace products — same situation: legacy storage only
-      if ((channel === 'all' || channel === 'squarespace') && squarespaceStatus?.connected) {
+      if ((channel === 'all' || channel === 'squarespace') && squarespaceConnected) {
         try {
           const prods = await squarespaceApi.listProducts()
           for (const p of prods) {
@@ -304,7 +306,7 @@ export default function Channels() {
     } finally {
       setLoading(false)
     }
-  }, [channel, etsyStatus?.connected, squarespaceStatus?.connected])
+  }, [channel, etsyConnected, squarespaceConnected])
 
   // Load data when tab or filters change
   useEffect(() => {
