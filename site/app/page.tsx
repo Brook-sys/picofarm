@@ -1,9 +1,10 @@
 "use client";
 
-import { ArrowRight, Bell, Camera, CheckCircle2, Container, FileText, FlaskConical, FolderOpen, Github, Layers, ListOrdered, Menu, Package, Printer, Settings2, TriangleAlert, X } from "lucide-react";
+import { ArrowRight, Bell, Camera, CheckCircle2, Container, FileText, FlaskConical, FolderOpen, Layers, ListOrdered, Menu, Package, Printer, Settings2, TriangleAlert, X } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { LanguageSwitch, useLocale } from "./components/locale";
 import { landingContent } from "./components/landing-content";
+import { GitHubIcon } from "./components/github-icon";
 
 const REPO = "https://github.com/Brook-sys/picofarm";
 const DAEDALUS = "https://github.com/philjestin/Daedalus";
@@ -99,7 +100,7 @@ export default function Home() {
             <h1 className="mb-6 text-4xl font-bold tracking-tight text-surface-50 sm:text-6xl lg:text-7xl">{t.title}<br /><span className="gradient-text">{t.highlight}</span></h1>
             <p className="mx-auto mb-8 max-w-2xl text-lg leading-relaxed text-surface-400">{t.intro}</p>
             <div className="flex flex-col justify-center gap-3 sm:flex-row"><a href="/docs#installation" className={primary}><Container aria-hidden="true" className="h-4 w-4" />{t.install}</a><a href="/docs" className={secondary}>{t.docs}<ArrowRight aria-hidden="true" className="h-4 w-4" /></a></div>
-            <a href={REPO} className="mt-5 inline-flex items-center gap-2 rounded py-2 text-sm text-surface-300 underline-offset-4 hover:underline"><Github aria-hidden="true" className="h-4 w-4" />{t.github}</a>
+            <a href={REPO} className="mt-5 inline-flex items-center gap-2 rounded py-2 text-sm text-surface-300 underline-offset-4 hover:underline"><GitHubIcon className="h-4 w-4" />{t.github}</a>
           </AnimatedSection>
           <AnimatedSection className="glow-accent mt-12 rounded-2xl"><Screenshot file="tela_geral_dashboardprincipal" title={t.preview} eager /></AnimatedSection>
         </div>
@@ -140,7 +141,7 @@ export default function Home() {
         </AnimatedSection>
       </div></section>
 
-      <section className="relative overflow-hidden border-t border-surface-800/50 py-20 sm:py-28"><div aria-hidden="true" className="pointer-events-none absolute inset-0 grid-bg" /><AnimatedSection className="relative mx-auto max-w-2xl px-6 text-center"><h2 className="mb-4 text-3xl font-bold text-surface-50 sm:text-4xl">{t.betaTitle}</h2><p className="mb-8 leading-relaxed text-surface-400 sm:text-lg">{t.betaIntro}</p><a href={REPO} className={primary}><Github aria-hidden="true" className="h-4 w-4" />{t.github}</a></AnimatedSection></section>
+      <section className="relative overflow-hidden border-t border-surface-800/50 py-20 sm:py-28"><div aria-hidden="true" className="pointer-events-none absolute inset-0 grid-bg" /><AnimatedSection className="relative mx-auto max-w-2xl px-6 text-center"><h2 className="mb-4 text-3xl font-bold text-surface-50 sm:text-4xl">{t.betaTitle}</h2><p className="mb-8 leading-relaxed text-surface-400 sm:text-lg">{t.betaIntro}</p><a href={REPO} className={primary}><GitHubIcon className="h-4 w-4" />{t.github}</a></AnimatedSection></section>
     </main>
     <footer className="border-t border-surface-800/50 py-10"><div className="mx-auto flex max-w-6xl flex-col justify-between gap-6 px-6 sm:flex-row"><div><Brand /><p className="mt-3 text-sm text-surface-400">{t.footer}</p></div><div className="flex flex-wrap items-center gap-5 text-xs text-surface-400"><a className="hover:text-white" href="/docs">{t.nav[3]}</a><a className="hover:text-white" href={REPO}>GitHub</a><a className="hover:text-white" href={DAEDALUS}>{t.origin}</a><span className="text-accent-400">{t.beta}</span></div></div></footer>
   </>;
