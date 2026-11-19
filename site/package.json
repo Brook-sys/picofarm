@@ -10,7 +10,7 @@
   },
   "dependencies": {
     "lucide-react": "^0.575.0",
-    "next": "^16.4.1",
+    "next": "^16.4.5",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "sharp": "^0.35.5"
