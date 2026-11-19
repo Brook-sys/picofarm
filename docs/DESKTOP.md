@@ -113,6 +113,15 @@ customer-free text and bounded in-memory deduplication.
 
 ## Limitations (honest status)
 
+- Invalid saved configuration currently aborts startup before the settings UI
+  is available; recovery requires correcting the local config file. A blank
+  remote token is allowed for unauthenticated servers, but protected servers
+  require a valid token; saving does not prove connectivity.
+- File permissions described as `0600` are Unix permissions. On Windows the
+  files inherit the user's profile-directory ACLs; Go `Chmod` does not install
+  an owner-only DACL. Do not place the profile in a shared directory. Explicit
+  Windows ACL enforcement or OS credential storage remains pending.
+
 - Desktop builds were validated headlessly: `go test ./...` and
   `go test -race ./...` in `desktop`, plus Windows cross-compile and macOS
   purego cross-compile. Native Linux compilation and any GUI launch were not

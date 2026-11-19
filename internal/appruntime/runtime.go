@@ -21,8 +21,8 @@ import (
 )
 
 // Runtime is a running application. All lifecycle methods are safe to call
-// concurrently. Done closes after owned resources have been cleaned up, or
-// after the shutdown deadline expired for a stage that would not return.
+// concurrently. Done closes only after ordered cleanup has actually completed.
+// A blocked cleanup stage keeps Done open; Shutdown callers can bound their wait.
 type Runtime struct {
 	server   *http.Server
 	address  net.Addr
@@ -89,7 +89,7 @@ func Start(parent context.Context, cfg Config) (_ *Runtime, err error) {
 	manager.SetBroadcaster(hub)
 	services := service.NewServicesWithConfig(repos, storage.NewLocalStorage(cfg.UploadDir), manager, hub, cfg.ServicesConfig)
 	cleanups = append(cleanups, services.Dispatcher.Stop)
-	if err = services.Printers.ConfigureReconnect(cfg.ReconnectConfig); err != nil {
+	if err := services.Printers.ConfigureReconnect(cfg.ReconnectConfig); err != nil {
 		return nil, err
 	}
 	cleanups = append(cleanups, services.Printers.StopReconnect)
@@ -108,7 +108,7 @@ func Start(parent context.Context, cfg Config) (_ *Runtime, err error) {
 	opts := cfg.RouterOptions
 	opts.StaticDir = cfg.StaticDir
 	router := api.NewRouterWithOptions(services, hub, opts)
-	if err = ctx.Err(); err != nil {
+	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
 	hubDone := make(chan struct{})
@@ -153,46 +153,34 @@ func Start(parent context.Context, cfg Config) (_ *Runtime, err error) {
 		if errors.Is(serveErr, http.ErrServerClosed) {
 			serveErr = nil
 		}
-		// Post-HTTP cleanup shares one hard deadline: a stage that blocks here
-		// would otherwise hang every host (notably the desktop app) forever.
-		hardCtx, hardCancel := context.WithTimeout(context.Background(), cfg.ShutdownTimeout)
-		hardDeadline := hardCtx.Done()
-		runBoundedStage("backup scheduler", hardDeadline, backup.StopScheduler)
-		runBoundedStage("printer reconnect", hardDeadline, services.Printers.StopReconnect)
-		runBoundedStage("printer disconnect", hardDeadline, manager.DisconnectAll)
-		runBoundedStage("queue dispatcher", hardDeadline, services.Dispatcher.Stop)
-		runBoundedStage("slicer jobs", hardDeadline, services.SlicerJobs.Close)
-		runBoundedStage("websocket hub", hardDeadline, func() { hub.Stop(); <-hubDone })
-		hardCancel()
-		// A database close failure is logged, never fatal: the original server
-		// ignored it (defer), and a busy database during shutdown (backup or a
-		// lingering read) must not turn a clean shutdown into a failed exit.
-		if dbErr := db.Close(); dbErr != nil {
+		// Cleanup stays in this goroutine. Never abandon a worker and then
+		// close resources it may still use. Shutdown(ctx) bounds the caller's
+		// wait, not worker ownership or the meaning of Done/Wait.
+		dbErr := cleanupResources(db.Close,
+			backup.StopScheduler,
+			services.Printers.StopReconnect,
+			manager.DisconnectAll,
+			services.Dispatcher.Stop,
+			services.SlicerJobs.Close,
+			func() { hub.Stop(); <-hubDone },
+		)
+		if dbErr != nil {
 			slog.Error("database close failed", "error", dbErr)
 		}
-		r.err = errors.Join(serveErr, shutdownErr)
+		r.err = errors.Join(serveErr, shutdownErr, dbErr)
 		slog.Info("shutdown complete")
 	}()
 	return r, nil
 }
 
-// runBoundedStage runs one cleanup stage and abandons it, with a warning, when
-// the shared shutdown deadline has already expired. Third-party stages (slicer
-// jobs waiting on a remote call, device disconnects) are not deadline-aware, so
-// without this a single stuck stage would keep the host from ever returning
-// from Wait. An abandoned stage leaks its goroutine on purpose: a host that can
-// never quit is worse than one that prints a warning.
-func runBoundedStage(stage string, deadline <-chan struct{}, fn func()) {
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		fn()
-	}()
-	select {
-	case <-done:
-	case <-deadline:
-		slog.Warn("cleanup stage exceeded shutdown deadline", "stage", stage)
+// cleanupResources runs each stop synchronously in dependency order before
+// closing the database. A stop must finish before the next one can start; a
+// timeout cannot safely revoke ownership of resources still used by a worker.
+func cleanupResources(closeDatabase func() error, stops ...func()) error {
+	for _, stop := range stops {
+		stop()
 	}
+	return closeDatabase()
 }
 
 // Addr is the actual bound address, including an OS-selected ephemeral port.
@@ -216,10 +204,9 @@ func (r *Runtime) Wait() error { <-r.done; return r.err }
 
 // Shutdown initiates cleanup exactly once and waits up to ctx's deadline. A
 // timed-out caller does not abort cleanup; Wait can be used to observe its
-// result. HTTP draining gets ShutdownTimeout, and every post-HTTP cleanup
-// stage shares the same budget: a stage that exceeds it is logged and
-// abandoned, so Wait returns instead of blocking forever. A database close
-// failure is logged, not returned.
+// result. HTTP draining gets ShutdownTimeout; subsequent cleanup runs in order
+// without abandonment, with the database closed last. A stuck stage can keep
+// Wait blocked indefinitely. Database close failures are logged and returned.
 func (r *Runtime) Shutdown(ctx context.Context) error {
 	r.stopOnce.Do(func() { close(r.stop) })
 	select {

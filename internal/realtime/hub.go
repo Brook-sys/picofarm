@@ -69,14 +69,21 @@ func (h *Hub) Run() {
 	for {
 		select {
 		case <-h.stop:
-			// Gracefully close all client connections
+			// Shutdown is deliberately abrupt: do not wait for a close handshake
+			// from each peer, especially clients that are no longer reading.
 			h.mu.Lock()
+			clients := make([]*Client, 0, len(h.clients))
 			for client := range h.clients {
-				close(client.send)
-				client.conn.Close(websocket.StatusGoingAway, "server shutting down") //nolint:errcheck // best-effort shutdown
+				clients = append(clients, client)
 				delete(h.clients, client)
 			}
 			h.mu.Unlock()
+			for _, client := range clients {
+				client.conn.CloseNow() //nolint:errcheck // best-effort shutdown
+				// Close the socket first so writePump's cleanup cannot start a
+				// graceful handshake before CloseNow takes effect.
+				close(client.send)
+			}
 			slog.Info("websocket hub stopped")
 			return
 
@@ -181,7 +188,12 @@ func (h *Hub) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 		send: make(chan Event, 256),
 	}
 
-	h.register <- client
+	select {
+	case h.register <- client:
+	case <-h.stop:
+		conn.CloseNow() //nolint:errcheck // hub no longer accepts clients
+		return
+	}
 
 	// Start write and read pumps
 	go h.writePump(client)
@@ -372,8 +384,10 @@ func (h *Hub) readPump(client *Client) {
 	}
 }
 
-// Stop gracefully shuts down the hub, closing all client connections. It is
-// safe to call more than once and from multiple goroutines.
+// Stop requests shutdown of the Run loop. Registered connections are closed
+// abruptly (without a WebSocket close handshake) so unresponsive peers cannot
+// delay shutdown. Stop does not wait for Run or handlers to return. It is safe
+// to call more than once and from multiple goroutines.
 func (h *Hub) Stop() {
 	h.stopOnce.Do(func() { close(h.stop) })
 }
