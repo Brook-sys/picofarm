@@ -8,7 +8,7 @@ Self-hosted print farm management and order fulfillment for makers and small 3D 
 
 PicoFarm brings a product catalog, customer orders, production tasks, print queues, and printer status into a browser-based application. A Go server provides the API and serves the production frontend; SQLite stores application data, while uploaded files remain on disk.
 
-[Install with Docker Compose](docs/INSTALL_DOCKER_COMPOSE.md) · [Getting started](docs/GETTING_STARTED.md) · [Screenshots](#a-look-inside)
+[Download desktop beta](https://github.com/Brook-sys/picofarm/releases) · [Desktop installation](docs/DESKTOP_INSTALL.md) · [Install with Docker Compose](docs/INSTALL_DOCKER_COMPOSE.md) · [Getting started](docs/GETTING_STARTED.md) · [Screenshots](#a-look-inside)
 
 [![PicoFarm dashboard showing printer status, print statistics, and a fleet overview](site/public/screenshots/tela_geral_dashboardprincipal.webp)](site/public/screenshots/tela_geral_dashboardprincipal.png)
 

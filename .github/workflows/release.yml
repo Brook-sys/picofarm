@@ -16,6 +16,12 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      - name: Verify version tag
+        shell: bash
+        run: |
+          [[ "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]
+          test "$(tr -d '\r\n' < VERSION)" = "$GITHUB_REF_NAME"
+
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
 
@@ -38,11 +44,12 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ${{ steps.image.outputs.name }}
+          flavor: latest=false
           tags: |
             type=ref,event=tag
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
-            type=raw,value=latest
+            type=raw,value=latest,enable=${{ !contains(github.ref_name, '-') }}
 
       - name: Build and push
         uses: docker/build-push-action@v6
@@ -60,16 +67,45 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+  desktop:
+    name: Build desktop binaries
+    uses: ./.github/workflows/desktop.yml
+    permissions:
+      contents: read
+
   release:
     name: Create GitHub Release
-    needs: docker
+    needs: [docker, desktop]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+
+      - name: Verify tag matches VERSION
+        shell: bash
+        run: test "$(tr -d '\r\n' < VERSION)" = "$GITHUB_REF_NAME"
+
+      - name: Download native archives
+        uses: actions/download-artifact@v4
+        with:
+          pattern: picofarm-desktop-*
+          path: release-assets
+          merge-multiple: true
+
+      - name: Prepare checksums and installation notes
+        shell: bash
+        run: |
+          cd release-assets
+          rm -f linux-linked-libraries.txt
+          test "$(find . -maxdepth 1 -type f \( -name '*.zip' -o -name '*.tar.gz' \) | wc -l)" -eq 4
+          sha256sum *.zip *.tar.gz > SHA256SUMS.txt
+          cp ../docs/DESKTOP_INSTALL.md INSTALL.md
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
           draft: false
-          prerelease: ${{ contains(github.ref, 'alpha') || contains(github.ref, 'beta') || contains(github.ref, 'rc') }}
+          prerelease: ${{ contains(github.ref, '-') }}
+          make_latest: ${{ !contains(github.ref, '-') }}
           generate_release_notes: true
+          body_path: docs/RELEASE_NOTES.md
+          files: release-assets/*
