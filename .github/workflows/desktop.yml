@@ -29,8 +29,8 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v6
         with:
           go-version-file: desktop/go.mod
           cache-dependency-path: |
@@ -65,14 +65,14 @@ jobs:
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 35
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v6
         with:
           go-version-file: desktop/go.mod
           cache-dependency-path: |
             go.sum
             desktop/go.sum
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: '22'
           cache: npm
@@ -101,7 +101,7 @@ jobs:
           ldd "$binary" | tee bin/desktop/linux-linked-libraries.txt
           if grep -q 'not found' bin/desktop/linux-linked-libraries.txt; then exit 1; fi
       - name: Upload preview archive
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: picofarm-desktop-${{ matrix.platform }}-${{ matrix.arch }}
           path: |
