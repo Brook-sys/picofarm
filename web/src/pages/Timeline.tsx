@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import { useCallback, useEffect, useState, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { Calendar, ChevronLeft, ChevronRight, Package, ListTodo, Printer } from 'lucide-react'
@@ -26,6 +27,9 @@ const typeIcons: Record<string, React.ReactNode> = {
 const DAY_MS = 24 * 60 * 60 * 1000
 
 export function Timeline() {
+  const { t, i18n } = useTranslation('production')
+  const dateLocale = i18n.resolvedLanguage === 'pt-BR' ? 'pt-BR' : 'en-US'
+
   const [items, setItems] = useState<TimelineItem[]>([])
   const [loading, setLoading] = useState(true)
   const [startDate, setStartDate] = useState(() => {
@@ -116,8 +120,8 @@ export function Timeline() {
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-display font-bold text-surface-100">Timeline</h1>
-          <p className="text-surface-400 text-sm mt-1">Gantt view of orders and print jobs</p>
+          <h1 className="text-2xl font-display font-bold text-surface-100">{t("Timeline")}</h1>
+          <p className="text-surface-400 text-sm mt-1">{t("Gantt view of orders and print jobs")}</p>
         </div>
         <div className="flex items-center gap-3">
           <select
@@ -125,9 +129,9 @@ export function Timeline() {
             onChange={e => setDaysToShow(Number(e.target.value))}
             className="input h-auto py-1.5 w-auto text-sm"
           >
-            <option value={7}>1 week</option>
-            <option value={14}>2 weeks</option>
-            <option value={30}>1 month</option>
+            <option value={7}>{t("1 week")}</option>
+            <option value={14}>{t("2 weeks")}</option>
+            <option value={30}>{t("1 month")}</option>
           </select>
           <div className="flex items-center gap-0.5 bg-surface-800 rounded-lg p-0.5">
             <button
@@ -140,8 +144,7 @@ export function Timeline() {
               onClick={goToToday}
               className="px-3 py-1.5 text-xs font-medium text-accent-400 hover:bg-surface-700 rounded-md transition-colors"
             >
-              Today
-            </button>
+              {t("Today")}</button>
             <button
               onClick={() => navigateDays(daysToShow)}
               className="p-1.5 hover:bg-surface-700 rounded-md transition-colors text-surface-400 hover:text-surface-100"
@@ -157,8 +160,7 @@ export function Timeline() {
         {/* Date header */}
         <div className="flex border-b border-surface-800">
           <div className="w-56 flex-shrink-0 px-4 py-2.5 bg-surface-900 border-r border-surface-800 text-xs font-medium text-surface-400 uppercase tracking-wider">
-            Item
-          </div>
+            {t("Item")}</div>
           <div className="flex-1 flex relative">
             {dateRange.map((date, i) => (
               <div
@@ -170,9 +172,9 @@ export function Timeline() {
                     : 'text-surface-500'
                 )}
               >
-                <div>{date.toLocaleDateString('en-US', { weekday: 'short' })}</div>
+                <div>{date.toLocaleDateString(dateLocale, { weekday: 'short' })}</div>
                 <div className={cn('text-[11px]', isToday(date) ? 'text-accent-300' : 'text-surface-600')}>
-                  {date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                  {date.toLocaleDateString(dateLocale, { month: 'short', day: 'numeric' })}
                 </div>
               </div>
             ))}
@@ -181,12 +183,12 @@ export function Timeline() {
 
         {/* Rows */}
         {loading ? (
-          <div className="text-center py-16 text-surface-500">Loading timeline...</div>
+          <div className="text-center py-16 text-surface-500">{t("Loading timeline...")}</div>
         ) : items.length === 0 ? (
           <div className="text-center py-16">
             <Calendar className="w-10 h-10 mx-auto text-surface-600 mb-3" />
-            <h3 className="text-sm font-medium text-surface-300 mb-1">No items in this period</h3>
-            <p className="text-xs text-surface-500">Adjust the date range or create new orders</p>
+            <h3 className="text-sm font-medium text-surface-300 mb-1">{t("No items in this period")}</h3>
+            <p className="text-xs text-surface-500">{t("Adjust the date range or create new orders")}</p>
           </div>
         ) : (
           <div>
@@ -205,11 +207,11 @@ export function Timeline() {
 
       {/* Legend */}
       <div className="mt-4 flex items-center gap-5 text-xs text-surface-500">
-        <span className="font-medium text-surface-400">Status:</span>
+        <span className="font-medium text-surface-400">{t("Status:")}</span>
         {Object.entries(statusColors).slice(0, 6).map(([status, colors]) => (
           <div key={status} className="flex items-center gap-1.5">
             <div className={cn('w-2.5 h-2.5 rounded-sm', colors.bar)} />
-            <span className="capitalize">{status.replace('_', ' ')}</span>
+            <span className="capitalize">{t(({ pending: 'Pending', confirmed: 'Confirmed', in_progress: 'In Progress', completed: 'Completed', cancelled: 'Cancelled', printing: 'Printing', paused: 'Paused', failed: 'Failed', shipped: 'Shipped', delivered: 'Delivered' } as Record<string, string>)[status] || status)}</span>
           </div>
         ))}
       </div>
@@ -226,6 +228,9 @@ interface TimelineRowProps {
 }
 
 function TimelineRow({ item, dateRange, getPosition, todayPct, depth = 0 }: TimelineRowProps) {
+  const { t, i18n } = useTranslation('production')
+  const dateLocale = i18n.resolvedLanguage === 'pt-BR' ? 'pt-BR' : 'en-US'
+
   const [expanded, setExpanded] = useState(depth === 0)
   const position = getPosition(item)
   const hasChildren = item.children && item.children.length > 0
@@ -251,7 +256,7 @@ function TimelineRow({ item, dateRange, getPosition, todayPct, depth = 0 }: Time
         >
           {hasChildren ? (
             <button
-              onClick={() => setExpanded(!expanded)}
+              aria-label={expanded ? t('Collapse item') : t('Expand item')} aria-expanded={expanded} onClick={() => setExpanded(!expanded)}
               className="p-0.5 hover:bg-surface-700 rounded transition-colors flex-shrink-0"
             >
               <ChevronRight
@@ -266,7 +271,7 @@ function TimelineRow({ item, dateRange, getPosition, todayPct, depth = 0 }: Time
             to={linkTo}
             className="text-sm text-surface-200 hover:text-accent-400 truncate transition-colors"
           >
-            {item.name || `${item.type} ${item.id.slice(0, 8)}`}
+            {item.name || t('{{type}} {{id}}', { type: t(({ order: 'Order', job: 'Job', project: 'Project' } as Record<string, string>)[item.type] || item.type), id: item.id.slice(0, 8) })}
           </Link>
         </div>
 
@@ -296,7 +301,7 @@ function TimelineRow({ item, dateRange, getPosition, todayPct, depth = 0 }: Time
                 colors.bar
               )}
               style={{ left: position.left, width: position.width, minWidth: '8px' }}
-              title={`${item.name}: ${item.status}${item.progress > 0 ? ` (${Math.round(item.progress)}%)` : ''}`}
+              title={t("{{name}}: {{status}} ({{progress}}%)", { name: item.name, status: t(({ pending: 'Pending', confirmed: 'Confirmed', in_progress: 'In Progress', completed: 'Completed', cancelled: 'Cancelled', printing: 'Printing', paused: 'Paused', failed: 'Failed', shipped: 'Shipped', delivered: 'Delivered' } as Record<string, string>)[item.status] || item.status), progress: Math.round(item.progress) })}
             >
               {/* Progress fill */}
               {item.progress > 0 && item.progress < 100 && (
@@ -319,7 +324,7 @@ function TimelineRow({ item, dateRange, getPosition, todayPct, depth = 0 }: Time
                 <div
                   className="absolute top-1 bottom-1 w-0.5 bg-red-500/70 z-10 pointer-events-none"
                   style={{ left: `${pct}%` }}
-                  title={`Due: ${new Date(item.due_date).toLocaleDateString()}`}
+                  title={t("Due: {{value1}}", { value1: new Date(item.due_date).toLocaleDateString(dateLocale) })}
                 />
               )
             }

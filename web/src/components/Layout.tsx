@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import { useState } from 'react'
 import { Outlet, NavLink } from 'react-router-dom'
 import {
@@ -29,7 +30,7 @@ import FeedbackButton from './FeedbackButton'
 
 const navigation = [
   {
-    label: 'Funcional',
+    label: 'Production',
     items: [
       { name: 'Queue', href: '/queue', icon: ListChecks },
       { name: 'Files', href: '/files', icon: FileCode },
@@ -42,7 +43,7 @@ const navigation = [
     ],
   },
   {
-    label: 'Comercial',
+    label: 'Commerce',
     items: [
       { name: 'Quotes', href: '/quotes', icon: FileText },
       { name: 'Customers', href: '/customers', icon: Users },
@@ -58,10 +59,12 @@ const navigation = [
 ]
 
 export default function Layout() {
-  const [collapsed, setCollapsed] = useState(false)
+  const { t } = useTranslation('common')
+  const [collapsed, setCollapsed] = useState(() => typeof window !== 'undefined' && window.matchMedia('(max-width: 640px)').matches)
 
   return (
     <div className="flex h-screen bg-surface-950">
+      <a href="#main-content" className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50 focus:rounded-lg focus:bg-accent-600 focus:p-3 focus:text-white">{t('Skip to main content')}</a>
       {/* Sidebar */}
       <aside
         className={cn(
@@ -75,10 +78,12 @@ export default function Layout() {
             <div className="relative mx-auto flex h-10 w-10 items-center justify-center">
               <img src="/picofarm_logo.png" alt="PicoFarm" className="h-9 w-9 rounded-md object-contain" />
               <button
+                aria-expanded={false}
+                aria-controls="main-navigation"
                 onClick={() => setCollapsed(false)}
                 className="absolute inset-0 flex items-center justify-center rounded-lg bg-surface-900/90 text-surface-100 opacity-0 transition-opacity hover:opacity-100 focus:opacity-100"
-                title="Expand sidebar"
-                aria-label="Expand sidebar"
+                title={t("Expand sidebar")}
+                aria-label={t("Expand sidebar")}
               >
                 <PanelLeftOpen className="h-5 w-5" />
               </button>
@@ -92,10 +97,12 @@ export default function Layout() {
                 </span>
               </div>
               <button
+                aria-expanded={true}
+                aria-controls="main-navigation"
                 onClick={() => setCollapsed(true)}
                 className="w-10 h-10 flex items-center justify-center rounded-lg text-surface-400 hover:text-surface-100 hover:bg-surface-800 transition-colors"
-                title="Collapse sidebar"
-                aria-label="Collapse sidebar"
+                title={t("Collapse sidebar")}
+                aria-label={t("Collapse sidebar")}
               >
                 <PanelLeftClose className="h-5 w-5" />
               </button>
@@ -104,13 +111,15 @@ export default function Layout() {
         </div>
 
         {/* Navigation */}
-        <nav className={cn('flex-1 py-4 space-y-1 overflow-y-auto', collapsed ? 'px-2' : 'px-3')}>
+        <nav id="main-navigation" aria-label={t('Main navigation')} className={cn('flex-1 py-4 space-y-1 overflow-y-auto', collapsed ? 'px-2' : 'px-3')}>
           <NavLink
+            aria-label={t('Dashboard')}
+            aria-current="page"
             to="/dashboard"
-            title={collapsed ? 'Dashboard' : undefined}
+            title={collapsed ? t("Dashboard") : undefined}
             className={({ isActive }) =>
               cn(
-                'flex items-center rounded-lg text-sm font-medium transition-colors mb-4',
+                'flex items-center rounded-lg text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 mb-4',
                 collapsed ? 'justify-center px-0 py-2' : 'px-3 py-2',
                 isActive
                   ? 'bg-accent-500/10 text-accent-400'
@@ -119,19 +128,21 @@ export default function Layout() {
             }
           >
             <LayoutDashboard className={cn('h-4 w-4 shrink-0', !collapsed && 'mr-3')} />
-            {!collapsed && 'Dashboard'}
+            {!collapsed && t("Dashboard")}
           </NavLink>
           {navigation.map((section) => (
             <div key={section.label} className="mb-3">
-              {!collapsed && <div className="px-3 mb-1 text-[10px] font-semibold tracking-widest text-surface-600">{section.label}</div>}
+              {!collapsed && <div className="px-3 mb-1 text-[10px] font-semibold tracking-widest text-surface-600">{t(section.label)}</div>}
               {section.items.map((item) => (
                 <NavLink
                   key={item.name}
+                  aria-label={t(item.name)}
+                  aria-current="page"
                   to={item.href}
-                  title={collapsed ? item.name : undefined}
+                  title={collapsed ? t(item.name) : undefined}
                   className={({ isActive }) =>
                     cn(
-                      'flex items-center rounded-lg text-sm font-medium transition-colors',
+                      'flex items-center rounded-lg text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500',
                       collapsed ? 'justify-center px-0 py-2' : 'px-3 py-2',
                       isActive
                         ? 'bg-accent-500/10 text-accent-400'
@@ -140,7 +151,7 @@ export default function Layout() {
                   }
                 >
                   <item.icon className={cn('h-4 w-4 shrink-0', !collapsed && 'mr-3')} />
-                  {!collapsed && item.name}
+                  {!collapsed && t(item.name)}
                 </NavLink>
               ))}
             </div>
@@ -150,11 +161,13 @@ export default function Layout() {
         {/* Settings */}
         <div className={cn('py-4 border-t border-surface-800', collapsed ? 'px-2' : 'px-3')}>
           <NavLink
+            aria-label={t('Settings')}
+            aria-current="page"
             to="/settings"
-            title={collapsed ? 'Settings' : undefined}
+            title={collapsed ? t("Settings") : undefined}
             className={({ isActive }) =>
               cn(
-                'flex items-center rounded-lg text-sm font-medium transition-colors',
+                'flex items-center rounded-lg text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500',
                 collapsed ? 'justify-center px-0 py-2.5' : 'px-3 py-2.5',
                 isActive
                   ? 'bg-accent-500/10 text-accent-400'
@@ -163,13 +176,13 @@ export default function Layout() {
             }
           >
             <Settings className={cn('h-5 w-5 shrink-0', !collapsed && 'mr-3')} />
-            {!collapsed && 'Settings'}
+            {!collapsed && t("Settings")}
           </NavLink>
         </div>
       </aside>
 
       {/* Main content */}
-      <main className="flex-1 overflow-auto min-w-0">
+      <main id="main-content" tabIndex={-1} className="flex-1 overflow-auto min-w-0">
         {/* Operational alerts (low spools, orders due). The component and its
             API existed and worked; nothing ever rendered it, so no alert was
             ever seen by a user. */}

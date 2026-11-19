@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import { useCallback, useEffect, useState } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { ArrowLeft, Clock, Play, CheckCircle, XCircle, Package, Printer, AlertCircle, CalendarDays, Square, CheckSquare, DollarSign, Pencil, Trash2 } from 'lucide-react'
@@ -24,6 +25,8 @@ function CompleteTaskModal({
   onClose: () => void
   onCompleted: () => void
 }) {
+  const { t } = useTranslation('production')
+
   const { symbol } = useCurrency()
   const queryClient = useQueryClient()
   const [recordSale, setRecordSale] = useState(!!task.project?.price_cents)
@@ -64,7 +67,7 @@ function CompleteTaskModal({
 
       onCompleted()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to complete task')
+      setError(err instanceof Error ? err.message : t("Failed to complete task"))
     } finally {
       setSubmitting(false)
     }
@@ -77,9 +80,9 @@ function CompleteTaskModal({
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
       <div className="bg-surface-800 border border-surface-700 rounded-xl w-full max-w-md mx-4 shadow-2xl">
         <div className="p-6">
-          <h2 className="text-lg font-semibold text-surface-100 mb-1">Complete Task</h2>
+          <h2 className="text-lg font-semibold text-surface-100 mb-1">{t("Complete Task")}</h2>
           <p className="text-sm text-surface-400 mb-5">
-            {task.name} &times; {task.quantity}
+            {task.name} ×{task.quantity}
           </p>
 
           {/* Record sale toggle */}
@@ -91,14 +94,14 @@ function CompleteTaskModal({
               className="w-4 h-4 rounded border-surface-600 text-accent-500 focus:ring-accent-500 bg-surface-700"
             />
             <DollarSign className="w-4 h-4 text-emerald-400" />
-            <span className="text-sm font-medium text-surface-100">Record a sale</span>
+            <span className="text-sm font-medium text-surface-100">{t("Record a sale")}</span>
           </label>
 
           {/* Sale form */}
           {recordSale && (
             <div className="space-y-3 mb-4">
               <div>
-                <label className="block text-xs text-surface-500 mb-1">Item Description</label>
+                <label className="block text-xs text-surface-500 mb-1">{t("Item Description")}</label>
                 <input
                   type="text"
                   value={saleForm.item_description}
@@ -108,7 +111,7 @@ function CompleteTaskModal({
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs text-surface-500 mb-1">Quantity</label>
+                  <label className="block text-xs text-surface-500 mb-1">{t("Quantity")}</label>
                   <input
                     type="number"
                     min={1}
@@ -118,7 +121,7 @@ function CompleteTaskModal({
                   />
                 </div>
                 <div>
-                  <label className="block text-xs text-surface-500 mb-1">Gross ({symbol})</label>
+                  <label className="block text-xs text-surface-500 mb-1">{t("Gross (")}{symbol})</label>
                   <input
                     type="number"
                     step="0.01"
@@ -131,19 +134,19 @@ function CompleteTaskModal({
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs text-surface-500 mb-1">Channel</label>
+                  <label className="block text-xs text-surface-500 mb-1">{t("Channel")}</label>
                   <select
                     value={saleForm.channel}
                     onChange={e => setSaleForm(f => ({ ...f, channel: e.target.value as SalesChannel }))}
                     className="input"
                   >
                     {SALES_CHANNELS.map(ch => (
-                      <option key={ch.value} value={ch.value}>{ch.label}</option>
+                      <option key={ch.value} value={ch.value}>{t(ch.label)}</option>
                     ))}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs text-surface-500 mb-1">Fees ({symbol})</label>
+                  <label className="block text-xs text-surface-500 mb-1">{t("Fees (")}{symbol})</label>
                   <input
                     type="number"
                     step="0.01"
@@ -155,12 +158,12 @@ function CompleteTaskModal({
                 </div>
               </div>
               <div>
-                <label className="block text-xs text-surface-500 mb-1">Customer Name</label>
+                <label className="block text-xs text-surface-500 mb-1">{t("Customer Name")}</label>
                 <input
                   type="text"
                   value={saleForm.customer_name}
                   onChange={e => setSaleForm(f => ({ ...f, customer_name: e.target.value }))}
-                  placeholder="Optional"
+                  placeholder={t("Optional")}
                   className="w-full px-3 py-2 bg-surface-900 border border-surface-700 rounded-lg text-sm text-surface-100 placeholder:text-surface-600 focus:outline-none focus:border-accent-500"
                 />
               </div>
@@ -177,15 +180,14 @@ function CompleteTaskModal({
               disabled={submitting}
               className="px-4 py-2 text-sm text-surface-300 border border-surface-600 rounded-lg hover:bg-surface-700 transition-colors disabled:opacity-50"
             >
-              Cancel
-            </button>
+              {t("Cancel")}</button>
             <button
               onClick={handleSubmit}
               disabled={submitting}
               className="inline-flex items-center gap-2 px-4 py-2 text-sm bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-50"
             >
               <CheckCircle className="w-4 h-4" />
-              {submitting ? 'Completing...' : 'Complete'}
+              {submitting ? t("Completing...") : t("Complete")}
             </button>
           </div>
         </div>
@@ -203,6 +205,8 @@ function EditTaskModal({
   onClose: () => void
   onSaved: () => void
 }) {
+  const { t } = useTranslation('production')
+
   const [form, setForm] = useState({
     name: task.name,
     quantity: String(task.quantity),
@@ -215,12 +219,12 @@ function EditTaskModal({
 
   const handleSubmit = async () => {
     if (!form.name.trim()) {
-      setError('Name is required')
+      setError(t("Name is required"))
       return
     }
     const quantity = Number(form.quantity)
     if (!Number.isInteger(quantity) || quantity < 1) {
-      setError('Quantity must be a whole number of at least 1')
+      setError(t("Quantity must be a whole number of at least 1"))
       return
     }
     setSubmitting(true)
@@ -237,7 +241,7 @@ function EditTaskModal({
       })
       onSaved()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to update task')
+      setError(err instanceof Error ? err.message : t("Failed to update task"))
     } finally {
       setSubmitting(false)
     }
@@ -247,14 +251,14 @@ function EditTaskModal({
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
       <div className="bg-surface-800 border border-surface-700 rounded-xl w-full max-w-md mx-4 shadow-2xl">
         <div className="p-6">
-          <h2 className="text-lg font-semibold text-surface-100 mb-1">Edit Task</h2>
+          <h2 className="text-lg font-semibold text-surface-100 mb-1">{t("Edit Task")}</h2>
           <p className="text-sm text-surface-400 mb-5">
-            {task.name} &times; {task.quantity}
+            {task.name} ×{task.quantity}
           </p>
 
           <div className="space-y-3">
             <div>
-              <label className="block text-xs text-surface-500 mb-1">Name</label>
+              <label className="block text-xs text-surface-500 mb-1">{t("Name")}</label>
               <input
                 type="text"
                 value={form.name}
@@ -264,7 +268,7 @@ function EditTaskModal({
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs text-surface-500 mb-1">Quantity</label>
+                <label className="block text-xs text-surface-500 mb-1">{t("Quantity")}</label>
                 <input
                   type="number"
                   min={1}
@@ -274,7 +278,7 @@ function EditTaskModal({
                 />
               </div>
               <div>
-                <label className="block text-xs text-surface-500 mb-1">Pickup Date</label>
+                <label className="block text-xs text-surface-500 mb-1">{t("Pickup Date")}</label>
                 <input
                   type="date"
                   value={form.pickup_date}
@@ -284,12 +288,12 @@ function EditTaskModal({
               </div>
             </div>
             <div>
-              <label className="block text-xs text-surface-500 mb-1">Notes</label>
+              <label className="block text-xs text-surface-500 mb-1">{t("Notes")}</label>
               <textarea
                 value={form.notes}
                 onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
                 rows={3}
-                placeholder="Optional"
+                placeholder={t("Optional")}
                 className="input resize-none"
               />
             </div>
@@ -305,15 +309,14 @@ function EditTaskModal({
               disabled={submitting}
               className="px-4 py-2 text-sm text-surface-300 border border-surface-600 rounded-lg hover:bg-surface-700 transition-colors disabled:opacity-50"
             >
-              Cancel
-            </button>
+              {t("Cancel")}</button>
             <button
               onClick={handleSubmit}
               disabled={submitting}
               className="inline-flex items-center gap-2 px-4 py-2 text-sm bg-accent-600 text-white rounded-lg hover:bg-accent-500 transition-colors disabled:opacity-50"
             >
               <CheckCircle className="w-4 h-4" />
-              {submitting ? 'Saving...' : 'Save'}
+              {submitting ? t("Saving...") : t("Save")}
             </button>
           </div>
         </div>
@@ -342,6 +345,9 @@ const jobStatusColors: Record<string, string> = {
 }
 
 export function TaskDetail() {
+  const { t, i18n } = useTranslation('production')
+  const dateLocale = i18n.resolvedLanguage === 'pt-BR' ? 'pt-BR' : 'en-US'
+
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const [task, setTask] = useState<Task | null>(null)
@@ -358,11 +364,11 @@ export function TaskDetail() {
       const data = await tasksApi.get(id)
       setTask(data)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load task')
+      setError(err instanceof Error ? err.message : t("Failed to load task"))
     } finally {
       setLoading(false)
     }
-  }, [id])
+  }, [id, t])
 
   useEffect(() => {
     if (id) {
@@ -377,20 +383,20 @@ export function TaskDetail() {
       await tasksApi.start(id)
       loadTask()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to start task')
+      setError(err instanceof Error ? err.message : t("Failed to start task"))
     } finally {
       setActionLoading(false)
     }
   }
 
   const handleCancel = async () => {
-    if (!id || !confirm('Are you sure you want to cancel this task?')) return
+    if (!id || !confirm(t("Are you sure you want to cancel this task?"))) return
     setActionLoading(true)
     try {
       await tasksApi.cancel(id)
       loadTask()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to cancel task')
+      setError(err instanceof Error ? err.message : t("Failed to cancel task"))
     } finally {
       setActionLoading(false)
     }
@@ -402,7 +408,7 @@ export function TaskDetail() {
       await tasksApi.toggleChecklistItem(id, item.id, !item.completed)
       loadTask()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to update checklist')
+      setError(err instanceof Error ? err.message : t("Failed to update checklist"))
     }
   }
 
@@ -413,7 +419,7 @@ export function TaskDetail() {
       await tasksApi.printFromChecklist(id, itemId)
       loadTask()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create print job')
+      setError(err instanceof Error ? err.message : t("Failed to create print job"))
     } finally {
       setActionLoading(false)
     }
@@ -426,7 +432,7 @@ export function TaskDetail() {
       await tasksApi.regenerateChecklist(id)
       loadTask()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to generate checklist')
+      setError(err instanceof Error ? err.message : t("Failed to generate checklist"))
     } finally {
       setActionLoading(false)
     }
@@ -439,18 +445,18 @@ export function TaskDetail() {
   // does cascade, so only jobs need to be removed first.
   const handleDelete = async () => {
     if (!id) return
-    if (!confirm('Delete this task? Its checklist goes with it. This cannot be undone.')) return
+    if (!confirm(t("Delete this task? Its checklist goes with it. This cannot be undone."))) return
     try {
       await tasksApi.delete(id)
       navigate('/tasks')
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete task')
+      setError(err instanceof Error ? err.message : t("Failed to delete task"))
     }
   }
 
   const formatDate = (dateStr?: string) => {
     if (!dateStr) return '-'
-    return new Date(dateStr).toLocaleString()
+    return new Date(dateStr).toLocaleString(dateLocale)
   }
 
   const getProgressColor = (progress: number) => {
@@ -463,7 +469,7 @@ export function TaskDetail() {
   if (loading) {
     return (
       <div className="p-4 sm:p-6 lg:p-8">
-        <div className="text-surface-500">Loading task...</div>
+        <div className="text-surface-500">{t("Loading task...")}</div>
       </div>
     )
   }
@@ -473,11 +479,10 @@ export function TaskDetail() {
       <div className="p-4 sm:p-6 lg:p-8">
         <div className="text-center py-16">
           <AlertCircle className="w-16 h-16 mx-auto text-red-400 mb-4" />
-          <h3 className="text-xl font-semibold text-surface-100 mb-2">Error</h3>
-          <p className="text-surface-500">{error || 'Task not found'}</p>
+          <h3 className="text-xl font-semibold text-surface-100 mb-2">{t("Error")}</h3>
+          <p className="text-surface-500">{error || t("Task not found")}</p>
           <Link to="/tasks" className="mt-4 inline-block text-accent-400 hover:text-accent-300">
-            Back to Tasks
-          </Link>
+            {t("Back to Tasks")}</Link>
         </div>
       </div>
     )
@@ -497,48 +502,45 @@ export function TaskDetail() {
       <div className="mb-6">
         <Link to="/tasks" className="inline-flex items-center gap-2 text-surface-400 hover:text-surface-100 mb-4 transition-colors">
           <ArrowLeft className="w-4 h-4" />
-          Back to Tasks
-        </Link>
+          {t("Back to Tasks")}</Link>
         <div className="flex items-start justify-between">
           <div>
             <h1 className="text-2xl font-bold text-surface-100">{task.name}</h1>
             <p className="text-surface-400">
-              Quantity: {task.quantity} | Created: {formatDate(task.created_at)}
+              {t("Quantity:")}{' '}{task.quantity} {t("| Created:")}{' '}{formatDate(task.created_at)}
             </p>
           </div>
           <div className="flex items-center gap-2">
             <div className={cn('inline-flex items-center gap-2 px-3 py-1.5 rounded-full', config.bgColor, config.color)}>
               {config.icon}
-              <span className="font-medium">{config.label}</span>
+              <span className="font-medium">{t(config.label)}</span>
             </div>
             <button
               onClick={() => setShowEditModal(true)}
               className="inline-flex items-center gap-2 px-3 py-1.5 text-sm text-surface-300 border border-surface-600 rounded-lg hover:bg-surface-700 transition-colors"
             >
               <Pencil className="w-3.5 h-3.5" />
-              Edit
-            </button>
+              {t("Edit")}</button>
             <button
               onClick={handleDelete}
               disabled={jobs.length > 0}
               title={jobs.length > 0
-                ? `This task still has ${jobs.length} print job(s). The database blocks deleting a task with jobs — remove the jobs first.`
-                : 'Delete this task'}
+                ? t("This task still has {{count}} print job. The database blocks deleting a task with jobs — remove the jobs first.", { count: jobs.length })
+                : t("Delete this task")}
               className="inline-flex items-center gap-2 px-3 py-1.5 text-sm text-red-400 border border-red-500/50 rounded-lg hover:bg-red-500/10 transition-colors disabled:opacity-50"
             >
               <Trash2 className="w-3.5 h-3.5" />
-              Delete
-            </button>
+              {t("Delete")}</button>
           </div>
         </div>
       </div>
 
       {/* Progress */}
       <div className="card p-6 mb-6">
-        <h2 className="text-lg font-semibold text-surface-100 mb-4">Progress</h2>
+        <h2 className="text-lg font-semibold text-surface-100 mb-4">{t("Progress")}</h2>
         <div className="mb-4">
           <div className="flex justify-between text-sm mb-1">
-            <span className="text-surface-400">Overall Progress</span>
+            <span className="text-surface-400">{t("Overall Progress")}</span>
             <span className="font-medium text-surface-100">{Math.round(progress)}%</span>
           </div>
           <div className="h-3 bg-surface-700 rounded-full overflow-hidden">
@@ -551,15 +553,15 @@ export function TaskDetail() {
         <div className="grid grid-cols-3 gap-4 text-center">
           <div>
             <div className="text-2xl font-bold text-surface-100">{jobs.length}</div>
-            <div className="text-sm text-surface-500">Total Jobs</div>
+            <div className="text-sm text-surface-500">{t("Total Jobs")}</div>
           </div>
           <div>
             <div className="text-2xl font-bold text-emerald-400">{completedJobs}</div>
-            <div className="text-sm text-surface-500">Completed</div>
+            <div className="text-sm text-surface-500">{t("Completed")}</div>
           </div>
           <div>
             <div className="text-2xl font-bold text-red-400">{failedJobs}</div>
-            <div className="text-sm text-surface-500">Failed</div>
+            <div className="text-sm text-surface-500">{t("Failed")}</div>
           </div>
         </div>
       </div>
@@ -567,19 +569,17 @@ export function TaskDetail() {
       {/* Checklist */}
       <div className="card p-6 mb-6">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-surface-100">Checklist</h2>
+          <h2 className="text-lg font-semibold text-surface-100">{t("Checklist")}</h2>
           {checklist.length > 0 ? (
             <span className="text-sm text-surface-400">
-              {completedChecklist}/{checklist.length} completed
-            </span>
+              {t("{{completed}} of {{count}} checklist item completed", { completed: completedChecklist, count: checklist.length })}</span>
           ) : (
             <button
               onClick={handleRegenerateChecklist}
               disabled={actionLoading}
               className="text-sm text-accent-400 hover:text-accent-300 transition-colors disabled:opacity-50"
             >
-              Generate from parts
-            </button>
+              {t("Generate from parts")}</button>
           )}
         </div>
         {checklist.length > 0 ? (
@@ -629,8 +629,7 @@ export function TaskDetail() {
                       className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-accent-400 border border-accent-500/50 rounded-lg hover:bg-accent-500/10 transition-colors disabled:opacity-50 flex-shrink-0"
                     >
                       <Printer className="w-3.5 h-3.5" />
-                      Print
-                    </button>
+                      {t("Print")}</button>
                   )}
                 </div>
               ))}
@@ -638,15 +637,14 @@ export function TaskDetail() {
           </>
         ) : (
           <p className="text-sm text-surface-500">
-            No checklist items. Click "Generate from parts" to create from project parts.
-          </p>
+            {t("No checklist items. Click \"Generate from parts\" to create from project parts.")}</p>
         )}
       </div>
 
       {/* Actions */}
       {task.status !== 'completed' && task.status !== 'cancelled' && (
         <div className="card p-6 mb-6">
-          <h2 className="text-lg font-semibold text-surface-100 mb-4">Actions</h2>
+          <h2 className="text-lg font-semibold text-surface-100 mb-4">{t("Actions")}</h2>
           <div className="flex gap-3">
             {task.status === 'pending' && (
               <button
@@ -655,8 +653,7 @@ export function TaskDetail() {
                 className="btn btn-primary"
               >
                 <Play className="w-4 h-4 mr-2" />
-                Start Task
-              </button>
+                {t("Start Task")}</button>
             )}
             {task.status === 'in_progress' && (
               <button
@@ -665,8 +662,7 @@ export function TaskDetail() {
                 className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors disabled:opacity-50"
               >
                 <CheckCircle className="w-4 h-4" />
-                Mark Complete
-              </button>
+                {t("Mark Complete")}</button>
             )}
             <button
               onClick={handleCancel}
@@ -674,8 +670,7 @@ export function TaskDetail() {
               className="inline-flex items-center gap-2 px-4 py-2 text-red-400 border border-red-500/50 rounded-lg hover:bg-red-500/10 transition-colors disabled:opacity-50"
             >
               <XCircle className="w-4 h-4" />
-              Cancel
-            </button>
+              {t("Cancel")}</button>
           </div>
         </div>
       )}
@@ -683,7 +678,7 @@ export function TaskDetail() {
       {/* Project Info */}
       {task.project && (
         <div className="card p-6 mb-6">
-          <h2 className="text-lg font-semibold text-surface-100 mb-4">Project</h2>
+          <h2 className="text-lg font-semibold text-surface-100 mb-4">{t("Project")}</h2>
           <Link
             to={`/projects/${task.project.id}`}
             className="flex items-center gap-3 p-3 bg-surface-800 rounded-lg hover:bg-surface-700 transition-colors"
@@ -692,7 +687,7 @@ export function TaskDetail() {
             <div>
               <div className="font-medium text-surface-100">{task.project.name}</div>
               {task.project.sku && (
-                <div className="text-sm text-surface-500">SKU: {task.project.sku}</div>
+                <div className="text-sm text-surface-500">{t("SKU:")}{' '}{task.project.sku}</div>
               )}
             </div>
           </Link>
@@ -701,11 +696,11 @@ export function TaskDetail() {
 
       {/* Jobs */}
       <div className="card p-6 mb-6">
-        <h2 className="text-lg font-semibold text-surface-100 mb-4">Print Jobs</h2>
+        <h2 className="text-lg font-semibold text-surface-100 mb-4">{t("Print Jobs")}</h2>
         {jobs.length === 0 ? (
           <div className="text-center py-8">
             <Printer className="w-10 h-10 mx-auto mb-3 text-surface-600" />
-            <p className="text-surface-500">No print jobs assigned to this task yet</p>
+            <p className="text-surface-500">{t("No print jobs assigned to this task yet")}</p>
           </div>
         ) : (
           <div className="space-y-3">
@@ -718,15 +713,15 @@ export function TaskDetail() {
                 <div className="flex items-center gap-3">
                   <Printer className="w-5 h-5 text-surface-500" />
                   <div>
-                    <div className="font-medium text-surface-100">Job {job.id.substring(0, 8)}</div>
+                    <div className="font-medium text-surface-100">{t('Job {{id}}', { id: job.id.substring(0, 8) })}</div>
                     <div className="text-sm text-surface-500">
-                      Progress: {Math.round(job.progress)}%
-                      {job.started_at && ` | Started: ${formatDate(job.started_at)}`}
+                      {t('Progress: {{progress}}%', { progress: Math.round(job.progress) })}
+                      {job.started_at && t(' · {{label}}', { label: `${t("Started")}: ${formatDate(job.started_at)}` })}
                     </div>
                   </div>
                 </div>
                 <span className={cn('px-2.5 py-1 rounded-full text-xs font-medium', jobStatusColors[job.status] || 'bg-surface-700 text-surface-400')}>
-                  {job.status}
+                  {t(({ pending: 'Pending', in_progress: 'In Progress', completed: 'Completed', cancelled: 'Cancelled', printing: 'Printing', paused: 'Paused', failed: 'Failed', queued: 'Queued', idle: 'Idle', offline: 'Offline', online: 'Online', error: 'Error', ready: 'Ready', sent: 'Sent', info: 'Info', success: 'Success', warning: 'Warning', critical: 'Critical', channels: 'Channels', templates: 'Templates', deliveries: 'Deliveries' } as Record<string, string>)[job.status] || job.status)}
                 </span>
               </Link>
             ))}
@@ -736,58 +731,57 @@ export function TaskDetail() {
 
       {/* Details */}
       <div className="card p-6">
-        <h2 className="text-lg font-semibold text-surface-100 mb-4">Details</h2>
+        <h2 className="text-lg font-semibold text-surface-100 mb-4">{t("Details")}</h2>
         <dl className="grid grid-cols-2 gap-4">
           <div>
-            <dt className="text-sm text-surface-500">Task ID</dt>
+            <dt className="text-sm text-surface-500">{t("Task ID")}</dt>
             <dd className="font-mono text-sm text-surface-300">{task.id}</dd>
           </div>
           <div>
-            <dt className="text-sm text-surface-500">Status</dt>
-            <dd className="text-surface-100">{config.label}</dd>
+            <dt className="text-sm text-surface-500">{t("Status")}</dt>
+            <dd className="text-surface-100">{t(config.label)}</dd>
           </div>
           <div>
-            <dt className="text-sm text-surface-500">Created</dt>
+            <dt className="text-sm text-surface-500">{t("Created")}</dt>
             <dd className="text-surface-300">{formatDate(task.created_at)}</dd>
           </div>
           <div>
-            <dt className="text-sm text-surface-500">Updated</dt>
+            <dt className="text-sm text-surface-500">{t("Updated")}</dt>
             <dd className="text-surface-300">{formatDate(task.updated_at)}</dd>
           </div>
           {task.pickup_date && (
             <div>
-              <dt className="text-sm text-surface-500">Pickup / Ship Date</dt>
+              <dt className="text-sm text-surface-500">{t("Pickup / Ship Date")}</dt>
               <dd className="flex items-center gap-2 text-surface-300">
                 <CalendarDays className="w-4 h-4 text-accent-400" />
-                {new Date(task.pickup_date).toLocaleDateString()}
+                {new Date(task.pickup_date).toLocaleDateString(dateLocale)}
               </dd>
             </div>
           )}
           {task.started_at && (
             <div>
-              <dt className="text-sm text-surface-500">Started</dt>
+              <dt className="text-sm text-surface-500">{t("Started")}</dt>
               <dd className="text-surface-300">{formatDate(task.started_at)}</dd>
             </div>
           )}
           {task.completed_at && (
             <div>
-              <dt className="text-sm text-surface-500">Completed</dt>
+              <dt className="text-sm text-surface-500">{t("Completed")}</dt>
               <dd className="text-surface-300">{formatDate(task.completed_at)}</dd>
             </div>
           )}
           {task.order_id && (
             <div className="col-span-2">
-              <dt className="text-sm text-surface-500">Order</dt>
+              <dt className="text-sm text-surface-500">{t("Order")}</dt>
               <dd>
                 <Link to={`/orders/${task.order_id}`} className="text-accent-400 hover:text-accent-300">
-                  View Order
-                </Link>
+                  {t("View Order")}</Link>
               </dd>
             </div>
           )}
           {task.notes && (
             <div className="col-span-2">
-              <dt className="text-sm text-surface-500">Notes</dt>
+              <dt className="text-sm text-surface-500">{t("Notes")}</dt>
               <dd className="whitespace-pre-wrap text-surface-300">{task.notes}</dd>
             </div>
           )}

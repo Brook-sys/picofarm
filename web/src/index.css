@@ -34,6 +34,23 @@ body {
   font-feature-settings: "rlig" 1, "calt" 1;
 }
 
+/* Keyboard users need the same location cues as pointer users, including
+   icon-only controls that do not use the shared .btn class. */
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 2px solid var(--color-accent-400);
+  outline-offset: 3px;
+}
+
+/* Respect OS motion preferences without suppressing progress information. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
 /* Button styles */
 .btn {
   @apply inline-flex items-center justify-center rounded-md px-4 py-2 text-sm font-medium transition-colors;

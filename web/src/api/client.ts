@@ -1,4 +1,5 @@
-import { resourceURL, webSocketURL } from '../lib/platform'
+import { readApiToken, resourceURL, webSocketURL, writeApiToken } from '../lib/platform'
+import i18n from '../i18n'
 
 // Generic fetch wrapper with error handling.
 async function fetchApi<T>(
@@ -20,12 +21,10 @@ async function fetchApi<T>(
     Object.assign(headers, existingHeaders)
   }
 
-  // Inject API Token if present in localStorage
-  if (typeof window !== 'undefined') {
-    const apiToken = window.localStorage.getItem('API_TOKEN')
-    if (apiToken) {
-      headers['Authorization'] = `Bearer ${apiToken}`
-    }
+  // Inject API Token if present (storage or session-only fallback)
+  const apiToken = readApiToken()
+  if (apiToken) {
+    headers['Authorization'] = `Bearer ${apiToken}`
   }
 
   const response = await fetch(url, {
@@ -37,29 +36,28 @@ async function fetchApi<T>(
 
   if (response.status === 401 && typeof window !== 'undefined') {
     // Basic prompt for API token when hitting 401 Unauthorized
-    const currentToken = window.localStorage.getItem('API_TOKEN')
+    const currentToken = readApiToken()
     if (!currentToken) {
-      const token = window.prompt('Authentication required. Enter API Token:')
+      const token = window.prompt(i18n.t('Authentication required. Enter your API token to connect.', { ns: 'runtime' }))
       if (token) {
-        window.localStorage.setItem('API_TOKEN', token)
-        window.location.reload()
+        const persisted = writeApiToken(token)
+        // Reload only when the token survives it. With storage blocked the
+        // in-memory session token already authenticates the next request, and
+        // reloading would just show this prompt again forever.
+        if (persisted) window.location.reload()
       }
     } else {
       // Token exists but is invalid/expired
-      const token = window.prompt('Invalid API Token. Enter a new token (or leave empty to clear):')
+      const token = window.prompt(i18n.t('Your API token was rejected. Enter a new token, or leave this empty to remove the saved token.', { ns: 'runtime' }))
       if (token !== null) {
-        if (token) {
-          window.localStorage.setItem('API_TOKEN', token)
-        } else {
-          window.localStorage.removeItem('API_TOKEN')
-        }
-        window.location.reload()
+        const persisted = writeApiToken(token || null)
+        if (persisted) window.location.reload()
       }
     }
   }
 
   if (!response.ok) {
-    const error = await response.json().catch(() => ({ error: 'Unknown error' }))
+    const error = await response.json().catch(() => ({ error: i18n.t('The server could not complete the request. Check the connection and try again.', { ns: 'runtime' }) }))
     throw new Error(error.error || `HTTP ${response.status}`)
   }
 
@@ -69,7 +67,7 @@ async function fetchApi<T>(
 
   const text = await response.text()
   console.log(`[API] Response body:`, text.substring(0, 500))
-  
+
   try {
     return JSON.parse(text) as T
   } catch (e) {
@@ -206,24 +204,24 @@ export const tasksApi = {
 
 // Parts API
 export const partsApi = {
-  listByProject: (projectId: string) => 
+  listByProject: (projectId: string) =>
     fetchApi<import('../types').Part[]>(`/projects/${projectId}/parts`),
-  
-  get: (id: string) => 
+
+  get: (id: string) =>
     fetchApi<import('../types').Part>(`/parts/${id}`),
-  
-  create: (projectId: string, data: Partial<import('../types').Part>) => 
+
+  create: (projectId: string, data: Partial<import('../types').Part>) =>
     fetchApi<import('../types').Part>(`/projects/${projectId}/parts`, {
       method: 'POST',
       body: JSON.stringify(data),
     }),
-  
-  update: (id: string, data: Partial<import('../types').Part>) => 
+
+  update: (id: string, data: Partial<import('../types').Part>) =>
     fetchApi<import('../types').Part>(`/parts/${id}`, {
       method: 'PATCH',
       body: JSON.stringify(data),
     }),
-  
+
   delete: (id: string) =>
     fetchApi<void>(`/parts/${id}`, { method: 'DELETE' }),
 
@@ -251,7 +249,7 @@ export const partsApi = {
     })
 
     if (!response.ok) {
-      const error = await response.json().catch(() => ({ error: 'Upload failed' }))
+      const error = await response.json().catch(() => ({ error: i18n.t('Upload failed', { ns: 'runtime' }) }))
       throw new Error(error.error)
     }
 
@@ -305,7 +303,7 @@ export const designsApi = {
     })
 
     if (!response.ok) {
-      const error = await response.json().catch(() => ({ error: 'Upload failed' }))
+      const error = await response.json().catch(() => ({ error: i18n.t('Upload failed', { ns: 'runtime' }) }))
       throw new Error(error.error)
     }
 
@@ -422,25 +420,25 @@ export const notificationsApi = {
 }
 
 export const printersApi = {
-  list: () => 
+  list: () =>
     fetchApi<import('../types').Printer[]>('/printers'),
-  
-  get: (id: string) => 
+
+  get: (id: string) =>
     fetchApi<import('../types').Printer>(`/printers/${id}`),
-  
-  create: (data: Partial<import('../types').Printer>) => 
+
+  create: (data: Partial<import('../types').Printer>) =>
     fetchApi<import('../types').Printer>('/printers', {
       method: 'POST',
       body: JSON.stringify(data),
     }),
-  
-  update: (id: string, data: Partial<import('../types').Printer>) => 
+
+  update: (id: string, data: Partial<import('../types').Printer>) =>
     fetchApi<import('../types').Printer>(`/printers/${id}`, {
       method: 'PATCH',
       body: JSON.stringify(data),
     }),
-  
-  delete: (id: string) => 
+
+  delete: (id: string) =>
     fetchApi<void>(`/printers/${id}`, { method: 'DELETE' }),
 
   setMaintenanceMode: (id: string, maintenanceMode: boolean) =>
@@ -547,7 +545,7 @@ export const printersApi = {
       method: 'POST',
       body: JSON.stringify({ enabled }),
     }),
-  
+
   getState: (id: string) =>
     fetchApi<import('../types').PrinterState>(`/printers/${id}/state`),
 
@@ -737,16 +735,16 @@ export const enqueueProjectParts = async (projectId: string, onProgress?: (msg: 
     for (let i = 0; i < part.quantity; i++) {
       if (onProgress) onProgress(`Queueing ${part.name} (${i + 1}/${part.quantity})...`)
       try {
-        await gcodeLibraryApi.addToQueue(gcodeToPrint.id, spoolData?.material ? { 
-          assigned_spool_id, 
-          project_id: part.project_id, 
-          material_type: spoolData.material.type, 
-          material_color: spoolData.material.color_hex || spoolData.material.color, 
-          filament_name: spoolData.material.name, 
-          source_type: 'project' 
-        } : { 
-          project_id: part.project_id, 
-          source_type: 'project' 
+        await gcodeLibraryApi.addToQueue(gcodeToPrint.id, spoolData?.material ? {
+          assigned_spool_id,
+          project_id: part.project_id,
+          material_type: spoolData.material.type,
+          material_color: spoolData.material.color_hex || spoolData.material.color,
+          filament_name: spoolData.material.name,
+          source_type: 'project'
+        } : {
+          project_id: part.project_id,
+          source_type: 'project'
         })
         addedCount++
       } catch (e) {
@@ -759,12 +757,12 @@ export const enqueueProjectParts = async (projectId: string, onProgress?: (msg: 
 }
 
 export const spoolsApi = {
-  list: () => 
+  list: () =>
     fetchApi<import('../types').MaterialSpool[]>('/spools'),
-  
-  get: (id: string) => 
+
+  get: (id: string) =>
     fetchApi<import('../types').MaterialSpool>(`/spools/${id}`),
-  
+
   create: (data: Partial<import('../types').MaterialSpool>) =>
     fetchApi<import('../types').MaterialSpool>('/spools', {
       method: 'POST',
@@ -885,7 +883,7 @@ export const gcodeLibraryApi = {
     if (parentSTLId) formData.append('parent_stl_id', parentSTLId)
     const response = await fetch(resourceURL(`/api/gcode-library/upload`), { method: 'POST', body: formData })
     if (!response.ok) {
-      const error = await response.json().catch(() => ({ error: 'Upload failed' }))
+      const error = await response.json().catch(() => ({ error: i18n.t('Upload failed', { ns: 'runtime' }) }))
       throw new Error(error.error)
     }
     return response.json() as Promise<import('../types').GCodeLibraryFile>
@@ -932,7 +930,7 @@ export const fileApi = {
     formData.append('file', file)
     const response = await fetch(resourceURL(`/api/files`), { method: 'POST', body: formData })
     if (!response.ok) {
-      const error = await response.json().catch(() => ({ error: 'Upload failed' }))
+      const error = await response.json().catch(() => ({ error: i18n.t('Upload failed', { ns: 'runtime' }) }))
       throw new Error(error.error)
     }
     return response.json() as Promise<import('../types').FileRecord>
@@ -961,7 +959,7 @@ export const stlLibraryApi = {
     if (thumbnail) formData.append('thumbnail', thumbnail, `${file.name}.png`)
     const response = await fetch(resourceURL(`/api/stl-library/upload`), { method: 'POST', body: formData })
     if (!response.ok) {
-      const error = await response.json().catch(() => ({ error: 'Upload failed' }))
+      const error = await response.json().catch(() => ({ error: i18n.t('Upload failed', { ns: 'runtime' }) }))
       throw new Error(error.error)
     }
     return response.json() as Promise<import('../types').STLLibraryFile>
@@ -975,7 +973,7 @@ export const stlLibraryApi = {
     formData.append('thumbnail', thumbnail, `${id}.png`)
     const response = await fetch(resourceURL(`/api/stl-library/${id}/thumbnail`), { method: 'POST', body: formData })
     if (!response.ok) {
-      const error = await response.json().catch(() => ({ error: 'Thumbnail upload failed' }))
+      const error = await response.json().catch(() => ({ error: i18n.t('Thumbnail upload failed', { ns: 'runtime' }) }))
       throw new Error(error.error)
     }
     return response.json() as Promise<import('../types').STLLibraryFile>
@@ -1001,7 +999,7 @@ export const queueApi = {
     })
     const response = await fetch(resourceURL(`/api/queue/upload`), { method: 'POST', body: formData })
     if (!response.ok) {
-      const error = await response.json().catch(() => ({ error: 'Upload failed' }))
+      const error = await response.json().catch(() => ({ error: i18n.t('Upload failed', { ns: 'runtime' }) }))
       throw new Error(error.error)
     }
     return response.json() as Promise<import('../types').GCodeQueueItem>
@@ -1054,7 +1052,7 @@ export const expensesApi = {
     })
 
     if (!response.ok) {
-      const error = await response.json().catch(() => ({ error: 'Upload failed' }))
+      const error = await response.json().catch(() => ({ error: i18n.t('Upload failed', { ns: 'runtime' }) }))
       throw new Error(error.error)
     }
 
@@ -1792,7 +1790,7 @@ async function fetchPublicApi<T>(path: string): Promise<T> {
     headers: { 'Content-Type': 'application/json' },
   })
   if (!response.ok) {
-    const error = await response.json().catch(() => ({ error: 'Unknown error' }))
+    const error = await response.json().catch(() => ({ error: i18n.t('The server could not complete the request. Check the connection and try again.', { ns: 'runtime' }) }))
     throw new Error(error.error || `HTTP ${response.status}`)
   }
   return response.json() as Promise<T>

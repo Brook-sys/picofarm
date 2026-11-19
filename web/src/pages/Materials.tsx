@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, Package, Droplet, ShoppingCart, Trash2, Edit2, Check, X } from 'lucide-react'
@@ -8,6 +9,7 @@ import { useCurrency } from '../hooks/useCurrency'
 import type { Material, MaterialSpool, MaterialType } from '../types'
 
 export default function Materials() {
+  const { t } = useTranslation('library')
   const { formatAmount, symbol } = useCurrency()
   const queryClient = useQueryClient()
 
@@ -76,9 +78,9 @@ export default function Materials() {
       try {
         await deleteMaterial.mutateAsync(material.id)
         setConfirmDeleteId(null)
-        showToast({ title: 'Material deleted', message: material.name, tone: 'success' })
+        showToast({ title: t("Material deleted"), message: material.name, tone: 'success' })
       } catch (err) {
-        setMaterialError(err instanceof Error ? err.message : 'Failed to delete material')
+        setMaterialError(err instanceof Error ? err.message : t("Failed to delete material"))
       }
     } else {
       setConfirmDeleteId(material.id)
@@ -91,9 +93,9 @@ export default function Materials() {
       try {
         await deleteSpool.mutateAsync(spool.id)
         setConfirmDeleteId(null)
-        showToast({ title: 'Spool deleted', message: 'Inventory references were updated.', tone: 'success' })
+        showToast({ title: t("Spool deleted"), message: t("Inventory references were updated."), tone: 'success' })
       } catch (err) {
-        setMaterialError(err instanceof Error ? err.message : 'Failed to delete spool')
+        setMaterialError(err instanceof Error ? err.message : t("Failed to delete spool"))
       }
     } else {
       setConfirmDeleteId(spool.id)
@@ -112,7 +114,7 @@ export default function Materials() {
   const handleCreateMaterial = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     const formData = new FormData(e.currentTarget)
-    
+
     await createMaterial.mutateAsync({
       name: formData.get('name') as string,
       type: formData.get('type') as MaterialType,
@@ -121,15 +123,15 @@ export default function Materials() {
       color_hex: formData.get('color_hex') as string,
       cost_per_kg: parseFloat(formData.get('cost_per_kg') as string) || 0,
     })
-    
+
     setShowAddMaterial(false)
-    showToast({ title: 'Material added', message: formData.get('name') as string, tone: 'success' })
+    showToast({ title: t("Material added"), message: formData.get('name') as string, tone: 'success' })
   }
 
   const handleCreateSpool = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     const formData = new FormData(e.currentTarget)
-    
+
     await createSpool.mutateAsync({
       material_id: formData.get('material_id') as string,
       initial_weight: parseFloat(formData.get('initial_weight') as string) || 1000,
@@ -137,9 +139,9 @@ export default function Materials() {
       purchase_cost: 0,
       location: formData.get('location') as string,
     })
-    
+
     setShowAddSpool(false)
-    showToast({ title: 'Spool added', message: 'Filament inventory updated.', tone: 'success' })
+    showToast({ title: t("Spool added"), message: t("Filament inventory updated."), tone: 'success' })
   }
 
   const getMaterialById = (id: string) => materials.find(m => m.id === id)
@@ -205,27 +207,23 @@ export default function Materials() {
       <div className="flex items-center justify-between mb-8">
         <div>
           <h1 className="text-3xl font-display font-bold text-surface-100">
-            Materials
-          </h1>
+            {t("Materials")}</h1>
           <p className="text-surface-400 mt-1">
-            Manage your filament inventory and supplies
-          </p>
+            {t("Manage your filament inventory and supplies")}</p>
         </div>
         <div className="flex gap-2">
-          <button 
+          <button
             onClick={() => setShowAddMaterial(true)}
             className="btn btn-secondary"
           >
             <Plus className="h-4 w-4 mr-2" />
-            Add Material
-          </button>
-          <button 
+            {t("Add Material")}</button>
+          <button
             onClick={() => setShowAddSpool(true)}
             className="btn btn-primary"
           >
             <Plus className="h-4 w-4 mr-2" />
-            Add Spool
-          </button>
+            {t("Add Spool")}</button>
         </div>
       </div>
 
@@ -241,7 +239,7 @@ export default function Materials() {
           )}
         >
           <Droplet className="h-4 w-4 inline mr-2" />
-          Inventory ({spools.length})
+          {t("Inventory (")}{' '}{spools.length})
         </button>
         <button
           onClick={() => setTab('catalog')}
@@ -253,7 +251,7 @@ export default function Materials() {
           )}
         >
           <Package className="h-4 w-4 inline mr-2" />
-          Catalog ({filamentMaterials.length})
+          {t("Catalog (")}{' '}{filamentMaterials.length})
         </button>
         <button
           onClick={() => setTab('supplies')}
@@ -265,7 +263,7 @@ export default function Materials() {
           )}
         >
           <ShoppingCart className="h-4 w-4 inline mr-2" />
-          Supplies ({supplyMaterials.length})
+          {t("Supplies (")}{' '}{supplyMaterials.length})
         </button>
       </div>
 
@@ -275,30 +273,27 @@ export default function Materials() {
       {/* Spools Tab */}
       {tab === 'spools' && (
         spoolsLoading ? (
-          <div className="text-surface-500">Loading...</div>
+          <div className="text-surface-500">{t("Loading...")}</div>
         ) : spools.length === 0 ? (
           <div className="text-center py-16">
             <Droplet className="h-16 w-16 mx-auto mb-4 text-surface-600" />
             <h3 className="text-xl font-semibold text-surface-300 mb-2">
-              No spools in inventory
-            </h3>
+              {t("No spools in inventory")}</h3>
             <p className="text-surface-500 mb-4">
-              Add your first spool to start tracking material usage
-            </p>
-            <button 
+              {t("Add your first spool to start tracking material usage")}</p>
+            <button
               onClick={() => setShowAddSpool(true)}
               className="btn btn-primary"
             >
               <Plus className="h-4 w-4 mr-2" />
-              Add Spool
-            </button>
+              {t("Add Spool")}</button>
           </div>
         ) : (
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             {spools.map((spool) => {
               const material = getMaterialById(spool.material_id)
               const percentRemaining = (spool.remaining_weight / spool.initial_weight) * 100
-              
+
               return (
                 <div key={spool.id} className="card p-4">
                   <div className="flex items-center gap-3 mb-3">
@@ -308,7 +303,7 @@ export default function Materials() {
                     />
                     <div className="flex-1 min-w-0">
                       <h3 className="font-medium text-surface-100 truncate">
-                        {material?.name || 'Unknown'}
+                        {material?.name || t("Unknown")}
                       </h3>
                       <p className="text-xs text-surface-500">
                         {material?.type?.toUpperCase()}
@@ -321,22 +316,21 @@ export default function Materials() {
                         className="text-xs px-2 py-1 rounded bg-red-500/20 text-red-400 border border-red-500/50 hover:bg-red-500/30 transition-colors"
                         autoFocus
                       >
-                        Delete?
-                      </button>
+                        {t("Delete?")}</button>
                     ) : (
                       <button
                         onClick={() => handleDeleteSpool(spool)}
                         className="p-1.5 rounded-lg text-surface-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
-                        title="Delete spool"
+                        title={t("Delete spool")}
                       >
                         <Trash2 className="h-4 w-4" />
                       </button>
                     )}
                   </div>
-                  
+
                   <div className="space-y-2">
                     <div className="flex items-center justify-between text-sm gap-2">
-                      <span className="text-surface-500">Remaining</span>
+                      <span className="text-surface-500">{t("Remaining")}</span>
                       {editingSpoolId === spool.id ? (
                         <div className="flex items-center gap-1">
                           <div className="relative">
@@ -348,19 +342,19 @@ export default function Materials() {
                               min="0"
                               max="1000"
                             />
-                            <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-surface-500">g</span>
+                            <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-surface-500">{t("g")}</span>
                           </div>
-                          <button onClick={() => saveSpoolWeight(spool)} className="p-1 text-emerald-400 hover:bg-emerald-500/10 rounded"><Check className="h-3.5 w-3.5" /></button>
-                          <button onClick={() => setEditingSpoolId(null)} className="p-1 text-surface-400 hover:bg-surface-800 rounded"><X className="h-3.5 w-3.5" /></button>
+                          <button aria-label={t("Save")} onClick={() => saveSpoolWeight(spool)} className="p-1 text-emerald-400 hover:bg-emerald-500/10 rounded"><Check className="h-3.5 w-3.5" /></button>
+                          <button aria-label={t("Cancel")} onClick={() => setEditingSpoolId(null)} className="p-1 text-surface-400 hover:bg-surface-800 rounded"><X className="h-3.5 w-3.5" /></button>
                         </div>
                       ) : (
                         <button onClick={() => startEditSpool(spool)} className="text-surface-300 hover:text-accent-400 inline-flex items-center gap-1">
-                          {spool.remaining_weight.toFixed(0)}g / {spool.initial_weight.toFixed(0)}g <Edit2 className="h-3 w-3" />
+                          {spool.remaining_weight.toFixed(0)}{t("g /")}{spool.initial_weight.toFixed(0)}{t("g")}<Edit2 className="h-3 w-3" />
                         </button>
                       )}
                     </div>
                     {editingSpoolId === spool.id ? (
-                      <div className="space-y-2" title={`${spoolWeight || 0}g remaining`}>
+                      <div className="space-y-2" title={t("{{name}}g remaining", { name: spoolWeight || 0 })}>
                         <div className="relative h-7 flex items-center">
                           <div className="absolute left-0 right-0 h-2 rounded-full bg-surface-800 overflow-hidden">
                             <div
@@ -384,13 +378,13 @@ export default function Materials() {
                           />
                         </div>
                         <div className="flex justify-between text-[10px] text-surface-500">
-                          <span>0g</span>
-                          <span>{spoolWeight || 0}g</span>
-                          <span>1000g</span>
+                          <span>{t("0g")}</span>
+                          <span>{spoolWeight || 0}{t("g")}</span>
+                          <span>{t("1000g")}</span>
                         </div>
                       </div>
                     ) : (
-                      <div className="h-2 bg-surface-800 rounded-full overflow-hidden" title={`${spool.remaining_weight.toFixed(0)}g remaining`}>
+                      <div className="h-2 bg-surface-800 rounded-full overflow-hidden" title={t("{{name}}g remaining", { name: spool.remaining_weight.toFixed(0) })}>
                         <div
                           className={cn(
                             'h-full transition-all',
@@ -405,21 +399,19 @@ export default function Materials() {
                     {editingSpoolId === spool.id && (
                       <div className="space-y-2 rounded-lg border border-surface-800 bg-surface-900/40 p-2">
                         <label className="text-[10px] text-surface-500 block">
-                          Location
-                          <input
+                          {t("Location")}<input
                             value={spoolForm.location}
                             onChange={e => setSpoolForm(prev => ({ ...prev, location: e.target.value }))}
                             className="input mt-1 h-8 text-xs"
-                            placeholder="Dry Box A, Shelf 3"
+                            placeholder={t("Dry Box A, Shelf 3")}
                           />
                         </label>
                         <label className="text-[10px] text-surface-500 block">
-                          Notes
-                          <textarea
+                          {t("Notes")}<textarea
                             value={spoolForm.notes}
                             onChange={e => setSpoolForm(prev => ({ ...prev, notes: e.target.value }))}
                             className="input mt-1 min-h-16 resize-none text-xs"
-                            placeholder="Optional notes"
+                            placeholder={t("Optional notes")}
                           />
                         </label>
                       </div>
@@ -427,12 +419,12 @@ export default function Materials() {
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex items-center gap-2">
                         <span className={cn('badge', getStatusBadge(spool.status))}>
-                          {spool.status}
+                          {t(({"queued":"Queued","assigned":"Assigned","uploaded":"Uploaded","started":"Started","progress":"Progress","paused":"Paused","resumed":"Resumed","completed":"Completed","failed":"Failed","cancelled":"Cancelled","retried":"Retried","idle":"Idle","printing":"Printing","offline":"Offline","error":"Error","unassigned":"Unassigned","available":"Available","empty":"Empty","in_use":"In use","running":"Running","succeeded":"Succeeded","interrupted":"Interrupted","user":"User","system":"System","printer":"Printer","api":"Api"} as Record<string, string>)[spool.status] || spool.status)}
                         </span>
                         {spool.default_for_material ? (
-                          <span className="badge border border-emerald-500/40 bg-emerald-500/15 text-emerald-300">Default</span>
+                          <span className="badge border border-emerald-500/40 bg-emerald-500/15 text-emerald-300">{t("Default")}</span>
                         ) : (
-                          <button onClick={async () => { await updateSpool.mutateAsync({ id: spool.id, data: { ...spool, default_for_material: true } }); showToast({ title: 'Default filament updated', message: `${material?.type?.toUpperCase() || 'Material'} will use this spool by default.`, tone: 'success' }) }} className="text-[11px] text-surface-500 hover:text-emerald-300">Set default</button>
+                          <button onClick={async () => { await updateSpool.mutateAsync({ id: spool.id, data: { ...spool, default_for_material: true } }); showToast({ title: t("Default filament updated"), message: t("{{name}} will use this spool by default.", { name: material?.type?.toUpperCase() || t("Material") }), tone: 'success' }) }} className="text-[11px] text-surface-500 hover:text-emerald-300">{t("Set default")}</button>
                         )}
                       </div>
                       {spool.location && (
@@ -455,23 +447,20 @@ export default function Materials() {
       {/* Catalog Tab */}
       {tab === 'catalog' && (
         materialsLoading ? (
-          <div className="text-surface-500">Loading...</div>
+          <div className="text-surface-500">{t("Loading...")}</div>
         ) : filamentMaterials.length === 0 ? (
           <div className="text-center py-16">
             <Package className="h-16 w-16 mx-auto mb-4 text-surface-600" />
             <h3 className="text-xl font-semibold text-surface-300 mb-2">
-              No materials in catalog
-            </h3>
+              {t("No materials in catalog")}</h3>
             <p className="text-surface-500 mb-4">
-              Add materials to your catalog before creating spools
-            </p>
+              {t("Add materials to your catalog before creating spools")}</p>
             <button
               onClick={() => setShowAddMaterial(true)}
               className="btn btn-primary"
             >
               <Plus className="h-4 w-4 mr-2" />
-              Add Material
-            </button>
+              {t("Add Material")}</button>
           </div>
         ) : (
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -494,7 +483,7 @@ export default function Materials() {
                     <button
                       onClick={() => startEditMaterial(material)}
                       className="p-1.5 rounded-lg text-surface-500 hover:text-accent-400 hover:bg-accent-500/10 transition-colors"
-                      title="Edit material"
+                      title={t("Edit material")}
                     >
                       <Edit2 className="h-4 w-4" />
                     </button>
@@ -506,13 +495,12 @@ export default function Materials() {
                       className="text-xs px-2 py-1 rounded bg-red-500/20 text-red-400 border border-red-500/50 hover:bg-red-500/30 transition-colors"
                       autoFocus
                     >
-                      Delete?
-                    </button>
+                      {t("Delete?")}</button>
                   ) : (
                     <button
                       onClick={() => handleDeleteMaterial(material)}
                       className="p-1.5 rounded-lg text-surface-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
-                      title="Delete material"
+                      title={t("Delete material")}
                     >
                       <Trash2 className="h-4 w-4" />
                     </button>
@@ -520,8 +508,8 @@ export default function Materials() {
                 </div>
                 {editingMaterialId === material.id ? (
                   <div className="space-y-2">
-                    <input value={materialForm.name} onChange={e => setMaterialForm(prev => ({ ...prev, name: e.target.value }))} className="input h-8 text-xs" placeholder="Name" />
-                    <input value={materialForm.manufacturer} onChange={e => setMaterialForm(prev => ({ ...prev, manufacturer: e.target.value }))} className="input h-8 text-xs" placeholder="Manufacturer" />
+                    <input value={materialForm.name} onChange={e => setMaterialForm(prev => ({ ...prev, name: e.target.value }))} className="input h-8 text-xs" placeholder={t("Name")} />
+                    <input value={materialForm.manufacturer} onChange={e => setMaterialForm(prev => ({ ...prev, manufacturer: e.target.value }))} className="input h-8 text-xs" placeholder={t("Manufacturer")} />
                     <div className="space-y-2 rounded-lg border border-surface-800 bg-surface-900/40 p-2">
                       <div className="flex items-center gap-2">
                         <input
@@ -529,40 +517,40 @@ export default function Materials() {
                           value={materialForm.color_hex && /^#[0-9a-fA-F]{6}$/.test(materialForm.color_hex) ? materialForm.color_hex : '#ffffff'}
                           onChange={e => setMaterialForm(prev => ({ ...prev, color_hex: e.target.value }))}
                           className="h-8 w-10 cursor-pointer rounded border border-surface-700 bg-surface-900 p-0.5"
-                          title="Pick color"
+                          title={t("Pick color")}
                         />
                         <div className="flex-1">
-                          <label className="block text-[10px] text-surface-500 mb-1">HEX color</label>
+                          <label className="block text-[10px] text-surface-500 mb-1">{t("HEX color")}</label>
                           <input
                             value={materialForm.color_hex}
                             onChange={e => setMaterialForm(prev => ({ ...prev, color_hex: e.target.value.startsWith('#') ? e.target.value : `#${e.target.value}` }))}
                             className="input h-8 text-xs font-mono uppercase"
-                            placeholder="#FFFFFF"
+                            placeholder={t("#FFFFFF")}
                             maxLength={7}
                           />
                         </div>
                       </div>
-                      <input value={materialForm.color} onChange={e => setMaterialForm(prev => ({ ...prev, color: e.target.value }))} className="input h-8 text-xs" placeholder="Color name, ex: Black" />
+                      <input value={materialForm.color} onChange={e => setMaterialForm(prev => ({ ...prev, color: e.target.value }))} className="input h-8 text-xs" placeholder={t("Color name, ex: Black")} />
                     </div>
-                    <input value={materialForm.cost_per_kg} onChange={e => setMaterialForm(prev => ({ ...prev, cost_per_kg: e.target.value }))} className="input h-8 text-xs" type="number" min="0" step="0.01" placeholder="Cost/kg" />
+                    <input aria-label={t("Cost/kg")} value={materialForm.cost_per_kg} onChange={e => setMaterialForm(prev => ({ ...prev, cost_per_kg: e.target.value }))} className="input h-8 text-xs" type="number" min="0" step="0.01" placeholder={t("Cost/kg")} />
                     <div className="flex gap-2 pt-1">
-                      <button onClick={() => saveMaterial(material)} className="btn btn-primary text-xs py-1 px-2">Salvar</button>
-                      <button onClick={() => setEditingMaterialId(null)} className="btn btn-secondary text-xs py-1 px-2">Cancelar</button>
+                      <button onClick={() => saveMaterial(material)} className="btn btn-primary text-xs py-1 px-2">{t("Save")}</button>
+                      <button onClick={() => setEditingMaterialId(null)} className="btn btn-secondary text-xs py-1 px-2">{t("Cancel")}</button>
                     </div>
                   </div>
                 ) : (
                   <div className="space-y-1 text-sm">
                     <div className="flex justify-between">
-                      <span className="text-surface-500">Type</span>
+                      <span className="text-surface-500">{t("Type")}</span>
                       <span className="text-surface-300">{material.type.toUpperCase()}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-surface-500">Color</span>
+                      <span className="text-surface-500">{t("Color")}</span>
                       <span className="text-surface-300">{material.color || '—'}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-surface-500">Cost</span>
-                      <span className="text-surface-300">{formatAmount(material.cost_per_kg)}/kg</span>
+                      <span className="text-surface-500">{t("Cost")}</span>
+                      <span className="text-surface-300">{formatAmount(material.cost_per_kg)}{t("/kg")}</span>
                     </div>
                   </div>
                 )}
@@ -575,25 +563,23 @@ export default function Materials() {
       {/* Supplies Tab */}
       {tab === 'supplies' && (
         materialsLoading ? (
-          <div className="text-surface-500">Loading...</div>
+          <div className="text-surface-500">{t("Loading...")}</div>
         ) : supplyMaterials.length === 0 ? (
           <div className="text-center py-16">
             <ShoppingCart className="h-16 w-16 mx-auto mb-4 text-surface-600" />
             <h3 className="text-xl font-semibold text-surface-300 mb-2">
-              No supplies yet
-            </h3>
+              {t("No supplies yet")}</h3>
             <p className="text-surface-500 mb-4">
-              Upload Amazon or other receipts to auto-create supply materials
-            </p>
+              {t("Upload Amazon or other receipts to auto-create supply materials")}</p>
           </div>
         ) : (
           <div className="card overflow-hidden">
             <table className="w-full">
               <thead>
                 <tr className="border-b border-surface-800">
-                  <th className="text-left text-xs font-medium text-surface-500 uppercase px-4 py-2">Item</th>
-                  <th className="text-left text-xs font-medium text-surface-500 uppercase px-4 py-2">Vendor</th>
-                  <th className="text-right text-xs font-medium text-surface-500 uppercase px-4 py-2">Unit Cost</th>
+                  <th className="text-left text-xs font-medium text-surface-500 uppercase px-4 py-2">{t("Item")}</th>
+                  <th className="text-left text-xs font-medium text-surface-500 uppercase px-4 py-2">{t("Vendor")}</th>
+                  <th className="text-right text-xs font-medium text-surface-500 uppercase px-4 py-2">{t("Unit Cost")}</th>
                   <th className="w-10 px-4 py-2"></th>
                 </tr>
               </thead>
@@ -613,8 +599,7 @@ export default function Materials() {
                           className="text-xs px-2 py-1 rounded bg-red-500/20 text-red-400 border border-red-500/50 hover:bg-red-500/30 transition-colors"
                           autoFocus
                         >
-                          Delete?
-                        </button>
+                          {t("Delete?")}</button>
                       ) : (
                         <button
                           onClick={() => handleDeleteMaterial(material)}
@@ -637,64 +622,58 @@ export default function Materials() {
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
           <div className="card w-full max-w-md p-6">
             <h2 className="text-xl font-semibold text-surface-100 mb-4">
-              Add Material
-            </h2>
+              {t("Add Material")}</h2>
             <form onSubmit={handleCreateMaterial}>
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-surface-300 mb-1">
-                    Name *
-                  </label>
+                    {t("Name *")}</label>
                   <input
                     type="text"
                     name="name"
                     required
                     className="input"
-                    placeholder="Prusament PLA Galaxy Black"
+                    placeholder={t("Prusament PLA Galaxy Black")}
                     autoFocus
                   />
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-surface-300 mb-1">
-                      Type *
-                    </label>
+                      {t("Type *")}</label>
                     <select name="type" required className="input">
-                      <option value="pla">PLA</option>
-                      <option value="petg">PETG</option>
-                      <option value="abs">ABS</option>
-                      <option value="asa">ASA</option>
-                      <option value="tpu">TPU</option>
+                      <option value="pla">{t("PLA")}</option>
+                      <option value="petg">{t("PETG")}</option>
+                      <option value="abs">{t("ABS")}</option>
+                      <option value="asa">{t("ASA")}</option>
+                      <option value="tpu">{t("TPU")}</option>
                     </select>
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-surface-300 mb-1">
-                      Manufacturer
-                    </label>
+                      {t("Manufacturer")}</label>
                     <input
                       type="text"
                       name="manufacturer"
                       className="input"
-                      placeholder="Prusament"
+                      placeholder={t("Prusament")}
                     />
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-surface-300 mb-1">
-                      Color
-                    </label>
+                      {t("Color")}</label>
                     <input
                       type="text"
                       name="color"
                       className="input"
-                      placeholder="Galaxy Black"
+                      placeholder={t("Galaxy Black")}
                     />
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-surface-300 mb-1">
-                      Color Hex
-                    </label>
+                      {t("Color Hex")}</label>
                     <input
                       type="color"
                       name="color_hex"
@@ -705,7 +684,7 @@ export default function Materials() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-surface-300 mb-1">
-                    Cost per kg ({symbol})
+                    {t("Cost per kg (")}{' '}{symbol})
                   </label>
                   <input
                     type="number"
@@ -722,14 +701,13 @@ export default function Materials() {
                   onClick={() => setShowAddMaterial(false)}
                   className="btn btn-ghost"
                 >
-                  Cancel
-                </button>
+                  {t("Cancel")}</button>
                 <button
                   type="submit"
                   disabled={createMaterial.isPending}
                   className="btn btn-primary"
                 >
-                  {createMaterial.isPending ? 'Adding...' : 'Add Material'}
+                  {createMaterial.isPending ? t("Adding...") : t("Add Material")}
                 </button>
               </div>
             </form>
@@ -742,13 +720,11 @@ export default function Materials() {
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
           <div className="card w-full max-w-md p-6">
             <h2 className="text-xl font-semibold text-surface-100 mb-4">
-              Add Spool
-            </h2>
+              {t("Add Spool")}</h2>
             {materials.length === 0 ? (
               <div className="text-center py-4">
                 <p className="text-surface-500 mb-4">
-                  You need to add a material first
-                </p>
+                  {t("You need to add a material first")}</p>
                 <button
                   onClick={() => {
                     setShowAddSpool(false)
@@ -756,18 +732,16 @@ export default function Materials() {
                   }}
                   className="btn btn-primary"
                 >
-                  Add Material
-                </button>
+                  {t("Add Material")}</button>
               </div>
             ) : (
               <form onSubmit={handleCreateSpool}>
                 <div className="space-y-4">
                   <div>
                     <label className="block text-sm font-medium text-surface-300 mb-1">
-                      Material *
-                    </label>
+                      {t("Material *")}</label>
                     <select name="material_id" required className="input">
-                      <option value="">Select material...</option>
+                      <option value="">{t("Select material...")}</option>
                       {materials.map((m) => (
                         <option key={m.id} value={m.id}>
                           {m.name} ({m.type.toUpperCase()})
@@ -777,8 +751,7 @@ export default function Materials() {
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-surface-300 mb-1">
-                      Initial Weight (g)
-                    </label>
+                      {t("Initial Weight (g)")}</label>
                     <input
                       type="number"
                       name="initial_weight"
@@ -786,17 +759,16 @@ export default function Materials() {
                       max="1000"
                       className="input"
                     />
-                    <p className="text-xs text-surface-500 mt-1">Cost comes from the selected catalog material.</p>
+                    <p className="text-xs text-surface-500 mt-1">{t("Cost comes from the selected catalog material.")}</p>
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-surface-300 mb-1">
-                      Location
-                    </label>
+                      {t("Location")}</label>
                     <input
                       type="text"
                       name="location"
                       className="input"
-                      placeholder="Dry Box A, Shelf 3"
+                      placeholder={t("Dry Box A, Shelf 3")}
                     />
                   </div>
                 </div>
@@ -806,14 +778,13 @@ export default function Materials() {
                     onClick={() => setShowAddSpool(false)}
                     className="btn btn-ghost"
                   >
-                    Cancel
-                  </button>
+                    {t("Cancel")}</button>
                   <button
                     type="submit"
                     disabled={createSpool.isPending}
                     className="btn btn-primary"
                   >
-                    {createSpool.isPending ? 'Adding...' : 'Add Spool'}
+                    {createSpool.isPending ? t("Adding...") : t("Add Spool")}
                   </button>
                 </div>
               </form>

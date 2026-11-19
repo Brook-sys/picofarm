@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import { resourceURL } from '../lib/platform'
 import { useMemo, useState } from 'react'
 import { FileCode, Search, X } from 'lucide-react'
@@ -16,6 +17,7 @@ interface GCodeFilePickerProps {
 }
 
 export default function GCodeFilePicker({ onSelect, onSelectMany, multiple = false, stlWithGCodeOnly = false, onClose }: GCodeFilePickerProps) {
+  const { t } = useTranslation('components')
   const [search, setSearch] = useState('')
   const [selected, setSelected] = useState<RootLibraryFile[]>([])
 
@@ -53,11 +55,11 @@ export default function GCodeFilePicker({ onSelect, onSelectMany, multiple = fal
       <div className="w-full max-w-3xl rounded-2xl border border-surface-800 bg-surface-950 shadow-2xl">
         <div className="flex items-center justify-between border-b border-surface-800 p-4">
           <div>
-            <div className="font-semibold text-surface-100">Selecionar arquivo da biblioteca</div>
-            <div className="text-xs text-surface-500">Apenas arquivos na raiz da aba Files: STL ou G-code</div>
+            <div className="font-semibold text-surface-100">{t("Select file from library")}</div>
+            <div className="text-xs text-surface-500">{t("Only root-level files from the Files tab: STL or G-code")}</div>
           </div>
           <div className="flex items-center gap-2">
-            {multiple && <button disabled={selected.length === 0} onClick={() => onSelectMany?.(selected)} className="btn btn-primary text-xs disabled:opacity-50">Adicionar {selected.length || ''}</button>}
+            {multiple && <button disabled={selected.length === 0} onClick={() => onSelectMany?.(selected)} className="btn btn-primary text-xs disabled:opacity-50">{t("Add")}{selected.length || ''}</button>}
             <button onClick={onClose} className="text-surface-400 hover:text-surface-200">
               <X className="h-5 w-5" />
             </button>
@@ -71,16 +73,16 @@ export default function GCodeFilePicker({ onSelect, onSelectMany, multiple = fal
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Buscar por nome, material, perfil..."
+              placeholder={t("Search by name, material, profile...")}
               className="input w-full pl-9"
             />
           </div>
 
           <div className="max-h-[520px] overflow-y-auto space-y-1 rounded-lg border border-surface-800 bg-surface-900/40 p-1">
             {isLoading ? (
-              <div className="p-8 text-center text-surface-500">Carregando...</div>
+              <div className="p-8 text-center text-surface-500">{t("Loading...")}</div>
             ) : items.length === 0 ? (
-              <div className="p-8 text-center text-surface-500">Nenhum arquivo raiz encontrado.</div>
+              <div className="p-8 text-center text-surface-500">{t("No root files found.")}</div>
             ) : (
               items.map((item) => (
                   <button
@@ -104,9 +106,9 @@ export default function GCodeFilePicker({ onSelect, onSelectMany, multiple = fal
                       <div className="mt-0.5 text-xs text-surface-500 flex items-center gap-2">
                         {item.type === 'gcode' ? <>
                           {item.file.material_type && <span className="uppercase">{item.file.material_type}</span>}
-                          {(item.file.filament_grams || 0) > 0 && <span>{item.file.filament_grams!.toFixed(0)}g</span>}
-                          {(item.file.estimated_seconds || 0) > 0 && <span>{Math.floor(item.file.estimated_seconds! / 3600)}h {Math.floor((item.file.estimated_seconds! % 3600) / 60)}m</span>}
-                        </> : <span>{item.file.gcodes?.length || 0} G-code linked</span>}
+                          {(item.file.filament_grams || 0) > 0 && <span>{item.file.filament_grams!.toFixed(0)}{t("g")}</span>}
+                          {(item.file.estimated_seconds || 0) > 0 && <span>{Math.floor(item.file.estimated_seconds! / 3600)}{t("h")}{Math.floor((item.file.estimated_seconds! % 3600) / 60)}{t("m")}</span>}
+                        </> : <span>{item.file.gcodes?.length || 0} {t("G-code linked")}</span>}
                       </div>
                     </div>
                     <div className="text-xs text-surface-500 text-right truncate max-w-48">{item.file.file_name}</div>

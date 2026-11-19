@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import { materialBadgeStyle, normalizeMaterialTypeKey, type MaterialColorMap } from '../lib/materialColors'
 
 /**
@@ -11,17 +12,17 @@ import { materialBadgeStyle, normalizeMaterialTypeKey, type MaterialColorMap } f
  * built from the type name (bg-${type}-500) would never be generated.
  */
 export function MaterialBadge({ material, colors }: { material?: string; colors: MaterialColorMap }) {
+  const { t } = useTranslation('components')
   const type = normalizeMaterialTypeKey(material ?? '')
   if (!type) {
     return (
       <span className="inline-flex items-center rounded-full border border-surface-700 bg-surface-800/60 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-surface-500">
-        No material
-      </span>
+        {t("No material")}</span>
     )
   }
   return (
     <span
-      title={`${type.toUpperCase()} filament`}
+      title={t("{{name}} filament", { name: type.toUpperCase() })}
       className="inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide"
       style={materialBadgeStyle(material, colors)}
     >

@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import { useCallback, useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import {
@@ -25,7 +26,19 @@ const statusConfig: Record<OrderStatus, { label: string; color: string; icon: Re
   cancelled: { label: 'Cancelled', color: 'bg-red-100 text-red-700', icon: <XCircle className="w-4 h-4" /> },
 }
 
+const displayLabels: Record<string, string> = {
+  marketplace: 'Marketplace', etsy: 'Etsy', website: 'Website', direct: 'Direct', other: 'Other',
+  manual: 'Manual', imported: 'Imported',
+  pending: 'Pending', in_progress: 'In Progress', completed: 'Completed', shipped: 'Shipped', cancelled: 'Cancelled',
+  draft: 'Draft', sent: 'Sent', accepted: 'Accepted', rejected: 'Rejected', expired: 'Expired',
+  confirmed: 'Confirmed', processing: 'Processing...', failed: 'Parse Failed', pending_review: 'Pending Review',
+  queued: 'Queued', printing: 'Printing', paused: 'Paused',
+}
+
 export function OrderDetail() {
+  const { t, i18n } = useTranslation('commerce')
+  const locale = i18n.resolvedLanguage?.startsWith('en') ? 'en-US' : 'pt-BR'
+
   const { id } = useParams<{ id: string }>()
   const [order, setOrder] = useState<Order | null>(null)
   const [progress, setProgress] = useState<OrderProgress | null>(null)
@@ -49,12 +62,12 @@ export function OrderDetail() {
     setOrder(orderResult.status === 'fulfilled' ? orderResult.value : null)
     setProgress(progressResult.status === 'fulfilled' ? progressResult.value : null)
     if (orderResult.status === 'rejected') {
-      setLoadError('Unable to load order. Please try again.')
+      setLoadError(t("Unable to load order. Please try again."))
     } else if (progressResult.status === 'rejected') {
-      setLoadError('Unable to load progress. Order details are available; retry to refresh progress.')
+      setLoadError(t("Unable to load progress. Order details are available; retry to refresh progress."))
     }
     setLoading(false)
-  }, [id])
+  }, [id, t])
 
   useEffect(() => {
     if (id) {
@@ -71,7 +84,7 @@ export function OrderDetail() {
       setOrder(updated)
     } catch (err) {
       console.error('Failed to update status:', err)
-      setActionError('Unable to update order status. Refresh the order before trying again.')
+      setActionError(t("Unable to update order status. Refresh the order before trying again."))
     } finally {
       setUpdatingStatus(false)
     }
@@ -86,7 +99,7 @@ export function OrderDetail() {
       loadOrder()
     } catch (err) {
       console.error('Failed to process item:', err)
-      setActionError('Unable to process item. Refresh the order before trying again.')
+      setActionError(t("Unable to process item. Refresh the order before trying again."))
     } finally {
       setProcessingItem(null)
     }
@@ -100,7 +113,7 @@ export function OrderDetail() {
   // the reason instead of failing on click.
   const handleRemoveItem = async (itemId: string) => {
     if (!id) return
-    if (!confirm('Remove this item from the order?')) return
+    if (!confirm(t("Remove this item from the order? Other order items will not be changed."))) return
     setActionError(null)
     setRemovingItem(itemId)
     try {
@@ -108,7 +121,7 @@ export function OrderDetail() {
       loadOrder()
     } catch (err) {
       console.error('Failed to remove item:', err)
-      setActionError('Unable to remove item. Refresh the order before trying again.')
+      setActionError(t("Unable to remove item. Refresh the order before trying again."))
     } finally {
       setRemovingItem(null)
     }
@@ -116,7 +129,7 @@ export function OrderDetail() {
 
   const handleShip = async () => {
     if (!id) return
-    const trackingNumber = prompt('Enter tracking number (optional):')
+    const trackingNumber = prompt(t('Enter tracking number (optional):'))
     if (trackingNumber === null) return
     setActionError(null)
     setUpdatingStatus(true)
@@ -125,7 +138,7 @@ export function OrderDetail() {
       setOrder(updated)
     } catch (err) {
       console.error('Failed to mark as shipped:', err)
-      setActionError('Unable to mark order as shipped. Refresh the order before trying again.')
+      setActionError(t("Unable to mark order as shipped. Refresh the order before trying again."))
     } finally {
       setUpdatingStatus(false)
     }
@@ -133,13 +146,13 @@ export function OrderDetail() {
 
   const formatDate = (dateStr?: string) => {
     if (!dateStr) return '-'
-    return new Date(dateStr).toLocaleString()
+    return new Date(dateStr).toLocaleString(locale)
   }
 
   if (loading) {
     return (
       <div className="p-6">
-        <div className="text-center py-12 text-gray-500">Loading order...</div>
+        <div className="text-center py-12 text-gray-500">{t("Loading order...")}</div>
       </div>
     )
   }
@@ -150,15 +163,17 @@ export function OrderDetail() {
         <div className="text-center py-12">
           <Package className="w-12 h-12 mx-auto text-gray-400 mb-4" />
           <h3 className="text-lg font-medium text-gray-900 mb-2" role="alert">
-            {loadError || 'Order not found'}
+            {loadError || t("Order not found")}
           </h3>
           {loadError && (
             <button onClick={loadOrder} className="block mx-auto mb-4 text-blue-600 hover:text-blue-700">
-              Retry loading order
+
+              {t("Retry loading order")}
             </button>
           )}
           <Link to="/orders" className="text-blue-600 hover:text-blue-700">
-            Back to orders
+
+            {t("Back to orders")}
           </Link>
         </div>
       </div>
@@ -176,24 +191,24 @@ export function OrderDetail() {
         <div role="alert" className="mb-4 rounded-lg border border-red-200 bg-red-50 p-4 text-red-700">
           {loadError && <p>{loadError}</p>}
           {actionError && <p>{actionError}</p>}
-          <button onClick={loadOrder} className="mt-2 underline">Refresh order</button>
+          <button onClick={loadOrder} className="mt-2 underline">{t("Refresh order")}</button>
         </div>
       )}
       {/* Header */}
       <div className="flex items-center gap-4 mb-6">
-        <Link to="/orders" className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
+        <Link aria-label={t("Open details")} to="/orders" className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
           <ArrowLeft className="w-5 h-5" />
         </Link>
         <div className="flex-1">
           <h1 className="text-2xl font-bold">{order.customer_name}</h1>
           <p className="text-gray-600">
-            {order.source.charAt(0).toUpperCase() + order.source.slice(1)} Order
+            {order.source.charAt(0).toUpperCase() + order.source.slice(1)}  {t("Order")}
             {order.source_order_id && ` #${order.source_order_id}`}
           </p>
         </div>
         <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium ${statusConfig[order.status].color}`}>
           {statusConfig[order.status].icon}
-          {statusConfig[order.status].label}
+          {t(statusConfig[order.status].label)}
         </span>
       </div>
 
@@ -203,10 +218,10 @@ export function OrderDetail() {
           {/* Progress */}
           {progress && (
             <div className="bg-white rounded-lg border p-6">
-              <h2 className="text-lg font-semibold mb-4">Progress</h2>
+              <h2 className="text-lg font-semibold mb-4">{t("Progress")}</h2>
               <div className="mb-4">
                 <div className="flex justify-between text-sm text-gray-600 mb-1">
-                  <span>{progress.completed_jobs} of {progress.total_jobs} jobs complete</span>
+                  <span>{progress.completed_jobs}  {t("of")} {progress.total_jobs}  {t("jobs complete")}</span>
                   <span>{Math.round(progress.progress_percent)}%</span>
                 </div>
                 <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
@@ -219,11 +234,11 @@ export function OrderDetail() {
               <div className="grid grid-cols-2 gap-4 text-center">
                 <div className="p-3 bg-gray-50 rounded-lg">
                   <div className="text-2xl font-bold text-gray-900">{progress.completed_items}</div>
-                  <div className="text-sm text-gray-500">Items Processed</div>
+                  <div className="text-sm text-gray-500">{t("Items Processed")}</div>
                 </div>
                 <div className="p-3 bg-gray-50 rounded-lg">
                   <div className="text-2xl font-bold text-gray-900">{progress.total_items}</div>
-                  <div className="text-sm text-gray-500">Total Items</div>
+                  <div className="text-sm text-gray-500">{t("Total Items")}</div>
                 </div>
               </div>
             </div>
@@ -232,13 +247,14 @@ export function OrderDetail() {
           {/* Items */}
           <div className="bg-white rounded-lg border p-6">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold">Order Items</h2>
+              <h2 className="text-lg font-semibold">{t("Order Items")}</h2>
               <button
                 onClick={() => setShowAddItem(true)}
                 className="inline-flex items-center gap-1 text-sm text-blue-600 hover:text-blue-700"
               >
                 <Plus className="w-4 h-4" />
-                Add Item
+
+                {t("Add Item")}
               </button>
             </div>
 
@@ -250,8 +266,8 @@ export function OrderDetail() {
                     className="flex items-center justify-between p-4 border rounded-lg"
                   >
                     <div>
-                      <div className="font-medium">{item.sku || 'No SKU'}</div>
-                      <div className="text-sm text-gray-500">Qty: {item.quantity}</div>
+                      <div className="font-medium">{item.sku || t("No SKU")}</div>
+                      <div className="text-sm text-gray-500">{t("Qty:")} {item.quantity}</div>
                       {item.notes && (
                         <div className="text-sm text-gray-500 mt-1">{item.notes}</div>
                       )}
@@ -264,21 +280,21 @@ export function OrderDetail() {
                           className="inline-flex items-center gap-1 px-3 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
                         >
                           <Play className="w-4 h-4" />
-                          {processingItem === item.id ? 'Processing...' : 'Process'}
+                          {processingItem === item.id ? t("Processing...") : t("Process")}
                         </button>
                       ) : (
-                        <span className="text-sm text-amber-600">No template linked</span>
+                        <span className="text-sm text-amber-600">{t("No template linked")}</span>
                       )}
                       <button
                         onClick={() => handleRemoveItem(item.id)}
                         disabled={removingItem === item.id || processedItemIds.has(item.id)}
                         title={processedItemIds.has(item.id)
-                          ? 'This item already has a task. The database blocks removing an order item that a task references — remove the task first.'
-                          : 'Remove this item from the order'}
+                          ? t("This item already has a task. The database blocks removing an order item that a task references — remove the task first.")
+                          : t("Remove this item from the order")}
                         className="inline-flex items-center gap-1 px-3 py-1.5 text-sm text-red-600 border border-red-200 rounded hover:bg-red-50 disabled:opacity-50"
                       >
                         <Trash2 className="w-4 h-4" />
-                        {removingItem === item.id ? 'Removing...' : 'Remove'}
+                        {removingItem === item.id ? t("Removing...") : t("Remove")}
                       </button>
                     </div>
                   </div>
@@ -286,7 +302,8 @@ export function OrderDetail() {
               </div>
             ) : (
               <div className="text-center py-8 text-gray-500">
-                No items yet. Add items to this order.
+
+                {t("No items yet. Add items to this order.")}
               </div>
             )}
           </div>
@@ -294,17 +311,18 @@ export function OrderDetail() {
           {/* Tasks */}
           {order.tasks && order.tasks.length > 0 && (
             <div className="bg-white rounded-lg border p-6">
-              <h2 className="text-lg font-semibold mb-4">Tasks</h2>
+              <h2 className="text-lg font-semibold mb-4">{t("Tasks")}</h2>
               <div className="space-y-2">
                 {order.tasks.map(task => (
-                  <Link
+                  <Link aria-label={t("Open details")}
                     key={task.id}
                     to={`/tasks/${task.id}`}
                     className="block p-3 border rounded-lg hover:bg-gray-50 transition-colors"
                   >
                     <div className="font-medium">{task.name}</div>
                     <div className="text-sm text-gray-500">
-                      Status: {task.status} | Progress: {Math.round(task.progress || 0)}%
+
+                      {t("Status:")} {t(displayLabels[task.status] || task.status)}  {t("| Progress:")} {Math.round(task.progress || 0)}%
                     </div>
                   </Link>
                 ))}
@@ -315,7 +333,7 @@ export function OrderDetail() {
           {/* Events */}
           {order.events && order.events.length > 0 && (
             <div className="bg-white rounded-lg border p-6">
-              <h2 className="text-lg font-semibold mb-4">Activity</h2>
+              <h2 className="text-lg font-semibold mb-4">{t("Activity")}</h2>
               <div className="space-y-3">
                 {order.events.map(event => (
                   <div key={event.id} className="flex gap-3">
@@ -335,7 +353,7 @@ export function OrderDetail() {
         <div className="space-y-6">
           {/* Actions */}
           <div className="bg-white rounded-lg border p-6">
-            <h2 className="text-lg font-semibold mb-4">Actions</h2>
+            <h2 className="text-lg font-semibold mb-4">{t("Actions")}</h2>
             <div className="space-y-2">
               {order.status === 'pending' && (
                 <button
@@ -343,7 +361,8 @@ export function OrderDetail() {
                   disabled={updatingStatus}
                   className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
                 >
-                  Start Processing
+
+                  {t("Start Processing")}
                 </button>
               )}
               {order.status === 'in_progress' && (
@@ -352,7 +371,8 @@ export function OrderDetail() {
                   disabled={updatingStatus}
                   className="w-full px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
                 >
-                  Mark Completed
+
+                  {t("Mark Completed")}
                 </button>
               )}
               {order.status === 'completed' && (
@@ -361,7 +381,8 @@ export function OrderDetail() {
                   disabled={updatingStatus}
                   className="w-full px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50"
                 >
-                  Mark Shipped
+
+                  {t("Mark Shipped")}
                 </button>
               )}
               {(order.status === 'pending' || order.status === 'in_progress') && (
@@ -370,7 +391,8 @@ export function OrderDetail() {
                   disabled={updatingStatus}
                   className="w-full px-4 py-2 text-red-600 border border-red-200 rounded-lg hover:bg-red-50"
                 >
-                  Cancel Order
+
+                  {t("Cancel Order")}
                 </button>
               )}
             </div>
@@ -378,12 +400,12 @@ export function OrderDetail() {
 
           {/* Details */}
           <div className="bg-white rounded-lg border p-6">
-            <h2 className="text-lg font-semibold mb-4">Details</h2>
+            <h2 className="text-lg font-semibold mb-4">{t("Details")}</h2>
             <dl className="space-y-3">
               {order.customer_email && (
                 <div>
                   <dt className="text-sm text-gray-500 flex items-center gap-1">
-                    <Mail className="w-4 h-4" /> Email
+                    <Mail className="w-4 h-4" />  {t("Email")}
                   </dt>
                   <dd className="text-sm font-medium">{order.customer_email}</dd>
                 </div>
@@ -391,24 +413,24 @@ export function OrderDetail() {
               {order.due_date && (
                 <div>
                   <dt className="text-sm text-gray-500 flex items-center gap-1">
-                    <Calendar className="w-4 h-4" /> Due Date
+                    <Calendar className="w-4 h-4" />  {t("Due Date")}
                   </dt>
                   <dd className="text-sm font-medium">{formatDate(order.due_date)}</dd>
                 </div>
               )}
               <div>
-                <dt className="text-sm text-gray-500">Created</dt>
+                <dt className="text-sm text-gray-500">{t("Created")}</dt>
                 <dd className="text-sm font-medium">{formatDate(order.created_at)}</dd>
               </div>
               <div>
-                <dt className="text-sm text-gray-500">Priority</dt>
+                <dt className="text-sm text-gray-500">{t("Priority")}</dt>
                 <dd className="text-sm font-medium">
-                  {order.priority === 0 ? 'Normal' : order.priority === 1 ? 'High' : 'Urgent'}
+                  {order.priority === 0 ? t("Normal") : order.priority === 1 ? t("High") : t("Urgent")}
                 </dd>
               </div>
               {order.notes && (
                 <div>
-                  <dt className="text-sm text-gray-500">Notes</dt>
+                  <dt className="text-sm text-gray-500">{t("Notes")}</dt>
                   <dd className="text-sm">{order.notes}</dd>
                 </div>
               )}
@@ -439,6 +461,8 @@ interface AddItemModalProps {
 }
 
 function AddItemModal({ orderId, onClose, onAdded }: AddItemModalProps) {
+  const { t } = useTranslation('commerce')
+
   const [projects, setProjects] = useState<Project[]>([])
   const [projectId, setProjectId] = useState('')
   const [sku, setSku] = useState('')
@@ -484,20 +508,21 @@ function AddItemModal({ orderId, onClose, onAdded }: AddItemModalProps) {
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
       <div className="bg-white rounded-lg shadow-xl w-full max-w-md p-6">
-        <h2 className="text-xl font-bold mb-4">Add Order Item</h2>
+        <h2 className="text-xl font-bold mb-4">{t("Add Order Item")}</h2>
 
         <form onSubmit={handleSubmit}>
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-surface-300 mb-1">
-                Project (product catalog)
+
+                {t("Project (product catalog)")}
               </label>
               <select
                 value={projectId}
                 onChange={e => setProjectId(e.target.value)}
                 className="input"
               >
-                <option value="">No project</option>
+                <option value="">{t("No project")}</option>
                 {projects.map(p => (
                   <option key={p.id} value={p.id}>
                     {p.name} {p.sku && `(${p.sku})`}
@@ -508,20 +533,22 @@ function AddItemModal({ orderId, onClose, onAdded }: AddItemModalProps) {
 
             <div>
               <label className="block text-sm font-medium text-surface-300 mb-1">
-                SKU
+
+                {t("SKU")}
               </label>
               <input
                 type="text"
                 value={sku}
                 onChange={e => setSku(e.target.value)}
                 className="input"
-                placeholder="Optional SKU"
+                placeholder={t("Optional SKU")}
               />
             </div>
 
             <div>
               <label className="block text-sm font-medium text-surface-300 mb-1">
-                Quantity
+
+                {t("Quantity")}
               </label>
               <input
                 type="number"
@@ -534,7 +561,8 @@ function AddItemModal({ orderId, onClose, onAdded }: AddItemModalProps) {
 
             <div>
               <label className="block text-sm font-medium text-surface-300 mb-1">
-                Notes
+
+                {t("Notes")}
               </label>
               <textarea
                 value={notes}
@@ -551,14 +579,15 @@ function AddItemModal({ orderId, onClose, onAdded }: AddItemModalProps) {
               onClick={onClose}
               className="px-4 py-2 text-gray-600 hover:text-gray-800"
             >
-              Cancel
+
+              {t("Cancel")}
             </button>
             <button
               type="submit"
               disabled={adding}
               className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
             >
-              {adding ? 'Adding...' : 'Add Item'}
+              {adding ? t("Adding...") : t("Add Item")}
             </button>
           </div>
         </form>

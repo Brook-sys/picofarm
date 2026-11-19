@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { FileText, Plus, ChevronRight, Send, CheckCircle, XCircle, Clock, Edit3, Trash2 } from 'lucide-react'
@@ -14,6 +15,9 @@ const statusConfig: Record<QuoteStatus, { label: string; color: string; icon: ty
 }
 
 export default function Quotes() {
+  const { t, i18n } = useTranslation('commerce')
+  const locale = i18n.resolvedLanguage?.startsWith('en') ? 'en-US' : 'pt-BR'
+
   const { formatCents } = useCurrency()
   const [quotes, setQuotes] = useState<Quote[]>([])
   const [customers, setCustomers] = useState<Customer[]>([])
@@ -58,7 +62,7 @@ export default function Quotes() {
   }
 
   const handleDelete = async (quoteId: string) => {
-    if (!confirm('Delete this quote?')) return
+    if (!confirm(t("Delete this quote? This permanently removes the quote and its options."))) return
     try {
       await quotesApi.delete(quoteId)
       loadData()
@@ -85,15 +89,16 @@ export default function Quotes() {
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-display font-bold text-surface-100">Quotes</h1>
-          <p className="text-sm text-surface-400 mt-1">{quotes.length} quote{quotes.length !== 1 ? 's' : ''}</p>
+          <h1 className="text-2xl font-display font-bold text-surface-100">{t("Quotes")}</h1>
+          <p className="text-sm text-surface-400 mt-1">{t("{{count}} quotes", { count: quotes.length })}</p>
         </div>
         <button
           onClick={() => setShowCreateModal(true)}
           className="inline-flex items-center gap-2 px-4 py-2 bg-accent-500 text-white rounded-lg hover:bg-accent-600 transition-colors text-sm font-medium"
         >
           <Plus className="h-4 w-4" />
-          New Quote
+
+          {t("New Quote")}
         </button>
       </div>
 
@@ -104,12 +109,12 @@ export default function Quotes() {
           onChange={(e) => setStatusFilter(e.target.value)}
           className="px-3 py-2 bg-surface-800 border border-surface-700 rounded-lg text-surface-200 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500"
         >
-          <option value="">All Statuses</option>
-          <option value="draft">Draft</option>
-          <option value="sent">Sent</option>
-          <option value="accepted">Accepted</option>
-          <option value="rejected">Rejected</option>
-          <option value="expired">Expired</option>
+          <option value="">{t("All Statuses")}</option>
+          <option value="draft">{t("Draft")}</option>
+          <option value="sent">{t("Sent")}</option>
+          <option value="accepted">{t("Accepted")}</option>
+          <option value="rejected">{t("Rejected")}</option>
+          <option value="expired">{t("Expired")}</option>
         </select>
       </div>
 
@@ -117,14 +122,15 @@ export default function Quotes() {
       {quotes.length === 0 ? (
         <div className="text-center py-16">
           <FileText className="h-12 w-12 text-surface-600 mx-auto mb-4" />
-          <h3 className="text-lg font-medium text-surface-300 mb-2">No quotes yet</h3>
-          <p className="text-surface-500 text-sm mb-4">Create your first quote to start tracking custom jobs.</p>
+          <h3 className="text-lg font-medium text-surface-300 mb-2">{t("No quotes yet")}</h3>
+          <p className="text-surface-500 text-sm mb-4">{t("Create your first quote to start tracking custom jobs.")}</p>
           <button
             onClick={() => setShowCreateModal(true)}
             className="inline-flex items-center gap-2 px-4 py-2 bg-accent-500 text-white rounded-lg hover:bg-accent-600 transition-colors text-sm"
           >
             <Plus className="h-4 w-4" />
-            New Quote
+
+            {t("New Quote")}
           </button>
         </div>
       ) : (
@@ -132,12 +138,12 @@ export default function Quotes() {
           <table className="w-full">
             <thead>
               <tr className="border-b border-surface-800">
-                <th className="text-left text-xs font-medium text-surface-400 uppercase tracking-wider px-4 py-3">Quote #</th>
-                <th className="text-left text-xs font-medium text-surface-400 uppercase tracking-wider px-4 py-3">Title</th>
-                <th className="text-left text-xs font-medium text-surface-400 uppercase tracking-wider px-4 py-3">Customer</th>
-                <th className="text-left text-xs font-medium text-surface-400 uppercase tracking-wider px-4 py-3">Status</th>
-                <th className="text-right text-xs font-medium text-surface-400 uppercase tracking-wider px-4 py-3">Total</th>
-                <th className="text-left text-xs font-medium text-surface-400 uppercase tracking-wider px-4 py-3">Date</th>
+                <th className="text-left text-xs font-medium text-surface-400 uppercase tracking-wider px-4 py-3">{t("Quote #")}</th>
+                <th className="text-left text-xs font-medium text-surface-400 uppercase tracking-wider px-4 py-3">{t("Title")}</th>
+                <th className="text-left text-xs font-medium text-surface-400 uppercase tracking-wider px-4 py-3">{t("Customer")}</th>
+                <th className="text-left text-xs font-medium text-surface-400 uppercase tracking-wider px-4 py-3">{t("Status")}</th>
+                <th className="text-right text-xs font-medium text-surface-400 uppercase tracking-wider px-4 py-3">{t("Total")}</th>
+                <th className="text-left text-xs font-medium text-surface-400 uppercase tracking-wider px-4 py-3">{t("Date")}</th>
                 <th className="w-10" />
               </tr>
             </thead>
@@ -163,23 +169,23 @@ export default function Quotes() {
                     <td className="px-4 py-3">
                       <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium ${config.color}`}>
                         <StatusIcon className="h-3 w-3" />
-                        {config.label}
+                        {t(config.label)}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-sm text-surface-300 text-right font-mono">
                       {getMaxOptionTotal(quote) > 0 ? formatCents(getMaxOptionTotal(quote)) : '—'}
                     </td>
                     <td className="px-4 py-3 text-sm text-surface-500">
-                      {new Date(quote.created_at).toLocaleDateString()}
+                      {new Date(quote.created_at).toLocaleDateString(locale)}
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1">
                         {quote.status === 'draft' && (
-                          <button onClick={() => handleDelete(quote.id)} className="text-surface-600 hover:text-red-400" title="Delete quote">
+                          <button onClick={() => handleDelete(quote.id)} className="text-surface-600 hover:text-red-400" title={t("Delete quote")}>
                             <Trash2 className="h-3.5 w-3.5" />
                           </button>
                         )}
-                        <Link to={`/quotes/${quote.id}`} className="text-surface-500 hover:text-surface-300">
+                        <Link aria-label={t("Open details")} to={`/quotes/${quote.id}`} className="text-surface-500 hover:text-surface-300">
                           <ChevronRight className="h-4 w-4" />
                         </Link>
                       </div>
@@ -196,28 +202,28 @@ export default function Quotes() {
       {showCreateModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-surface-900 border border-surface-700 rounded-xl p-6 w-full max-w-md">
-            <h2 className="text-lg font-display font-semibold text-surface-100 mb-4">New Quote</h2>
+            <h2 className="text-lg font-display font-semibold text-surface-100 mb-4">{t("New Quote")}</h2>
             <form onSubmit={handleCreate} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-surface-300 mb-1">Customer *</label>
+                <label className="block text-sm font-medium text-surface-300 mb-1">{t("Customer *")}</label>
                 <select name="customer_id" required className="w-full px-3 py-2 bg-surface-800 border border-surface-700 rounded-lg text-surface-100 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500">
-                  <option value="">Select a customer...</option>
+                  <option value="">{t("Select a customer...")}</option>
                   {customers.map((c) => (
                     <option key={c.id} value={c.id}>{c.name}{c.company ? ` (${c.company})` : ''}</option>
                   ))}
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-surface-300 mb-1">Title *</label>
-                <input name="title" required className="w-full px-3 py-2 bg-surface-800 border border-surface-700 rounded-lg text-surface-100 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500" placeholder="e.g. Custom enclosure build" />
+                <label className="block text-sm font-medium text-surface-300 mb-1">{t("Title *")}</label>
+                <input name="title" required className="w-full px-3 py-2 bg-surface-800 border border-surface-700 rounded-lg text-surface-100 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500" placeholder={t("e.g. Custom enclosure build")} />
               </div>
               <div>
-                <label className="block text-sm font-medium text-surface-300 mb-1">Notes</label>
+                <label className="block text-sm font-medium text-surface-300 mb-1">{t("Notes")}</label>
                 <textarea name="notes" rows={3} className="w-full px-3 py-2 bg-surface-800 border border-surface-700 rounded-lg text-surface-100 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500" />
               </div>
               <div className="flex justify-end gap-3 pt-2">
-                <button type="button" onClick={() => setShowCreateModal(false)} className="px-4 py-2 text-sm text-surface-400 hover:text-surface-200">Cancel</button>
-                <button type="submit" className="px-4 py-2 bg-accent-500 text-white rounded-lg hover:bg-accent-600 text-sm font-medium">Create Quote</button>
+                <button type="button" onClick={() => setShowCreateModal(false)} className="px-4 py-2 text-sm text-surface-400 hover:text-surface-200">{t("Cancel")}</button>
+                <button type="submit" className="px-4 py-2 bg-accent-500 text-white rounded-lg hover:bg-accent-600 text-sm font-medium">{t("Create Quote")}</button>
               </div>
             </form>
           </div>

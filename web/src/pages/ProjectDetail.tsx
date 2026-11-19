@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import { externalLinkClick } from '../lib/platform'
 import { resourceURL } from '../lib/platform'
 import { useEffect, useState } from 'react'
@@ -32,7 +33,7 @@ import { useProject, useParts, useCreatePart, useUpdateProject } from '../hooks/
 import { usePrinters, usePrinterStates } from '../hooks/usePrinters'
 import { useSpoolsWithMaterials } from '../hooks/useMaterials'
 import { designsApi, printJobsApi, projectsApi, partsApi, suppliesApi, materialsApi, queueApi, gcodeLibraryApi, fileLibraryApi, fileApi, tagsApi, enqueueProjectParts } from '../api/client'
-import { cn, getStatusBadge, formatBytes, formatRelativeTime } from '../lib/utils'
+import { cn, getStatusBadge, formatBytes, formatRelativeTime, PRINT_JOB_STATUS_LABELS } from '../lib/utils'
 import { useCurrency } from '../hooks/useCurrency'
 import AppToast, { type AppToastState } from '../components/AppToast'
 import { FailureModal } from '../components/FailureModal'
@@ -46,17 +47,19 @@ import type { Design, Part, Material, PrintJob, ProjectSummary, ProjectSupply, G
 type RootProjectFile = { type: 'stl'; file: STLLibraryFile } | { type: 'gcode'; file: GCodeLibraryFile }
 
 export default function ProjectDetail() {
+  const { t } = useTranslation('production')
+
   const { id } = useParams<{ id: string }>()
   const queryClient = useQueryClient()
-  
+
   const { data: project, isLoading: projectLoading } = useProject(id!)
   const { data: parts = [], isLoading: partsLoading } = useParts(id!)
   const { data: printers = [] } = usePrinters()
   const { data: printerStates = {} } = usePrinterStates()
-  
+
   const createPart = useCreatePart()
   const updateProject = useUpdateProject()
-  
+
   const [showAddPart, setShowAddPart] = useState(false)
   const [selectedPart, setSelectedPart] = useState<Part | null>(null)
   const [showUpload, setShowUpload] = useState(false)
@@ -86,15 +89,15 @@ export default function ProjectDetail() {
     try {
       const { added, missing } = await enqueueProjectParts(id!)
       if (added > 0) {
-        setProjectToast({ title: 'Project queued', message: `${added} item(s) added to the print queue.`, tone: 'success' })
+        setProjectToast({ title: t("Project queued"), message: t("{{count}} item added to the print queue.", { count: added }), tone: 'success' })
         queryClient.invalidateQueries({ queryKey: ['queue'] })
       } else if (missing > 0) {
-        setProjectToast({ title: 'No G-code found', message: `${missing} part(s) do not have valid G-code.`, tone: 'info' })
+        setProjectToast({ title: t("No G-code found"), message: t("{{count}} part does not have valid G-code.", { count: missing }), tone: 'info' })
       } else {
-        setProjectToast({ title: 'Nothing queued', message: 'No items were added to the print queue.', tone: 'info' })
+        setProjectToast({ title: t("Nothing queued"), message: t("No items were added to the print queue."), tone: 'info' })
       }
     } catch (err) {
-      setProjectToast({ title: 'Failed to queue project', message: err instanceof Error ? err.message : String(err), tone: 'error' })
+      setProjectToast({ title: t("Failed to queue project"), message: err instanceof Error ? err.message : String(err), tone: 'error' })
     } finally {
       setPrintingProject(false)
       setTimeout(() => setProjectToast(null), 3500)
@@ -125,7 +128,7 @@ export default function ProjectDetail() {
   if (projectLoading) {
     return (
       <div className="p-4 sm:p-6 lg:p-8">
-        <div className="text-surface-500">Loading...</div>
+        <div className="text-surface-500">{t("Loading...")}</div>
       </div>
     )
   }
@@ -133,7 +136,7 @@ export default function ProjectDetail() {
   if (!project) {
     return (
       <div className="p-4 sm:p-6 lg:p-8">
-        <div className="text-surface-500">Project not found</div>
+        <div className="text-surface-500">{t("Project not found")}</div>
       </div>
     )
   }
@@ -166,7 +169,7 @@ export default function ProjectDetail() {
       })
       setEditingProject(false)
     } catch (err) {
-      setProjectEditError(err instanceof Error ? err.message : 'Failed to update project')
+      setProjectEditError(err instanceof Error ? err.message : t("Failed to update project"))
     }
   }
 
@@ -182,7 +185,7 @@ export default function ProjectDetail() {
         image_file_ids: Array.from(new Set([...prev.image_file_ids, uploaded.id])),
       }))
     } catch (err) {
-      setProjectEditError(err instanceof Error ? err.message : 'Failed to upload project photo')
+      setProjectEditError(err instanceof Error ? err.message : t("Failed to upload project photo"))
     } finally {
       setUploadingCover(false)
     }
@@ -197,48 +200,47 @@ export default function ProjectDetail() {
       {projectToast && <AppToast toast={projectToast} onClose={() => setProjectToast(null)} />}
       {/* Header */}
       <div className="mb-8">
-        <Link 
-          to="/projects" 
+        <Link
+          to="/projects"
           className="inline-flex items-center text-sm text-surface-500 hover:text-surface-300 mb-4"
         >
           <ArrowLeft className="h-4 w-4 mr-1" />
-          Back to Projects
-        </Link>
-        
+          {t("Back to Projects")}</Link>
+
           <div className="card p-5">
           {editingProject ? (
             <div className="space-y-3">
               <div>
-                <label className="block text-xs text-surface-500 mb-1">Nome do projeto</label>
+                <label className="block text-xs text-surface-500 mb-1">{t("Project name")}</label>
                 <input value={projectForm.name} onChange={e => setProjectForm(prev => ({ ...prev, name: e.target.value }))} className="input text-xl font-semibold" autoFocus />
               </div>
               <div>
-                <label className="block text-xs text-surface-500 mb-1">Descrição</label>
-                <textarea value={projectForm.description} onChange={e => setProjectForm(prev => ({ ...prev, description: e.target.value }))} rows={2} className="input resize-none" placeholder="Descrição opcional" />
+                <label className="block text-xs text-surface-500 mb-1">{t("Description")}</label>
+                <textarea value={projectForm.description} onChange={e => setProjectForm(prev => ({ ...prev, description: e.target.value }))} rows={2} className="input resize-none" placeholder={t("Optional description")} />
               </div>
               <div className="grid gap-3 md:grid-cols-2">
                 <div>
-                  <label className="block text-xs text-surface-500 mb-1">Link do projeto / fonte</label>
-                  <input value={projectForm.source_url} onChange={e => setProjectForm(prev => ({ ...prev, source_url: e.target.value }))} className="input" placeholder="https://..." />
+                  <label className="block text-xs text-surface-500 mb-1">{t("Project / source link")}</label>
+                  <input value={projectForm.source_url} onChange={e => setProjectForm(prev => ({ ...prev, source_url: e.target.value }))} className="input" placeholder={t("https://...")} />
                 </div>
                 <div>
-                  <label className="block text-xs text-surface-500 mb-1">Licença</label>
-                  <input value={projectForm.source_license} onChange={e => setProjectForm(prev => ({ ...prev, source_license: e.target.value }))} className="input" placeholder="CC BY, MIT, Commercial use..." />
+                  <label className="block text-xs text-surface-500 mb-1">{t("License")}</label>
+                  <input value={projectForm.source_license} onChange={e => setProjectForm(prev => ({ ...prev, source_license: e.target.value }))} className="input" placeholder={t("CC BY, MIT, Commercial use...")} />
                 </div>
                 <div>
-                  <label className="block text-xs text-surface-500 mb-1">Autor / criador</label>
-                  <input value={projectForm.source_author} onChange={e => setProjectForm(prev => ({ ...prev, source_author: e.target.value }))} className="input" placeholder="Nome do autor" />
+                  <label className="block text-xs text-surface-500 mb-1">{t("Author / creator")}</label>
+                  <input value={projectForm.source_author} onChange={e => setProjectForm(prev => ({ ...prev, source_author: e.target.value }))} className="input" placeholder={t("Author name")} />
                 </div>
                 <div>
-                  <label className="block text-xs text-surface-500 mb-1">Plataforma</label>
-                  <input value={projectForm.source_provider} onChange={e => setProjectForm(prev => ({ ...prev, source_provider: e.target.value }))} className="input" placeholder="MakerWorld, Printables, etc." />
+                  <label className="block text-xs text-surface-500 mb-1">{t("Platform")}</label>
+                  <input value={projectForm.source_provider} onChange={e => setProjectForm(prev => ({ ...prev, source_provider: e.target.value }))} className="input" placeholder={t("MakerWorld, Printables, etc.")} />
                 </div>
               </div>
               <div>
-                <label className="block text-xs text-surface-500 mb-1">Foto de capa</label>
+                <label className="block text-xs text-surface-500 mb-1">{t("Cover photo")}</label>
                 <div className="space-y-3">
                   <label className="btn btn-secondary text-sm cursor-pointer w-fit">
-                    {uploadingCover ? 'Enviando...' : 'Adicionar foto'}
+                    {uploadingCover ? t("Uploading...") : t("Add photo")}
                     <input type="file" accept="image/png,image/jpeg" disabled={uploadingCover} className="hidden" onChange={e => void uploadProjectImage(e.target.files?.[0])} />
                   </label>
                   {projectForm.image_file_ids.length > 0 && (
@@ -248,11 +250,10 @@ export default function ProjectDetail() {
                           <img src={resourceURL(`/api/files/${fileId}`)} className="h-28 w-full object-cover" />
                           <div className="absolute inset-x-0 bottom-0 flex gap-1 bg-black/70 p-1">
                             <button type="button" onClick={() => setProjectForm(prev => ({ ...prev, cover_file_id: fileId }))} className="flex-1 rounded bg-surface-800/80 px-2 py-1 text-[10px] text-surface-200 hover:bg-accent-600">
-                              {projectForm.cover_file_id === fileId ? 'Capa' : 'Definir capa'}
+                              {projectForm.cover_file_id === fileId ? t("Cover") : t("Set as cover")}
                             </button>
                             <button type="button" onClick={() => setProjectForm(prev => ({ ...prev, image_file_ids: prev.image_file_ids.filter(id => id !== fileId), cover_file_id: prev.cover_file_id === fileId ? '' : prev.cover_file_id }))} className="rounded bg-red-500/20 px-2 py-1 text-[10px] text-red-200 hover:bg-red-500/40">
-                              Remover
-                            </button>
+                              {t("Remove")}</button>
                           </div>
                         </div>
                       ))}
@@ -262,8 +263,8 @@ export default function ProjectDetail() {
               </div>
               {projectEditError && <div className="text-sm text-red-400">{projectEditError}</div>}
               <div className="flex gap-2">
-                <button onClick={saveProjectEdit} disabled={updateProject.isPending} className="btn btn-primary text-sm">{updateProject.isPending ? 'Salvando...' : 'Salvar'}</button>
-                <button onClick={() => setEditingProject(false)} className="btn btn-secondary text-sm">Cancelar</button>
+                <button onClick={saveProjectEdit} disabled={updateProject.isPending} className="btn btn-primary text-sm">{updateProject.isPending ? t("Saving...") : t("Save")}</button>
+                <button onClick={() => setEditingProject(false)} className="btn btn-secondary text-sm">{t("Cancel")}</button>
               </div>
             </div>
           ) : (
@@ -275,21 +276,20 @@ export default function ProjectDetail() {
                   </h1>
                   {(project.source_url || project.source_license || project.source_author || project.source_provider) && (
                     <div className="mt-3 flex flex-wrap gap-2 text-xs text-surface-500">
-                      {project.source_url && <a href={project.source_url} onClick={externalLinkClick} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-accent-400 hover:underline"><ExternalLink className="h-3 w-3" />Source</a>}
-                      {project.source_license && <span className="rounded-full border border-surface-700 px-2 py-0.5">License: {project.source_license}</span>}
-                      {project.source_author && <span className="rounded-full border border-surface-700 px-2 py-0.5">By {project.source_author}</span>}
+                      {project.source_url && <a href={project.source_url} onClick={externalLinkClick} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-accent-400 hover:underline"><ExternalLink className="h-3 w-3" />{t("Source")}</a>}
+                      {project.source_license && <span className="rounded-full border border-surface-700 px-2 py-0.5">{t("License:")}{' '}{project.source_license}</span>}
+                      {project.source_author && <span className="rounded-full border border-surface-700 px-2 py-0.5">{t("By")}{' '}{project.source_author}</span>}
                       {project.source_provider && <span className="rounded-full border border-surface-700 px-2 py-0.5">{project.source_provider}</span>}
                     </div>
                   )}
                   {project.description && (
                     <div className="mt-5 rounded-2xl border border-surface-800 bg-surface-950/40 p-4">
                       <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-surface-200">
-                        <Info className="h-4 w-4 text-accent-400" />Descrição
-                      </div>
+                        <Info className="h-4 w-4 text-accent-400" />{t("Description")}</div>
                       <p className="whitespace-pre-line text-sm leading-6 text-surface-300">{visibleDescription}</p>
                       {hasLongDescription && (
                         <button onClick={() => setDescriptionExpanded(prev => !prev)} className="mt-3 text-sm font-medium text-accent-400 hover:text-accent-300">
-                          {descriptionExpanded ? 'Ver menos' : 'Ver mais'}
+                          {descriptionExpanded ? t("Show less") : t("Show more")}
                         </button>
                       )}
                     </div>
@@ -307,11 +307,11 @@ export default function ProjectDetail() {
                 </div>
               </div>
               <div className="flex flex-wrap items-center gap-3">
-                <button onClick={handlePrintProject} disabled={printingProject} className="btn btn-primary" title="Print whole project">
+                <button onClick={handlePrintProject} disabled={printingProject} className="btn btn-primary" aria-label={t("Print whole project")} title={t("Print whole project")}>
                   <Play className="h-4 w-4 mr-2" />
-                  {printingProject ? 'Queueing...' : 'Print Project'}
+                  {printingProject ? t("Queueing...") : t("Print Project")}
                 </button>
-                <button onClick={startProjectEdit} className="btn btn-secondary text-sm">Editar</button>
+                <button onClick={startProjectEdit} className="btn btn-secondary text-sm">{t("Edit")}</button>
               </div>
             </div>
           )}
@@ -323,21 +323,19 @@ export default function ProjectDetail() {
         <div className="flex items-center justify-between mb-3">
           <h2 className="font-semibold text-surface-100 flex items-center gap-2">
             <Printer className="h-5 w-5 text-accent-500" />
-            Printer Fleet
-          </h2>
+            {t("Printer Fleet")}</h2>
         </div>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           {printers.length === 0 ? (
             <div className="col-span-4 text-center py-4 text-surface-500">
               <Link to="/printers" className="text-accent-400 hover:text-accent-300">
-                Add printers to get started
-              </Link>
+                {t("Add printers to get started")}</Link>
             </div>
           ) : (
             printers.map((printer) => {
               const state = printerStates[printer.id]
               return (
-                <div 
+                <div
                   key={printer.id}
                   className="p-3 rounded-lg bg-surface-800/50 border border-surface-700"
                 >
@@ -355,7 +353,7 @@ export default function ProjectDetail() {
                   </div>
                   <div className="flex items-center justify-between">
                     <span className={cn('badge text-xs', getStatusBadge(state?.status || 'offline'))}>
-                      {state?.status || 'offline'}
+                      {t(({ pending: 'Pending', in_progress: 'In Progress', completed: 'Completed', cancelled: 'Cancelled', printing: 'Printing', paused: 'Paused', failed: 'Failed', queued: 'Queued', idle: 'Idle', offline: 'Offline', online: 'Online', error: 'Error', ready: 'Ready', sent: 'Sent', info: 'Info', success: 'Success', warning: 'Warning', critical: 'Critical', channels: 'Channels', templates: 'Templates', deliveries: 'Deliveries' } as Record<string, string>)[state?.status || 'offline'] || state?.status || 'offline')}
                     </span>
                     {state?.status === 'printing' && (
                       <span className="text-xs text-surface-400">
@@ -365,7 +363,7 @@ export default function ProjectDetail() {
                   </div>
                   {state?.status === 'printing' && (
                     <div className="mt-2 h-1 bg-surface-700 rounded-full overflow-hidden">
-                      <div 
+                      <div
                         className="h-full bg-emerald-500 transition-all"
                         style={{ width: `${state.progress}%` }}
                       />
@@ -395,8 +393,7 @@ export default function ProjectDetail() {
           )}
         >
           <Box className="h-4 w-4" />
-          Parts
-        </button>
+          {t("Parts")}</button>
         <button
           onClick={() => setActiveTab('history')}
           className={cn(
@@ -407,8 +404,7 @@ export default function ProjectDetail() {
           )}
         >
           <History className="h-4 w-4" />
-          Print History
-        </button>
+          {t("Print History")}</button>
         <button
           onClick={() => setActiveTab('analytics')}
           className={cn(
@@ -419,43 +415,38 @@ export default function ProjectDetail() {
           )}
         >
           <BarChart3 className="h-4 w-4" />
-          Analytics
-        </button>
+          {t("Analytics")}</button>
       </div>
 
       {/* Parts Tab */}
       {activeTab === 'parts' && (
         <>
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-semibold text-surface-100">Parts</h2>
+            <h2 className="text-xl font-semibold text-surface-100">{t("Parts")}</h2>
             <button
               onClick={() => setShowAddPart(true)}
               className="btn btn-secondary"
             >
               <Plus className="h-4 w-4 mr-2" />
-              Add Part
-            </button>
+              {t("Add Part")}</button>
           </div>
 
           {partDeleteError && <div className="mb-4 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300">{partDeleteError}</div>}
           {partsLoading ? (
-            <div className="text-surface-500">Loading parts...</div>
+            <div className="text-surface-500">{t("Loading parts...")}</div>
           ) : parts.length === 0 ? (
             <div className="card p-8 text-center">
               <Box className="h-12 w-12 mx-auto mb-3 text-surface-600" />
               <h3 className="text-lg font-medium text-surface-300 mb-2">
-                No parts yet
-              </h3>
+                {t("No parts yet")}</h3>
               <p className="text-surface-500 mb-4">
-                Add parts to start organizing your project
-              </p>
+                {t("Add parts to start organizing your project")}</p>
               <button
                 onClick={() => setShowAddPart(true)}
                 className="btn btn-primary"
               >
                 <Plus className="h-4 w-4 mr-2" />
-                Add First Part
-              </button>
+                {t("Add First Part")}</button>
             </div>
           ) : (
             <div className="space-y-4">
@@ -466,13 +457,13 @@ export default function ProjectDetail() {
                   onSendToPrinter={(design) => setShowSendToPrinter(design)}
                   onAddDesign={() => { setSelectedPart(part); setShowUpload(true) }}
                   onDelete={async () => {
-                    if (!confirm(`Delete part "${part.name}"? This cannot be undone.`)) return
+                    if (!confirm(t("Delete part \"{{value1}}\"? This cannot be undone.", { value1: part.name }))) return
                     try {
                       setPartDeleteError('')
                       await partsApi.delete(part.id)
                       queryClient.invalidateQueries({ queryKey: ['parts', id] })
                     } catch (err) {
-                      setPartDeleteError(err instanceof Error ? err.message : 'Failed to delete part')
+                      setPartDeleteError(err instanceof Error ? err.message : t("Failed to delete part"))
                     }
                   }}
                 />
@@ -503,11 +494,11 @@ export default function ProjectDetail() {
 
       {/* Add Part Modal */}
       {showAddPart && (
-        <Modal title="Add Part" onClose={() => setShowAddPart(false)}>
+        <Modal title={t("Add Part")} onClose={() => setShowAddPart(false)}>
           <form onSubmit={handleAddPart}>
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-surface-300 mb-2">Arquivos da aba Files</label>
+                <label className="block text-sm font-medium text-surface-300 mb-2">{t("Files from the Files page")}</label>
                 {selectedRootFiles.length > 0 ? (
                   <div className="space-y-2 rounded-lg border border-accent-500/40 bg-accent-500/5 p-3">
                     {selectedRootFiles.map(selected => (
@@ -522,10 +513,9 @@ export default function ProjectDetail() {
                   </div>
                 ) : (
                   <button type="button" onClick={() => setShowGCodePicker(true)} className="w-full rounded-lg border border-surface-700 bg-surface-900/40 px-4 py-6 text-sm text-surface-300 hover:border-accent-500 hover:text-accent-400">
-                    Selecionar STL/G-code da aba Files
-                  </button>
+                    {t("Select STL / G-code from Files")}</button>
                 )}
-                {selectedRootFiles.length > 0 && <button type="button" onClick={() => setShowGCodePicker(true)} className="mt-2 text-xs text-accent-400 hover:text-accent-300">Alterar seleção</button>}
+                {selectedRootFiles.length > 0 && <button type="button" onClick={() => setShowGCodePicker(true)} className="mt-2 text-xs text-accent-400 hover:text-accent-300">{t("Change selection")}</button>}
               </div>
             </div>
             <div className="flex justify-end gap-3 mt-6">
@@ -534,14 +524,13 @@ export default function ProjectDetail() {
                 onClick={() => { setShowAddPart(false); setSelectedRootFiles([]) }}
                 className="btn btn-ghost"
               >
-                Cancel
-              </button>
+                {t("Cancel")}</button>
               <button
                 type="submit"
                 disabled={createPart.isPending || selectedRootFiles.length === 0}
                 className="btn btn-primary"
               >
-                {createPart.isPending ? 'Adding...' : selectedRootFiles.length > 1 ? 'Add Parts' : 'Add Part'}
+                {createPart.isPending ? t("Adding...") : selectedRootFiles.length > 1 ? t("Add Parts") : t("Add Part")}
               </button>
             </div>
           </form>
@@ -624,14 +613,16 @@ export default function ProjectDetail() {
   )
 }
 
-function formatPrintTime(seconds: number): string {
+function formatPrintTime(seconds: number, translate: (key: string, options: Record<string, unknown>) => string): string {
   const h = Math.floor(seconds / 3600)
   const m = Math.floor((seconds % 3600) / 60)
-  if (h > 0) return `${h}h ${m}m`
-  return `${m}m`
+  if (h > 0) return translate('{{hours}}h {{minutes}}m', { hours: h, minutes: m })
+  return translate('{{minutes}}m', { minutes: m })
 }
 
 function InfoRow({ label, value }: { label: string; value: string }) {
+  useTranslation('production')
+
   return <div className="flex justify-between gap-4 border-b border-surface-800 pb-2"><span className="text-surface-500">{label}</span><span className="text-right text-surface-200">{value}</span></div>
 }
 
@@ -647,6 +638,8 @@ function PartCard({
   onAddDesign: () => void
   onDelete: () => void
 }) {
+  const { t } = useTranslation('production')
+
   const queryClient = useQueryClient()
   const [partBusy, setPartBusy] = useState('')
   const [editingPartName, setEditingPartName] = useState(false)
@@ -695,7 +688,7 @@ function PartCard({
 
   const getDesignSTL = (design: Design) => (library?.stl_files || []).find(file => file.file_id === design.file_id)
   const getDesignGCode = (design: Design) => [...(library?.root_gcode_files || []), ...(library?.stl_files || []).flatMap(file => file.gcodes || [])].find(file => file.file_id === design.file_id)
-  const getGCodeProfile = (gcode: GCodeLibraryFile) => gcode.metadata?.print_settings_id || 'No profile'
+  const getGCodeProfile = (gcode: GCodeLibraryFile) => gcode.metadata?.print_settings_id || t("No profile")
 
   const makeDefaultGCode = async (gcode: GCodeLibraryFile) => {
     await gcodeLibraryApi.setDefaultForSTL(gcode.id)
@@ -710,10 +703,10 @@ function PartCard({
       const gcodeMaterialType = (gcode.material_type || '').toLowerCase()
       const spool = availableSpools.find(item => item.id === selectedGCodeMaterials[gcode.id]) || availableSpools.find(item => item.default_for_material && item.material?.type.toLowerCase() === gcodeMaterialType)
       await gcodeLibraryApi.addToQueue(gcode.id, spool?.material ? { assigned_spool_id: spool.id, project_id: part.project_id, material_type: spool.material.type, material_color: spool.material.color_hex || spool.material.color, filament_name: spool.material.name, source_type: 'project' } : { project_id: part.project_id, source_type: 'project' })
-      setToast({ title: 'Print added to queue', message: gcode.display_name || gcode.file_name, tone: 'success' })
+      setToast({ title: t("Print added to queue"), message: gcode.display_name || gcode.file_name, tone: 'success' })
       setTimeout(() => setToast(null), 3500)
     } catch (err) {
-      setPartError(err instanceof Error ? err.message : 'Failed to add print to queue')
+      setPartError(err instanceof Error ? err.message : t("Failed to add print to queue"))
     } finally {
       setPartBusy('')
     }
@@ -724,7 +717,7 @@ function PartCard({
       const stl = getDesignSTL(design)
       const gcode = stl?.gcodes?.find(file => file.default_for_stl) || stl?.gcodes?.[0]
       if (!gcode) {
-        setPartError('STL has no linked G-code')
+        setPartError(t("STL has no linked G-code"))
         return
       }
       await printGCode(gcode)
@@ -733,7 +726,7 @@ function PartCard({
     if (design.file_type === 'gcode') {
       const gcode = getDesignGCode(design)
       if (!gcode) {
-        setPartError('G-code not found in library')
+        setPartError(t("G-code not found in library"))
         return
       }
       await printGCode(gcode)
@@ -753,26 +746,26 @@ function PartCard({
         <div className="flex items-center gap-2 text-sm font-medium text-orange-200">
           <FileCode className="h-4 w-4 text-orange-400" />
           <span className="truncate">{gcode.display_name || gcode.file_name}</span>
-          {gcode.default_for_stl && <span className="rounded-full border border-emerald-500/40 bg-emerald-500/15 px-2 py-0.5 text-[10px] font-bold uppercase text-emerald-300">Default</span>}
+          {gcode.default_for_stl && <span className="rounded-full border border-emerald-500/40 bg-emerald-500/15 px-2 py-0.5 text-[10px] font-bold uppercase text-emerald-300">{t("Default")}</span>}
         </div>
         <div className="mt-1 flex flex-wrap gap-1.5 text-xs text-surface-500">
-          <span>Perfil: {getGCodeProfile(gcode)}</span>
+          <span>{t('Profile: ')}{getGCodeProfile(gcode)}</span>
           {gcode.material_type && <span>{gcode.material_type.toUpperCase()}</span>}
-          {gcode.layer_height && <span>{gcode.layer_height}mm</span>}
-          {gcode.estimated_seconds && <span>{formatPrintTime(gcode.estimated_seconds)}</span>}
-          {gcode.filament_grams && <span>{Math.round(gcode.filament_grams)}g</span>}
+          {gcode.layer_height && <span>{t('{{value1}}mm', { value1: gcode.layer_height })}</span>}
+          {gcode.estimated_seconds && <span>{formatPrintTime(gcode.estimated_seconds, t)}</span>}
+          {gcode.filament_grams && <span>{t('{{value1}}g', { value1: Math.round(gcode.filament_grams) })}</span>}
         </div>
       </div>
       <div className="flex shrink-0 items-center gap-2">
         <select value={selectedSpoolID} onChange={e => setSelectedGCodeMaterials(current => ({ ...current, [gcode.id]: e.target.value }))} className="input w-56 py-1 text-xs" disabled={matchingSpools.length === 0}>
-          <option value="">{gcodeMaterialType ? `Spool ${gcodeMaterialType.toUpperCase()}` : 'Tipo não detectado'}</option>
-          {matchingSpools.map(spool => <option key={spool.id} value={spool.id}>{spool.material ? `${spool.material.name} · ${spool.material.type.toUpperCase()}` : 'Unknown'} · {Math.round(spool.remaining_weight)}g{spool.default_for_material ? ' · Default' : ''}</option>)}
+          <option value="">{gcodeMaterialType ? t("Spool {{value1}}", { value1: gcodeMaterialType.toUpperCase() }) : t("Type not detected")}</option>
+          {matchingSpools.map(spool => <option key={spool.id} value={spool.id}>{spool.material ? `${spool.material.name} · ${spool.material.type.toUpperCase()}` : t("Unknown")} · {t('{{value1}}g', { value1: Math.round(spool.remaining_weight) })}{spool.default_for_material ? t(" · Default") : ''}</option>)}
         </select>
-        {!gcode.default_for_stl && gcode.parent_stl_id && <button onClick={() => void makeDefaultGCode(gcode)} className="btn btn-ghost text-xs py-1.5 px-2">Make default</button>}
-        <button onClick={() => setViewingGCode(gcode)} className="btn btn-ghost text-xs py-1.5 px-2" title="G-code info"><Info className="h-3.5 w-3.5" /></button>
+        {!gcode.default_for_stl && gcode.parent_stl_id && <button onClick={() => void makeDefaultGCode(gcode)} className="btn btn-ghost text-xs py-1.5 px-2">{t("Make default")}</button>}
+        <button onClick={() => setViewingGCode(gcode)} className="btn btn-ghost text-xs py-1.5 px-2" title={t("G-code info")}><Info className="h-3.5 w-3.5" /></button>
         <button onClick={() => void printGCode(gcode)} className="btn btn-primary text-xs py-1.5 px-3">
           <Play className="h-3.5 w-3.5 mr-1" />
-          {partBusy === gcode.id ? 'Adding...' : 'Queue'}
+          {partBusy === gcode.id ? t("Adding...") : t("Queue")}
         </button>
       </div>
     </div>
@@ -809,12 +802,12 @@ function PartCard({
         </div>
         <div className="flex items-center gap-2">
           <span className={cn('badge', getStatusBadge(part.status))}>
-            {part.status}
+            {t(({ pending: 'Pending', in_progress: 'In Progress', completed: 'Completed', cancelled: 'Cancelled', printing: 'Printing', paused: 'Paused', failed: 'Failed', queued: 'Queued', idle: 'Idle', offline: 'Offline', online: 'Online', error: 'Error', ready: 'Ready', sent: 'Sent', info: 'Info', success: 'Success', warning: 'Warning', critical: 'Critical', channels: 'Channels', templates: 'Templates', deliveries: 'Deliveries' } as Record<string, string>)[part.status] || part.status)}
           </span>
           <button
             onClick={onDelete}
             className="p-1.5 rounded-lg text-surface-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
-            title="Delete part"
+            aria-label={t("Delete part")} title={t("Delete part")}
           >
             <Trash2 className="h-4 w-4" />
           </button>
@@ -825,16 +818,15 @@ function PartCard({
       <div className="border-t border-surface-800 pt-4">
         <div className="flex items-center justify-between mb-3">
           <span className="text-sm font-medium text-surface-400">
-            Designs ({designs.length} version{designs.length !== 1 ? 's' : ''})
+            {t('Designs ({{count}})', { count: designs.length })})
           </span>
-          <button onClick={onAddDesign} className="btn btn-secondary text-xs py-1.5 px-3"><Plus className="h-3.5 w-3.5 mr-1" />Add Design</button>
+          <button onClick={onAddDesign} className="btn btn-secondary text-xs py-1.5 px-3"><Plus className="h-3.5 w-3.5 mr-1" />{t("Add Design")}</button>
         </div>
 
         {partError && <div className="mb-3 rounded-lg border border-red-500/30 bg-red-500/10 p-2 text-sm text-red-300">{partError}</div>}
         {designs.length === 0 ? (
           <div className="text-center py-4 text-surface-500 text-sm">
-            No designs uploaded yet
-          </div>
+            {t("No designs uploaded yet")}</div>
         ) : (
           <div className="space-y-2">
             {designs.slice(0, 3).map((design) => {
@@ -849,7 +841,7 @@ function PartCard({
                       </div>
                       <div className="min-w-0">
                         <div className="text-sm font-medium text-surface-200 truncate">
-                          v{design.version} — {stl?.display_name || gcode?.display_name || design.file_name}
+                          {t('v{{version}}', { version: design.version })} — {stl?.display_name || gcode?.display_name || design.file_name}
                         </div>
                         <div className="text-xs text-surface-500 truncate">
                           {design.file_name} • {formatBytes(design.file_size_bytes)} • {formatRelativeTime(design.created_at)}
@@ -860,28 +852,27 @@ function PartCard({
                       {design.file_type === '3mf' && (
                         <button
                           onClick={() => {
-                            designsApi.openExternal(design.id, 'BambuStudio').catch((err) => {
-                              alert('Failed to open Bambu Studio: ' + err.message)
+                            designsApi.openExternal(design.id, t("BambuStudio")).catch((err) => {
+                              alert(t("Failed to open Bambu Studio: ") + err.message)
                             })
                           }}
                           className="btn btn-ghost text-xs py-1.5 px-3"
-                          title="Open in Bambu Studio"
+                          title={t("Open in Bambu Studio")}
                         >
                           <ExternalLink className="h-3.5 w-3.5 mr-1" />
-                          Bambu Studio
-                        </button>
+                          {t("Bambu Studio")}</button>
                       )}
-                      {stl && <button onClick={() => setViewingSTL(stl)} className="btn btn-ghost text-xs py-1.5 px-2" title="STL info"><Info className="h-3.5 w-3.5" /></button>}
+                      {stl && <button onClick={() => setViewingSTL(stl)} className="btn btn-ghost text-xs py-1.5 px-2" title={t("STL info")}><Info className="h-3.5 w-3.5" /></button>}
                       {design.file_type !== 'stl' && (
                         <button onClick={() => void printDesign(design)} className="btn btn-primary text-xs py-1.5 px-3">
                           <Play className="h-3.5 w-3.5 mr-1" />
-                          {partBusy === design.id || partBusy === gcode?.id ? 'Adding...' : 'Queue'}
+                          {partBusy === design.id || partBusy === gcode?.id ? t("Adding...") : t("Queue")}
                         </button>
                       )}
                       <button
-                        onClick={async () => { if (!confirm(`Delete design ${design.file_name}?`)) return; await designsApi.delete(design.id); queryClient.invalidateQueries({ queryKey: ['designs', part.id] }) }}
+                        onClick={async () => { if (!confirm(t("Delete design {{value1}}?", { value1: design.file_name }))) return; await designsApi.delete(design.id); queryClient.invalidateQueries({ queryKey: ['designs', part.id] }) }}
                         className="btn btn-ghost text-xs py-1.5 px-2 text-red-400"
-                        title="Delete design"
+                        title={t("Delete design")}
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                       </button>
@@ -896,24 +887,24 @@ function PartCard({
         )}
       </div>
       {viewingSTL && (
-        <Modal title="STL Viewer" onClose={() => setViewingSTL(null)}>
+        <Modal title={t("STL Viewer")} onClose={() => setViewingSTL(null)}>
           <div className="space-y-4">
             <STLViewer3D url={resourceURL(`/api/files/${viewingSTL.file_id}`)} />
             <div className="grid grid-cols-2 gap-4 text-sm bg-surface-900/50 p-3 rounded-lg">
               <div>
-                <div className="text-surface-500 mb-1">Title</div>
+                <div className="text-surface-500 mb-1">{t("Title")}</div>
                 <div className="font-medium text-surface-200">{viewingSTL.display_name || viewingSTL.file_name}</div>
               </div>
               <div>
-                <div className="text-surface-500 mb-1">File</div>
+                <div className="text-surface-500 mb-1">{t("File")}</div>
                 <div className="font-medium text-surface-200 truncate" title={viewingSTL.file_name}>{viewingSTL.file_name}</div>
               </div>
               <div>
-                <div className="text-surface-500 mb-1">Size</div>
+                <div className="text-surface-500 mb-1">{t("Size")}</div>
                 <div className="font-medium text-surface-200">{formatBytes(viewingSTL.size_bytes)}</div>
               </div>
               <div>
-                <div className="text-surface-500 mb-1">Linked G-codes</div>
+                <div className="text-surface-500 mb-1">{t("Linked G-codes")}</div>
                 <div className="font-medium text-surface-200">{viewingSTL.gcodes?.length || 0}</div>
               </div>
             </div>
@@ -921,20 +912,20 @@ function PartCard({
         </Modal>
       )}
       {viewingGCode && (
-        <Modal title="G-code info" onClose={() => setViewingGCode(null)}>
+        <Modal title={t("G-code info")} onClose={() => setViewingGCode(null)}>
           <div className="space-y-3 text-sm">
             {viewingGCode.thumbnail_file_id && <img src={resourceURL(`/api/files/${viewingGCode.thumbnail_file_id}`)} className="h-48 w-full rounded-lg bg-surface-900 object-contain" />}
-            <InfoRow label="Title" value={viewingGCode.display_name || viewingGCode.file_name} />
-            <InfoRow label="File" value={viewingGCode.file_name} />
-            <InfoRow label="Perfil de Impressão" value={viewingGCode.metadata?.print_settings_id || '-'} />
-            <InfoRow label="Perfil de Impressora" value={viewingGCode.metadata?.printer_settings_id || '-'} />
-            <InfoRow label="Perfil de Filamento" value={viewingGCode.metadata?.filament_settings_id || viewingGCode.filament_name || '-'} />
-            <InfoRow label="Impressora" value={viewingGCode.metadata?.printer_model || '-'} />
-            <InfoRow label="Material" value={viewingGCode.material_type?.toUpperCase() || '-'} />
-            <InfoRow label="Weight" value={viewingGCode.filament_grams ? `${Math.round(viewingGCode.filament_grams)}g` : '-'} />
-            <InfoRow label="Time" value={viewingGCode.estimated_seconds ? formatPrintTime(viewingGCode.estimated_seconds) : '-'} />
-            <InfoRow label="Layer" value={viewingGCode.layer_height ? `${viewingGCode.layer_height}mm` : '-'} />
-            <InfoRow label="Nozzle" value={viewingGCode.nozzle_diameter ? `${viewingGCode.nozzle_diameter}mm` : '-'} />
+            <InfoRow label={t("Title")} value={viewingGCode.display_name || viewingGCode.file_name} />
+            <InfoRow label={t("File")} value={viewingGCode.file_name} />
+            <InfoRow label={t("Print profile")} value={viewingGCode.metadata?.print_settings_id || '-'} />
+            <InfoRow label={t("Printer profile")} value={viewingGCode.metadata?.printer_settings_id || '-'} />
+            <InfoRow label={t("Filament profile")} value={viewingGCode.metadata?.filament_settings_id || viewingGCode.filament_name || '-'} />
+            <InfoRow label={t("Printer")} value={viewingGCode.metadata?.printer_model || '-'} />
+            <InfoRow label={t("Material")} value={viewingGCode.material_type?.toUpperCase() || '-'} />
+            <InfoRow label={t("Weight")} value={viewingGCode.filament_grams ? t('{{value1}}g', { value1: Math.round(viewingGCode.filament_grams) }) : '-'} />
+            <InfoRow label={t("Time")} value={viewingGCode.estimated_seconds ? formatPrintTime(viewingGCode.estimated_seconds, t) : '-'} />
+            <InfoRow label={t("Layer")} value={viewingGCode.layer_height ? t('{{value1}}mm', { value1: viewingGCode.layer_height }) : '-'} />
+            <InfoRow label={t("Nozzle")} value={viewingGCode.nozzle_diameter ? t('{{value1}}mm', { value1: viewingGCode.nozzle_diameter }) : '-'} />
           </div>
         </Modal>
       )}
@@ -944,6 +935,8 @@ function PartCard({
 
 // Supplies Section Component
 function SuppliesSection({ projectId }: { projectId: string }) {
+  const { t } = useTranslation('production')
+
   const { formatAmount, formatCents, symbol } = useCurrency()
   const queryClient = useQueryClient()
   const [showAddForm, setShowAddForm] = useState(false)
@@ -1036,15 +1029,13 @@ function SuppliesSection({ projectId }: { projectId: string }) {
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-xl font-semibold text-surface-100 flex items-center gap-2">
           <ShoppingCart className="h-5 w-5 text-surface-400" />
-          Supplies
-        </h2>
+          {t("Supplies")}</h2>
         <button
           onClick={() => setShowAddForm(!showAddForm)}
           className="btn btn-secondary"
         >
           <Plus className="h-4 w-4 mr-2" />
-          Add Supply
-        </button>
+          {t("Add Supply")}</button>
       </div>
 
       {showAddForm && (
@@ -1061,8 +1052,7 @@ function SuppliesSection({ projectId }: { projectId: string }) {
                     : 'bg-surface-800 text-surface-400 border border-surface-700 hover:text-surface-200'
                 )}
               >
-                From Catalog
-              </button>
+                {t("From Catalog")}</button>
               <button
                 type="button"
                 onClick={() => setAddMode('manual')}
@@ -1073,8 +1063,7 @@ function SuppliesSection({ projectId }: { projectId: string }) {
                     : 'bg-surface-800 text-surface-400 border border-surface-700 hover:text-surface-200'
                 )}
               >
-                Manual Entry
-              </button>
+                {t("Manual Entry")}</button>
             </div>
           )}
 
@@ -1082,14 +1071,14 @@ function SuppliesSection({ projectId }: { projectId: string }) {
             <form onSubmit={handleCatalogAdd}>
               <div className="grid grid-cols-[1fr_auto_auto_auto] gap-3 items-end">
                 <div>
-                  <label className="block text-xs font-medium text-surface-400 mb-1">Supply Material</label>
+                  <label className="block text-xs font-medium text-surface-400 mb-1">{t("Supply Material")}</label>
                   <select
                     value={selectedMaterialId}
                     onChange={(e) => handleMaterialSelect(e.target.value)}
                     className="input"
                     required
                   >
-                    <option value="">Select a supply...</option>
+                    <option value="">{t("Select a supply...")}</option>
                     {supplyMaterials.map((mat) => (
                       <option key={mat.id} value={mat.id}>
                         {mat.name} {mat.manufacturer ? `(${mat.manufacturer})` : ''} — {formatAmount(mat.cost_per_kg)}
@@ -1098,20 +1087,20 @@ function SuppliesSection({ projectId }: { projectId: string }) {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-surface-400 mb-1">Unit Cost ({symbol})</label>
+                  <label className="block text-xs font-medium text-surface-400 mb-1">{t("Unit Cost (")}{symbol})</label>
                   <input
                     type="number"
                     value={newCost}
                     onChange={(e) => setNewCost(e.target.value)}
                     className="input w-28"
-                    placeholder="0.00"
+                    placeholder={t("0.00")}
                     min="0"
                     step="0.01"
                     readOnly
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-surface-400 mb-1">Qty</label>
+                  <label className="block text-xs font-medium text-surface-400 mb-1">{t("Qty")}</label>
                   <input
                     type="number"
                     value={newQuantity}
@@ -1121,10 +1110,9 @@ function SuppliesSection({ projectId }: { projectId: string }) {
                   />
                 </div>
                 <div className="flex gap-2">
-                  <button type="submit" className="btn btn-primary" disabled={!selectedMaterialId}>Add</button>
+                  <button type="submit" className="btn btn-primary" disabled={!selectedMaterialId}>{t("Add")}</button>
                   <button type="button" onClick={() => setShowAddForm(false)} className="btn btn-ghost">
-                    Cancel
-                  </button>
+                    {t("Cancel")}</button>
                 </div>
               </div>
             </form>
@@ -1132,31 +1120,31 @@ function SuppliesSection({ projectId }: { projectId: string }) {
             <form onSubmit={handleManualAdd}>
               <div className="grid grid-cols-[1fr_auto_auto_auto] gap-3 items-end">
                 <div>
-                  <label className="block text-xs font-medium text-surface-400 mb-1">Name</label>
+                  <label className="block text-xs font-medium text-surface-400 mb-1">{t("Name")}</label>
                   <input
                     type="text"
                     value={newName}
                     onChange={(e) => setNewName(e.target.value)}
                     className="input"
-                    placeholder="e.g., Lamp cord, Lightbulb"
+                    placeholder={t("e.g., Lamp cord, Lightbulb")}
                     autoFocus
                     required
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-surface-400 mb-1">Unit Cost ({symbol})</label>
+                  <label className="block text-xs font-medium text-surface-400 mb-1">{t("Unit Cost (")}{symbol})</label>
                   <input
                     type="number"
                     value={newCost}
                     onChange={(e) => setNewCost(e.target.value)}
                     className="input w-28"
-                    placeholder="0.00"
+                    placeholder={t("0.00")}
                     min="0"
                     step="0.01"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-surface-400 mb-1">Qty</label>
+                  <label className="block text-xs font-medium text-surface-400 mb-1">{t("Qty")}</label>
                   <input
                     type="number"
                     value={newQuantity}
@@ -1166,10 +1154,9 @@ function SuppliesSection({ projectId }: { projectId: string }) {
                   />
                 </div>
                 <div className="flex gap-2">
-                  <button type="submit" className="btn btn-primary">Add</button>
+                  <button type="submit" className="btn btn-primary">{t("Add")}</button>
                   <button type="button" onClick={() => setShowAddForm(false)} className="btn btn-ghost">
-                    Cancel
-                  </button>
+                    {t("Cancel")}</button>
                 </div>
               </div>
             </form>
@@ -1179,17 +1166,16 @@ function SuppliesSection({ projectId }: { projectId: string }) {
 
       {supplies.length === 0 ? (
         <div className="card p-6 text-center text-surface-500 text-sm">
-          No supplies added yet. Add non-printed items like lamp cords, lightbulbs, etc.
-        </div>
+          {t("No supplies added yet. Add non-printed items like lamp cords, lightbulbs, etc.")}</div>
       ) : (
         <div className="card overflow-hidden">
           <table className="w-full">
             <thead>
               <tr className="border-b border-surface-800">
-                <th className="text-left text-xs font-medium text-surface-500 uppercase px-4 py-2">Item</th>
-                <th className="text-right text-xs font-medium text-surface-500 uppercase px-4 py-2">Unit Cost</th>
-                <th className="text-right text-xs font-medium text-surface-500 uppercase px-4 py-2">Qty</th>
-                <th className="text-right text-xs font-medium text-surface-500 uppercase px-4 py-2">Total</th>
+                <th className="text-left text-xs font-medium text-surface-500 uppercase px-4 py-2">{t("Item")}</th>
+                <th className="text-right text-xs font-medium text-surface-500 uppercase px-4 py-2">{t("Unit Cost")}</th>
+                <th className="text-right text-xs font-medium text-surface-500 uppercase px-4 py-2">{t("Qty")}</th>
+                <th className="text-right text-xs font-medium text-surface-500 uppercase px-4 py-2">{t("Total")}</th>
                 <th className="w-10 px-4 py-2"></th>
               </tr>
             </thead>
@@ -1212,8 +1198,7 @@ function SuppliesSection({ projectId }: { projectId: string }) {
                         className="text-xs px-2 py-1 rounded bg-red-500/20 text-red-400 border border-red-500/50 hover:bg-red-500/30 transition-colors"
                         autoFocus
                       >
-                        Delete?
-                      </button>
+                        {t("Delete?")}</button>
                     ) : (
                       <button
                         onClick={() => handleDelete(supply)}
@@ -1229,8 +1214,7 @@ function SuppliesSection({ projectId }: { projectId: string }) {
             <tfoot>
               <tr className="border-t border-surface-700">
                 <td colSpan={3} className="px-4 py-3 text-right text-sm font-medium text-surface-400">
-                  Total Supplies
-                </td>
+                  {t("Total Supplies")}</td>
                 <td className="px-4 py-3 text-right font-semibold text-surface-100">
                   {formatCents(totalCents)}
                 </td>
@@ -1258,6 +1242,8 @@ function PrintHistoryTab({
   onRecordOutcome: (job: PrintJob) => void
   onHandleFailure: (job: PrintJob) => void
 }) {
+  const { t } = useTranslation('production')
+
   const { formatAmount } = useCurrency()
   const queryClient = useQueryClient()
   const [confirmDeleteJob, setConfirmDeleteJob] = useState<string | null>(null)
@@ -1280,7 +1266,7 @@ function PrintHistoryTab({
       setConfirmDeleteJob(null)
       refreshHistory()
     } catch (err) {
-      setHistoryError(err instanceof Error ? err.message : 'Failed to delete print record')
+      setHistoryError(err instanceof Error ? err.message : t("Failed to delete print record"))
     }
   }
 
@@ -1295,7 +1281,7 @@ function PrintHistoryTab({
       setConfirmClearHistory(false)
       refreshHistory()
     } catch (err) {
-      setHistoryError(err instanceof Error ? err.message : 'Failed to clear print history')
+      setHistoryError(err instanceof Error ? err.message : t("Failed to clear print history"))
     }
   }
 
@@ -1354,12 +1340,12 @@ function PrintHistoryTab({
     const diffMs = end.getTime() - start.getTime()
     const hours = Math.floor(diffMs / (1000 * 60 * 60))
     const mins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60))
-    if (hours > 0) return `${hours}h ${mins}m`
-    return `${mins}m`
+    if (hours > 0) return t('{{hours}}h {{minutes}}m', { hours, minutes: mins })
+    return t('{{minutes}}m', { minutes: mins })
   }
 
   if (isLoadingDesigns || isLoadingJobs || isLoadingQueue) {
-    return <div className="text-surface-500">Loading print history...</div>
+    return <div className="text-surface-500">{t("Loading print history...")}</div>
   }
 
   if (allJobs.length === 0 && projectQueueItems.length === 0) {
@@ -1367,11 +1353,9 @@ function PrintHistoryTab({
       <div className="card p-8 text-center">
         <History className="h-12 w-12 mx-auto mb-3 text-surface-600" />
         <h3 className="text-lg font-medium text-surface-300 mb-2">
-          No print history yet
-        </h3>
+          {t("No print history yet")}</h3>
         <p className="text-surface-500">
-          Print jobs will appear here once you start printing
-        </p>
+          {t("Print jobs will appear here once you start printing")}</p>
       </div>
     )
   }
@@ -1400,10 +1384,10 @@ function PrintHistoryTab({
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <div className="text-sm text-surface-500">Print History</div>
+        <div className="text-sm text-surface-500">{t("Print History")}</div>
         <div className="flex gap-2">
           <button onClick={clearHistory} className="btn btn-secondary text-xs py-1 px-3 flex items-center gap-1">
-            <Trash2 className="h-3.5 w-3.5" /> {confirmClearHistory ? 'Confirmar limpar?' : 'Limpar histórico'}
+            <Trash2 className="h-3.5 w-3.5" /> {confirmClearHistory ? t("Clear all print history? This cannot be undone.") : t("Clear history")}
           </button>
         </div>
       </div>
@@ -1411,13 +1395,13 @@ function PrintHistoryTab({
       {/* Stats Summary */}
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
         <div className="card p-4">
-          <div className="text-sm text-surface-500 mb-1">Total Prints</div>
+          <div className="text-sm text-surface-500 mb-1">{t("Total Prints")}</div>
           <div className="text-2xl font-semibold text-surface-100">
             {statsTotal}
           </div>
         </div>
         <div className="card p-4">
-          <div className="text-sm text-surface-500 mb-1">Success Rate</div>
+          <div className="text-sm text-surface-500 mb-1">{t("Success Rate")}</div>
           <div className="text-2xl font-semibold text-emerald-400">
             {(statsCompleted + statsFailed) > 0
               ? Math.round((statsCompleted / (statsCompleted + statsFailed)) * 100)
@@ -1425,20 +1409,19 @@ function PrintHistoryTab({
           </div>
         </div>
         <div className="card p-4">
-          <div className="text-sm text-surface-500 mb-1">Active</div>
+          <div className="text-sm text-surface-500 mb-1">{t("Active")}</div>
           <div className="text-2xl font-semibold text-blue-400">
-            {statsPrinting}{statsQueued > 0 && <span className="text-sm text-surface-400 ml-1">+{statsQueued} queued</span>}
+            {statsPrinting}{statsQueued > 0 && <span className="text-sm text-surface-400 ml-1">+{statsQueued} {t("queued")}</span>}
           </div>
         </div>
         <div className="card p-4">
-          <div className="text-sm text-surface-500 mb-1">Material Used</div>
+          <div className="text-sm text-surface-500 mb-1">{t("Material Used")}</div>
           <div className="text-2xl font-semibold text-surface-100">
-            {totalMaterialUsed.toFixed(0)}g
-          </div>
-          <div className="mt-1 text-xs text-surface-500">{formatPrintTime(totalPrintSeconds)} print time</div>
+            {t('{{value1}}g', { value1: totalMaterialUsed.toFixed(0) })}</div>
+          <div className="mt-1 text-xs text-surface-500">{formatPrintTime(totalPrintSeconds, t)} {t("print time")}</div>
         </div>
         <div className="card p-4">
-          <div className="text-sm text-surface-500 mb-1">Total Cost</div>
+          <div className="text-sm text-surface-500 mb-1">{t("Total Cost")}</div>
           <div className="text-2xl font-semibold text-emerald-400">
             {formatAmount(totalCost)}
           </div>
@@ -1457,19 +1440,19 @@ function PrintHistoryTab({
               <div>
                 <div className="font-medium text-surface-100">{item.display_name || item.file_name}</div>
                 <div className="text-sm text-surface-500 flex items-center gap-2">
-                  <span>Queue from Projects</span>
+                  <span>{t("Queue from Projects")}</span>
                   <span>·</span>
                   <span>{formatRelativeTime(item.created_at)}</span>
-                  {item.estimated_seconds && <><span>·</span><span>{formatPrintTime(item.estimated_seconds)}</span></>}
+                  {item.estimated_seconds && <><span>·</span><span>{formatPrintTime(item.estimated_seconds, t)}</span></>}
                 </div>
               </div>
             </div>
             <div className="flex items-center gap-3">
               <div className="text-right text-sm text-surface-300">
-                {item.filament_grams ? `${Math.round(item.filament_grams)}g` : 'No grams'}
+                {item.filament_grams ? `${Math.round(item.filament_grams)}g` : t("No grams")}
                 {item.material_type && <span className="ml-2 text-surface-500">{item.material_type.toUpperCase()}</span>}
               </div>
-              <span className={cn('badge', getStatusBadge(item.status))}>{item.status}</span>
+              <span className={cn('badge', getStatusBadge(item.status))}>{t(({ pending: 'Pending', in_progress: 'In Progress', completed: 'Completed', cancelled: 'Cancelled', printing: 'Printing', paused: 'Paused', failed: 'Failed', queued: 'Queued', idle: 'Idle', offline: 'Offline', online: 'Online', error: 'Error', ready: 'Ready', sent: 'Sent', info: 'Info', success: 'Success', warning: 'Warning', critical: 'Critical', channels: 'Channels', templates: 'Templates', deliveries: 'Deliveries' } as Record<string, string>)[item.status] || item.status)}</span>
             </div>
           </div>
         </div>
@@ -1508,10 +1491,10 @@ function PrintHistoryTab({
 
                 <div>
                   <div className="font-medium text-surface-100">
-                    {design?.file_name || 'Unknown design'}
+                    {design?.file_name || t("Unknown design")}
                   </div>
                   <div className="text-sm text-surface-500 flex items-center gap-2">
-                    <span>{printer?.name || 'Unknown printer'}</span>
+                    <span>{printer?.name || t("Unknown printer")}</span>
                     <span>·</span>
                     <span>{formatRelativeTime(job.created_at)}</span>
                     {job.started_at && (
@@ -1528,8 +1511,7 @@ function PrintHistoryTab({
                 {job.outcome && (
                   <div className="text-right text-sm">
                     <div className="text-surface-300">
-                      {job.outcome.material_used.toFixed(1)}g used
-                      {job.outcome.material_cost > 0 && (
+                      {job.outcome.material_used.toFixed(1)}{t("g used")}{job.outcome.material_cost > 0 && (
                         <span className="text-emerald-400 ml-2">
                           {formatAmount(job.outcome.material_cost)}
                         </span>
@@ -1562,10 +1544,10 @@ function PrintHistoryTab({
                   )}
                 >
                   {job.outcome?.success === false
-                    ? 'failed'
+                    ? t("Failed")
                     : job.status === 'completed' && job.outcome?.success
-                    ? 'success'
-                    : job.status}
+                    ? t("Success")
+                    : t(PRINT_JOB_STATUS_LABELS[job.status] || job.status)}
                 </span>
 
                 {/* Handle Failure button for failed jobs without outcome */}
@@ -1575,8 +1557,7 @@ function PrintHistoryTab({
                     className="btn btn-primary text-xs py-1 px-2 flex items-center gap-1"
                   >
                     <RefreshCw className="h-3 w-3" />
-                    Handle Failure
-                  </button>
+                    {t("Handle Failure")}</button>
                 )}
 
                 {/* Record Outcome button for completed jobs without outcome */}
@@ -1585,8 +1566,7 @@ function PrintHistoryTab({
                     onClick={() => onRecordOutcome(job)}
                     className="btn btn-secondary text-xs py-1 px-2"
                   >
-                    Record Outcome
-                  </button>
+                    {t("Record Outcome")}</button>
                 )}
 
                 <button
@@ -1599,7 +1579,7 @@ function PrintHistoryTab({
                   )}
                 >
                   <Trash2 className="h-3 w-3" />
-                  {confirmDeleteJob === job.id ? 'Confirmar' : 'Apagar'}
+                  {confirmDeleteJob === job.id ? t("Confirm") : t("Delete")}
                 </button>
               </div>
             </div>
@@ -1618,14 +1598,16 @@ function PrintHistoryTab({
 
 // Quick Stats Bar (above tabs)
 function ProjectQuickStats({ summary }: { summary: ProjectSummary }) {
+  const { t } = useTranslation('production')
+
   const { formatCents } = useCurrency()
 
   const formatTime = (seconds: number) => {
     if (seconds <= 0) return '-'
     const hours = Math.floor(seconds / 3600)
     const mins = Math.floor((seconds % 3600) / 60)
-    if (hours > 0) return `${hours}h ${mins}m`
-    return `${mins}m`
+    if (hours > 0) return t('{{hours}}h {{minutes}}m', { hours, minutes: mins })
+    return t('{{minutes}}m', { minutes: mins })
   }
 
   const printSeconds = summary.total_print_seconds > 0
@@ -1643,7 +1625,7 @@ function ProjectQuickStats({ summary }: { summary: ProjectSummary }) {
       <div className="flex items-center gap-3 px-4 py-3 rounded-lg bg-surface-800/50 border border-surface-700">
         <Timer className="h-5 w-5 text-blue-400 shrink-0" />
         <div className="min-w-0">
-          <div className="text-xs text-surface-500">Print Time</div>
+          <div className="text-xs text-surface-500">{t("Print Time")}</div>
           <div className="text-sm font-semibold text-surface-100 truncate">
             {formatTime(printSeconds)}
           </div>
@@ -1652,7 +1634,7 @@ function ProjectQuickStats({ summary }: { summary: ProjectSummary }) {
       <div className="flex items-center gap-3 px-4 py-3 rounded-lg bg-surface-800/50 border border-surface-700">
         <DollarSign className="h-5 w-5 text-amber-400 shrink-0" />
         <div className="min-w-0">
-          <div className="text-xs text-surface-500">Unit Cost</div>
+          <div className="text-xs text-surface-500">{t("Unit Cost")}</div>
           <div className="text-sm font-semibold text-surface-100 truncate">
             {formatCents(summary.unit_cost_cents)}
           </div>
@@ -1661,7 +1643,7 @@ function ProjectQuickStats({ summary }: { summary: ProjectSummary }) {
       <div className="flex items-center gap-3 px-4 py-3 rounded-lg bg-surface-800/50 border border-surface-700">
         <Scale className="h-5 w-5 text-purple-400 shrink-0" />
         <div className="min-w-0">
-          <div className="text-xs text-surface-500">Material</div>
+          <div className="text-xs text-surface-500">{t("Material")}</div>
           <div className="text-sm font-semibold text-surface-100 truncate">
             {materialGrams > 0 ? `${materialGrams.toFixed(0)}g` : '-'}
           </div>
@@ -1670,7 +1652,7 @@ function ProjectQuickStats({ summary }: { summary: ProjectSummary }) {
       <div className="flex items-center gap-3 px-4 py-3 rounded-lg bg-surface-800/50 border border-surface-700">
         <TrendingUp className="h-5 w-5 text-emerald-400 shrink-0" />
         <div className="min-w-0">
-          <div className="text-xs text-surface-500">Avg Profit / Sale</div>
+          <div className="text-xs text-surface-500">{t("Avg Profit / Sale")}</div>
           <div className={cn(
             'text-sm font-semibold truncate',
             summary.sales_count > 0
@@ -1687,17 +1669,17 @@ function ProjectQuickStats({ summary }: { summary: ProjectSummary }) {
 
 // Project Analytics Tab
 function ProjectAnalyticsTab({ summary }: { summary?: ProjectSummary }) {
+  const { t } = useTranslation('production')
+
   const { formatAmount, formatCents } = useCurrency()
   if (!summary) {
     return (
       <div className="card p-8 text-center">
         <BarChart3 className="h-12 w-12 mx-auto mb-3 text-surface-600" />
         <h3 className="text-lg font-medium text-surface-300 mb-2">
-          No analytics yet
-        </h3>
+          {t("No analytics yet")}</h3>
         <p className="text-surface-500">
-          Complete some print jobs and record sales to see project analytics
-        </p>
+          {t("Complete some print jobs and record sales to see project analytics")}</p>
       </div>
     )
   }
@@ -1706,8 +1688,8 @@ function ProjectAnalyticsTab({ summary }: { summary?: ProjectSummary }) {
     if (seconds <= 0) return '-'
     const hours = Math.floor(seconds / 3600)
     const mins = Math.floor((seconds % 3600) / 60)
-    if (hours > 0) return `${hours}h ${mins}m`
-    return `${mins}m`
+    if (hours > 0) return t('{{hours}}h {{minutes}}m', { hours, minutes: mins })
+    return t('{{minutes}}m', { minutes: mins })
   }
 
   return (
@@ -1716,27 +1698,24 @@ function ProjectAnalyticsTab({ summary }: { summary?: ProjectSummary }) {
       <div>
         <h3 className="text-sm font-medium text-surface-400 uppercase tracking-wider mb-3 flex items-center gap-2">
           <DollarSign className="h-4 w-4" />
-          Revenue
-        </h3>
+          {t("Revenue")}</h3>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="card p-4">
             <div className="flex items-center gap-1.5 text-sm text-surface-500 mb-1">
-              Gross Revenue
-              <Tooltip text="Total amount collected from all sales of this project before any deductions." />
+              {t("Gross Revenue")}<Tooltip text={t("Total amount collected from all sales of this project before any deductions.")} />
             </div>
             <div className="text-2xl font-semibold text-surface-100">
               {formatCents(summary.total_revenue_cents)}
             </div>
             {summary.sales_count > 0 && (
               <div className="text-xs text-surface-500 mt-1">
-                {summary.sales_count} sale{summary.sales_count !== 1 ? 's' : ''}
+                {t('{{count}} sale', { count: summary.sales_count })}
               </div>
             )}
           </div>
           <div className="card p-4">
             <div className="flex items-center gap-1.5 text-sm text-surface-500 mb-1">
-              Fees
-              <Tooltip text="Marketplace and payment processing fees deducted from sales (e.g. Etsy fees, PayPal fees)." />
+              {t("Fees")}<Tooltip text={t("Marketplace and payment processing fees deducted from sales (e.g. Etsy fees, PayPal fees).")} />
             </div>
             <div className="text-2xl font-semibold text-red-400">
               {formatCents(summary.total_fees_cents)}
@@ -1744,8 +1723,7 @@ function ProjectAnalyticsTab({ summary }: { summary?: ProjectSummary }) {
           </div>
           <div className="card p-4">
             <div className="flex items-center gap-1.5 text-sm text-surface-500 mb-1">
-              Net Revenue
-              <Tooltip text="Gross revenue minus fees. The actual amount received after marketplace and payment deductions." />
+              {t("Net Revenue")}<Tooltip text={t("Gross revenue minus fees. The actual amount received after marketplace and payment deductions.")} />
             </div>
             <div className="text-2xl font-semibold text-surface-100">
               {formatCents(summary.net_revenue_cents)}
@@ -1753,8 +1731,7 @@ function ProjectAnalyticsTab({ summary }: { summary?: ProjectSummary }) {
           </div>
           <div className="card p-4">
             <div className="flex items-center gap-1.5 text-sm text-surface-500 mb-1">
-              Gross Profit
-              <Tooltip text="Net revenue minus total cost of goods sold (COGS). This is the profit after accounting for all production costs and fees." />
+              {t("Gross Profit")}<Tooltip text={t("Net revenue minus total cost of goods sold (COGS). This is the profit after accounting for all production costs and fees.")} />
             </div>
             <div className={cn(
               'text-2xl font-semibold',
@@ -1764,8 +1741,7 @@ function ProjectAnalyticsTab({ summary }: { summary?: ProjectSummary }) {
             </div>
             {summary.gross_margin_percent > 0 && (
               <div className="text-xs text-surface-500 mt-1">
-                {summary.gross_margin_percent.toFixed(1)}% margin
-              </div>
+                {summary.gross_margin_percent.toFixed(1)}{t("% margin")}</div>
             )}
           </div>
         </div>
@@ -1775,37 +1751,32 @@ function ProjectAnalyticsTab({ summary }: { summary?: ProjectSummary }) {
       <div>
         <h3 className="text-sm font-medium text-surface-400 uppercase tracking-wider mb-3 flex items-center gap-2">
           <TrendingUp className="h-4 w-4" />
-          Cost Breakdown
-        </h3>
+          {t("Cost Breakdown")}</h3>
         <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
           <div className="card p-4">
             <div className="flex items-center gap-1.5 text-sm text-surface-500 mb-1">
-              Unit Cost
-              <Tooltip text="Total cost to produce one unit of this project, including printer time, material, and supplies." />
+              {t("Unit Cost")}<Tooltip text={t("Total cost to produce one unit of this project, including printer time, material, and supplies.")} />
             </div>
             <div className="text-2xl font-semibold text-surface-100">
               {formatCents(summary.unit_cost_cents)}
             </div>
-            <div className="text-xs text-surface-500 mt-1">per unit produced</div>
+            <div className="text-xs text-surface-500 mt-1">{t("per unit produced")}</div>
           </div>
           {summary.sales_count > 1 && (
             <div className="card p-4">
               <div className="flex items-center gap-1.5 text-sm text-surface-500 mb-1">
-                Total COGS
-                <Tooltip text="Cost of Goods Sold. Unit cost multiplied by the number of units sold. Represents total production cost for all sales." />
+                {t("Total COGS")}<Tooltip text={t("Cost of Goods Sold. Unit cost multiplied by the number of units sold. Represents total production cost for all sales.")} />
               </div>
               <div className="text-2xl font-semibold text-red-400">
                 {formatCents(summary.total_cost_cents)}
               </div>
               <div className="text-xs text-surface-500 mt-1">
-                {summary.sales_count} units sold
-              </div>
+                {summary.sales_count} {t("units sold")}</div>
             </div>
           )}
           <div className="card p-4">
             <div className="flex items-center gap-1.5 text-sm text-surface-500 mb-1">
-              Printer Time
-              <Tooltip text="Cost of printer usage based on each printer's hourly rate multiplied by actual print time from completed jobs." />
+              {t("Printer Time")}<Tooltip text={t("Cost of printer usage based on each printer's hourly rate multiplied by actual print time from completed jobs.")} />
             </div>
             <div className="text-2xl font-semibold text-surface-100">
               {formatCents(summary.printer_time_cost_cents)}
@@ -1813,40 +1784,36 @@ function ProjectAnalyticsTab({ summary }: { summary?: ProjectSummary }) {
           </div>
           <div className="card p-4">
             <div className="flex items-center gap-1.5 text-sm text-surface-500 mb-1">
-              Material (Actual)
-              <Tooltip text="Actual filament cost recorded when print jobs complete, calculated from material used and spool cost per kg." />
+              {t("Material (Actual)")}<Tooltip text={t("Actual filament cost recorded when print jobs complete, calculated from material used and spool cost per kg.")} />
             </div>
             <div className="text-2xl font-semibold text-surface-100">
               {formatCents(summary.material_cost_cents)}
             </div>
             {summary.total_material_grams > 0 && (
               <div className="text-xs text-surface-500 mt-1">
-                {summary.total_material_grams.toFixed(0)}g used
-              </div>
+                {summary.total_material_grams.toFixed(0)}{t("g used")}</div>
             )}
           </div>
           {summary.estimated_material_cost_cents > 0 && (
             <div className="card p-4">
               <div className="flex items-center gap-1.5 text-sm text-surface-500 mb-1">
-                Est. Material
-                <Tooltip text={`Estimated material cost calculated from slice profile weight data at a default rate of ${formatAmount(19.99)}/kg. Used when actual costs aren't available.`} />
+                {t("Est. Material")}<Tooltip text={t("Estimated material cost calculated from slice profile weight data at a default rate of {{value1}}/kg. Used when actual costs aren't available.", { value1: formatAmount(19.99) })} />
               </div>
               <div className="text-2xl font-semibold text-amber-400">
                 {formatCents(summary.estimated_material_cost_cents)}
               </div>
-              <div className="text-xs text-surface-500 mt-1">from slice profiles</div>
+              <div className="text-xs text-surface-500 mt-1">{t("from slice profiles")}</div>
             </div>
           )}
           {summary.supply_cost_cents > 0 && (
             <div className="card p-4">
               <div className="flex items-center gap-1.5 text-sm text-surface-500 mb-1">
-                Supplies
-                <Tooltip text="Total cost of non-printed items added to this project's bill of materials (e.g. hardware, wiring, packaging)." />
+                {t("Supplies")}<Tooltip text={t("Total cost of non-printed items added to this project's bill of materials (e.g. hardware, wiring, packaging).")} />
               </div>
               <div className="text-2xl font-semibold text-surface-100">
                 {formatCents(summary.supply_cost_cents)}
               </div>
-              <div className="text-xs text-surface-500 mt-1">non-printed items</div>
+              <div className="text-xs text-surface-500 mt-1">{t("non-printed items")}</div>
             </div>
           )}
         </div>
@@ -1856,25 +1823,22 @@ function ProjectAnalyticsTab({ summary }: { summary?: ProjectSummary }) {
       <div>
         <h3 className="text-sm font-medium text-surface-400 uppercase tracking-wider mb-3 flex items-center gap-2">
           <Timer className="h-4 w-4" />
-          Performance
-        </h3>
+          {t("Performance")}</h3>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="card p-4">
             <div className="flex items-center gap-1.5 text-sm text-surface-500 mb-1">
-              Total Print Time
-              <Tooltip text="Combined print time across all jobs. Uses actual time from completed jobs, or estimated time from slice profiles if no jobs have run." />
+              {t("Total Print Time")}<Tooltip text={t("Combined print time across all jobs. Uses actual time from completed jobs, or estimated time from slice profiles if no jobs have run.")} />
             </div>
             <div className="text-2xl font-semibold text-surface-100">
               {formatSeconds(summary.total_print_seconds || summary.estimated_print_seconds)}
             </div>
             {summary.total_print_seconds <= 0 && summary.estimated_print_seconds > 0 && (
-              <div className="text-xs text-surface-500 mt-1">estimated from slices</div>
+              <div className="text-xs text-surface-500 mt-1">{t("estimated from slices")}</div>
             )}
           </div>
           <div className="card p-4">
             <div className="flex items-center gap-1.5 text-sm text-surface-500 mb-1">
-              Avg Print Time
-              <Tooltip text="Average print time per completed job. Calculated from actual completed print job durations." />
+              {t("Avg Print Time")}<Tooltip text={t("Average print time per completed job. Calculated from actual completed print job durations.")} />
             </div>
             <div className="text-2xl font-semibold text-surface-100">
               {formatSeconds(summary.avg_print_seconds)}
@@ -1882,8 +1846,7 @@ function ProjectAnalyticsTab({ summary }: { summary?: ProjectSummary }) {
           </div>
           <div className="card p-4">
             <div className="flex items-center gap-1.5 text-sm text-surface-500 mb-1">
-              Success Rate
-              <Tooltip text="Percentage of print jobs that completed successfully out of all completed and failed jobs." />
+              {t("Success Rate")}<Tooltip text={t("Percentage of print jobs that completed successfully out of all completed and failed jobs.")} />
             </div>
             <div className={cn(
               'text-2xl font-semibold',
@@ -1893,13 +1856,11 @@ function ProjectAnalyticsTab({ summary }: { summary?: ProjectSummary }) {
               {summary.success_rate.toFixed(0)}%
             </div>
             <div className="text-xs text-surface-500 mt-1">
-              {summary.completed_count}/{summary.job_count} jobs
-            </div>
+              {summary.completed_count}/{summary.job_count} {t("jobs")}</div>
           </div>
           <div className="card p-4">
             <div className="flex items-center gap-1.5 text-sm text-surface-500 mb-1">
-              Profit / Hour
-              <Tooltip text="Gross profit divided by total print hours. Measures how efficiently this project converts printer time into profit." />
+              {t("Profit / Hour")}<Tooltip text={t("Gross profit divided by total print hours. Measures how efficiently this project converts printer time into profit.")} />
             </div>
             <div className={cn(
               'text-2xl font-semibold',
@@ -1907,7 +1868,7 @@ function ProjectAnalyticsTab({ summary }: { summary?: ProjectSummary }) {
             )}>
               {formatCents(summary.profit_per_hour_cents)}
             </div>
-            <div className="text-xs text-surface-500 mt-1">per print hour</div>
+            <div className="text-xs text-surface-500 mt-1">{t("per print hour")}</div>
           </div>
         </div>
       </div>
@@ -1925,6 +1886,8 @@ function UploadDesignModal({
   onClose: () => void
   onSuccess: () => void
 }) {
+  const { t } = useTranslation('production')
+
   const [selectedGCodeFile, setSelectedGCodeFile] = useState<RootProjectFile | null>(null)
   const [notes, setNotes] = useState('')
   const [uploading, setUploading] = useState(false)
@@ -1940,19 +1903,18 @@ function UploadDesignModal({
       await designsApi.linkRootFile(part.id, { type: selectedGCodeFile.type, id: selectedGCodeFile.file.id }, notes)
       onSuccess()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to add design')
+      setError(err instanceof Error ? err.message : t("Failed to add design"))
     } finally {
       setUploading(false)
     }
   }
 
   return (
-    <Modal title={`Add Design for ${part.name}`} onClose={onClose}>
+    <Modal title={t("Add Design for {{value1}}", { value1: part.name })} onClose={onClose}>
       <div className="space-y-4">
         <div>
           <label className="block text-sm font-medium text-surface-300 mb-2">
-            Design File (G-code)
-          </label>
+            {t("Design File (G-code)")}</label>
           {selectedGCodeFile ? (
             <div className="rounded-lg border border-accent-500/40 bg-accent-500/5 p-3">
               <div className="flex items-center justify-between">
@@ -1974,20 +1936,18 @@ function UploadDesignModal({
             </div>
           ) : (
             <button type="button" onClick={() => setShowPicker(true)} className="w-full rounded-lg border border-surface-700 bg-surface-900/40 px-4 py-4 text-sm text-surface-300 hover:border-accent-500 hover:text-accent-400">
-              Selecionar arquivo da aba Files
-            </button>
+              {t("Select a file from Files")}</button>
           )}
         </div>
         <div>
           <label className="block text-sm font-medium text-surface-300 mb-1">
-            Notes
-          </label>
+            {t("Notes")}</label>
           <textarea
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
             rows={2}
             className="input resize-none"
-            placeholder="Optional notes about this version"
+            placeholder={t("Optional notes about this version")}
           />
         </div>
         {error && <div className="text-sm text-red-400">{error}</div>}
@@ -2004,14 +1964,13 @@ function UploadDesignModal({
       )}
       <div className="flex justify-end gap-3 mt-6">
         <button onClick={onClose} className="btn btn-ghost">
-          Cancel
-        </button>
+          {t("Cancel")}</button>
         <button
           onClick={handleUpload}
           disabled={!selectedGCodeFile || uploading}
           className="btn btn-primary"
         >
-          {uploading ? 'Adicionando...' : 'Adicionar design'}
+          {uploading ? t("Adding...") : t("Add design")}
         </button>
       </div>
     </Modal>
@@ -2040,6 +1999,8 @@ function SendToPrinterModal({
   printerStates: Record<string, { status: string; progress: number }>
   onClose: () => void
 }) {
+  const { t } = useTranslation('production')
+
   const [selectedPrinter, setSelectedPrinter] = useState('')
   const [selectedSpool, setSelectedSpool] = useState('')
   const [sending, setSending] = useState(false)
@@ -2075,7 +2036,7 @@ function SendToPrinterModal({
       queryClient.invalidateQueries({ queryKey: ['queue'] })
       onClose()
     } catch (err) {
-      setSendError(err instanceof Error ? err.message : 'Failed to add to queue')
+      setSendError(err instanceof Error ? err.message : t("Failed to add to queue"))
     } finally {
       setSending(false)
     }
@@ -2086,15 +2047,14 @@ function SendToPrinterModal({
   )
 
   return (
-    <Modal title="Adicionar à fila" onClose={onClose}>
+    <Modal title={t("Add to queue")} onClose={onClose}>
       <div className="space-y-4">
         <div>
           <label className="block text-sm font-medium text-surface-300 mb-2">
-            Design
-          </label>
+            {t("Design")}</label>
           <div className="p-3 rounded-lg bg-surface-800/50">
             <div className="font-medium text-surface-100">
-              v{design.version} — {design.file_name}
+              {t('v{{version}}', { version: design.version })} — {design.file_name}
             </div>
             <div className="text-sm text-surface-500">
               {formatBytes(design.file_size_bytes)}
@@ -2104,12 +2064,10 @@ function SendToPrinterModal({
 
         <div>
           <label className="block text-sm font-medium text-surface-300 mb-2">
-            Select Printer
-          </label>
+            {t("Select Printer")}</label>
           {availablePrinters.length === 0 ? (
             <div className="text-surface-500 text-sm p-4 text-center bg-surface-800/50 rounded-lg">
-              No printers available. All printers are busy or offline.
-            </div>
+              {t("No printers available. All printers are busy or offline.")}</div>
           ) : (
             <div className="space-y-2">
               {availablePrinters.map((printer) => (
@@ -2140,7 +2098,7 @@ function SendToPrinterModal({
                       {printer.name}
                     </div>
                     <div className="text-xs text-surface-500">
-                      {printer.model || 'Unknown model'}
+                      {printer.model || t("Unknown model")}
                     </div>
                   </div>
                 </label>
@@ -2151,12 +2109,10 @@ function SendToPrinterModal({
 
         <div>
           <label className="block text-sm font-medium text-surface-300 mb-2">
-            Select Material Spool
-          </label>
+            {t("Select Material Spool")}</label>
           {availableSpools.length === 0 ? (
             <div className="text-surface-500 text-sm p-4 text-center bg-surface-800/50 rounded-lg">
-              No spools available. Add material spools in the Materials page.
-            </div>
+              {t("No spools available. Add material spools in the Materials page.")}</div>
           ) : (
             <div className="space-y-2 max-h-48 overflow-y-auto">
               {availableSpools.map((spool: SpoolWithMaterial) => {
@@ -2192,7 +2148,7 @@ function SendToPrinterModal({
                     )}
                     <div className="flex-1 min-w-0">
                       <div className="font-medium text-surface-100 truncate">
-                        {spool.material?.name || 'Unknown material'}
+                        {spool.material?.name || t("Unknown material")}
                       </div>
                       <div className="text-xs text-surface-500 flex items-center gap-2">
                         <span className="uppercase">
@@ -2204,8 +2160,7 @@ function SendToPrinterModal({
                             isLow && 'text-amber-400 font-medium'
                           )}
                         >
-                          {spool.remaining_weight.toFixed(0)}g remaining
-                        </span>
+                          {spool.remaining_weight.toFixed(0)}{t("g remaining")}</span>
                         {isLow && (
                           <AlertTriangle className="h-3 w-3 text-amber-400" />
                         )}
@@ -2223,15 +2178,14 @@ function SendToPrinterModal({
 
       <div className="flex justify-end gap-3 mt-6">
         <button onClick={onClose} className="btn btn-ghost">
-          Cancel
-        </button>
+          {t("Cancel")}</button>
         <button
           onClick={handleSend}
           disabled={!selectedPrinter || !selectedSpool || sending}
           className="btn btn-primary"
         >
           <Play className="h-4 w-4 mr-2" />
-          {sending ? 'Adicionando...' : 'Adicionar à fila'}
+          {sending ? t("Adding...") : t("Add to queue")}
         </button>
       </div>
     </Modal>
@@ -2248,6 +2202,8 @@ function Modal({
   children: React.ReactNode
   onClose: () => void
 }) {
+  useTranslation('production')
+
   return (
     <div
       className="fixed inset-0 bg-black/60 flex items-center justify-center z-50"
@@ -2271,6 +2227,8 @@ function OutcomeCaptureModal({
   onClose: () => void
   onSuccess: () => void
 }) {
+  const { t } = useTranslation('production')
+
   const [success, setSuccess] = useState(true)
   const [qualityRating, setQualityRating] = useState(4)
   const [materialUsed, setMaterialUsed] = useState('')
@@ -2300,13 +2258,12 @@ function OutcomeCaptureModal({
   }
 
   return (
-    <Modal title="Record Print Outcome" onClose={onClose}>
+    <Modal title={t("Record Print Outcome")} onClose={onClose}>
       <div className="space-y-4">
         {/* Success/Failure Toggle */}
         <div>
           <label className="block text-sm font-medium text-surface-300 mb-2">
-            Print Result
-          </label>
+            {t("Print Result")}</label>
           <div className="grid grid-cols-2 gap-2">
             <button
               type="button"
@@ -2319,8 +2276,7 @@ function OutcomeCaptureModal({
               )}
             >
               <CheckCircle className="h-5 w-5" />
-              Success
-            </button>
+              {t("Success")}</button>
             <button
               type="button"
               onClick={() => setSuccess(false)}
@@ -2332,8 +2288,7 @@ function OutcomeCaptureModal({
               )}
             >
               <XCircle className="h-5 w-5" />
-              Failed
-            </button>
+              {t("Failed")}</button>
           </div>
         </div>
 
@@ -2341,8 +2296,7 @@ function OutcomeCaptureModal({
         {success && (
           <div>
             <label className="block text-sm font-medium text-surface-300 mb-2">
-              Quality Rating
-            </label>
+              {t("Quality Rating")}</label>
             <div className="flex gap-1">
               {[1, 2, 3, 4, 5].map((rating) => (
                 <button
@@ -2369,14 +2323,13 @@ function OutcomeCaptureModal({
         {!success && (
           <div>
             <label className="block text-sm font-medium text-surface-300 mb-1">
-              Failure Reason
-            </label>
+              {t("Failure Reason")}</label>
             <input
               type="text"
               value={failureReason}
               onChange={(e) => setFailureReason(e.target.value)}
               className="input"
-              placeholder="e.g., Bed adhesion, spaghetti, layer shift"
+              placeholder={t("e.g., Bed adhesion, spaghetti, layer shift")}
             />
           </div>
         )}
@@ -2384,47 +2337,43 @@ function OutcomeCaptureModal({
         {/* Material Used */}
         <div>
           <label className="block text-sm font-medium text-surface-300 mb-1">
-            Material Used (grams)
-          </label>
+            {t("Material Used (grams)")}</label>
           <input
             type="number"
             value={materialUsed}
             onChange={(e) => setMaterialUsed(e.target.value)}
             className="input"
-            placeholder="e.g., 25"
+            placeholder={t("e.g., 25")}
             min="0"
             step="0.1"
           />
           <p className="text-xs text-surface-500 mt-1">
-            Enter the amount of material consumed during this print
-          </p>
+            {t("Enter the amount of material consumed during this print")}</p>
         </div>
 
         {/* Notes */}
         <div>
           <label className="block text-sm font-medium text-surface-300 mb-1">
-            Notes
-          </label>
+            {t("Notes")}</label>
           <textarea
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
             rows={2}
             className="input resize-none"
-            placeholder="Optional notes about this print"
+            placeholder={t("Optional notes about this print")}
           />
         </div>
       </div>
 
       <div className="flex justify-end gap-3 mt-6">
         <button onClick={onClose} className="btn btn-ghost">
-          Cancel
-        </button>
+          {t("Cancel")}</button>
         <button
           onClick={handleSubmit}
           disabled={submitting}
           className="btn btn-primary"
         >
-          {submitting ? 'Saving...' : 'Save Outcome'}
+          {submitting ? t("Saving...") : t("Save Outcome")}
         </button>
       </div>
     </Modal>

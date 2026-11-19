@@ -7,7 +7,9 @@ import * as THREE from 'three'
 
 const source = readFileSync(new URL('../src/components/stlViewerUtils.ts', import.meta.url), 'utf8')
 const { outputText } = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS } })
-const context = { exports: {}, require: () => THREE, Uint8Array, DataView }
+const translate = (key, values = {}) => key.replace(/{{(\w+)}}/g, (match, name) => values[name] ?? match)
+const i18n = { t: translate }
+const context = { exports: {}, require: name => name === '../i18n' ? { default: i18n, t: translate } : THREE, Uint8Array, DataView }
 vm.runInNewContext(outputText, context)
 const { inspectSTLGeometry, stlViewPose, stlCameraDistance, readSTLResponse, MAX_STL_BYTES } = context.exports
 

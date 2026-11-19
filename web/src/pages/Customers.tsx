@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Users, Plus, ChevronRight, Search, Building2, Mail, Trash2 } from 'lucide-react'
@@ -5,6 +6,8 @@ import { customersApi } from '../api/client'
 import type { Customer } from '../types'
 
 export default function Customers() {
+  const { t } = useTranslation('commerce')
+
   const [customers, setCustomers] = useState<Customer[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
@@ -26,7 +29,7 @@ export default function Customers() {
   }, [loadCustomers])
 
   const handleDelete = async (customerId: string) => {
-    if (!confirm('Delete this customer? This cannot be undone.')) return
+    if (!confirm(t("Delete this customer? This cannot be undone."))) return
     try {
       await customersApi.delete(customerId)
       loadCustomers()
@@ -66,15 +69,16 @@ export default function Customers() {
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-display font-bold text-surface-100">Customers</h1>
-          <p className="text-sm text-surface-400 mt-1">{customers.length} customer{customers.length !== 1 ? 's' : ''}</p>
+          <h1 className="text-2xl font-display font-bold text-surface-100">{t("Customers")}</h1>
+          <p className="text-sm text-surface-400 mt-1">{t("{{count}} customers", { count: customers.length })}</p>
         </div>
         <button
           onClick={() => setShowCreateModal(true)}
           className="inline-flex items-center gap-2 px-4 py-2 bg-accent-500 text-white rounded-lg hover:bg-accent-600 transition-colors text-sm font-medium"
         >
           <Plus className="h-4 w-4" />
-          New Customer
+
+          {t("New Customer")}
         </button>
       </div>
 
@@ -84,7 +88,7 @@ export default function Customers() {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-surface-500" />
           <input
             type="text"
-            placeholder="Search customers..."
+            placeholder={t("Search customers...")}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="w-full pl-10 pr-4 py-2 bg-surface-800 border border-surface-700 rounded-lg text-surface-100 placeholder-surface-500 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500"
@@ -96,14 +100,15 @@ export default function Customers() {
       {customers.length === 0 ? (
         <div className="text-center py-16">
           <Users className="h-12 w-12 text-surface-600 mx-auto mb-4" />
-          <h3 className="text-lg font-medium text-surface-300 mb-2">No customers yet</h3>
-          <p className="text-surface-500 text-sm mb-4">Create your first customer to start building quotes.</p>
+          <h3 className="text-lg font-medium text-surface-300 mb-2">{t("No customers yet")}</h3>
+          <p className="text-surface-500 text-sm mb-4">{t("Create your first customer to start building quotes.")}</p>
           <button
             onClick={() => setShowCreateModal(true)}
             className="inline-flex items-center gap-2 px-4 py-2 bg-accent-500 text-white rounded-lg hover:bg-accent-600 transition-colors text-sm"
           >
             <Plus className="h-4 w-4" />
-            New Customer
+
+            {t("New Customer")}
           </button>
         </div>
       ) : (
@@ -111,10 +116,10 @@ export default function Customers() {
           <table className="w-full">
             <thead>
               <tr className="border-b border-surface-800">
-                <th className="text-left text-xs font-medium text-surface-400 uppercase tracking-wider px-4 py-3">Name</th>
-                <th className="text-left text-xs font-medium text-surface-400 uppercase tracking-wider px-4 py-3">Company</th>
-                <th className="text-left text-xs font-medium text-surface-400 uppercase tracking-wider px-4 py-3">Email</th>
-                <th className="text-left text-xs font-medium text-surface-400 uppercase tracking-wider px-4 py-3">Phone</th>
+                <th className="text-left text-xs font-medium text-surface-400 uppercase tracking-wider px-4 py-3">{t("Name")}</th>
+                <th className="text-left text-xs font-medium text-surface-400 uppercase tracking-wider px-4 py-3">{t("Company")}</th>
+                <th className="text-left text-xs font-medium text-surface-400 uppercase tracking-wider px-4 py-3">{t("Email")}</th>
+                <th className="text-left text-xs font-medium text-surface-400 uppercase tracking-wider px-4 py-3">{t("Phone")}</th>
                 <th className="w-10" />
               </tr>
             </thead>
@@ -145,10 +150,10 @@ export default function Customers() {
                   <td className="px-4 py-3 text-sm text-surface-400">{customer.phone}</td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-1">
-                      <button onClick={() => handleDelete(customer.id)} className="text-surface-600 hover:text-red-400" title="Delete customer">
+                      <button onClick={() => handleDelete(customer.id)} className="text-surface-600 hover:text-red-400" title={t("Delete customer")}>
                         <Trash2 className="h-3.5 w-3.5" />
                       </button>
-                      <Link to={`/customers/${customer.id}`} className="text-surface-500 hover:text-surface-300">
+                      <Link aria-label={t("Open details")} to={`/customers/${customer.id}`} className="text-surface-500 hover:text-surface-300">
                         <ChevronRight className="h-4 w-4" />
                       </Link>
                     </div>
@@ -164,27 +169,27 @@ export default function Customers() {
       {showCreateModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-surface-900 border border-surface-700 rounded-xl p-6 w-full max-w-md">
-            <h2 className="text-lg font-display font-semibold text-surface-100 mb-4">New Customer</h2>
+            <h2 className="text-lg font-display font-semibold text-surface-100 mb-4">{t("New Customer")}</h2>
             <form onSubmit={handleCreate} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-surface-300 mb-1">Name *</label>
+                <label className="block text-sm font-medium text-surface-300 mb-1">{t("Name *")}</label>
                 <input name="name" required className="w-full px-3 py-2 bg-surface-800 border border-surface-700 rounded-lg text-surface-100 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-surface-300 mb-1">Email</label>
+                <label className="block text-sm font-medium text-surface-300 mb-1">{t("Email")}</label>
                 <input name="email" type="email" className="w-full px-3 py-2 bg-surface-800 border border-surface-700 rounded-lg text-surface-100 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-surface-300 mb-1">Company</label>
+                <label className="block text-sm font-medium text-surface-300 mb-1">{t("Company")}</label>
                 <input name="company" className="w-full px-3 py-2 bg-surface-800 border border-surface-700 rounded-lg text-surface-100 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-surface-300 mb-1">Phone</label>
+                <label className="block text-sm font-medium text-surface-300 mb-1">{t("Phone")}</label>
                 <input name="phone" className="w-full px-3 py-2 bg-surface-800 border border-surface-700 rounded-lg text-surface-100 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500" />
               </div>
               <div className="flex justify-end gap-3 pt-2">
-                <button type="button" onClick={() => setShowCreateModal(false)} className="px-4 py-2 text-sm text-surface-400 hover:text-surface-200">Cancel</button>
-                <button type="submit" className="px-4 py-2 bg-accent-500 text-white rounded-lg hover:bg-accent-600 text-sm font-medium">Create</button>
+                <button type="button" onClick={() => setShowCreateModal(false)} className="px-4 py-2 text-sm text-surface-400 hover:text-surface-200">{t("Cancel")}</button>
+                <button type="submit" className="px-4 py-2 bg-accent-500 text-white rounded-lg hover:bg-accent-600 text-sm font-medium">{t("Create")}</button>
               </div>
             </form>
           </div>

@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import { resourceURL } from '../lib/platform'
 import { useState, useMemo } from 'react'
 import { Link } from 'react-router-dom'
@@ -24,6 +25,8 @@ function SortHeader({
   onSort: (field: SortField) => void
   children: React.ReactNode
 }) {
+  useTranslation('production')
+
   return (
     <button
       onClick={() => onSort(field)}
@@ -39,6 +42,8 @@ function SortHeader({
 }
 
 export default function Projects() {
+  const { t } = useTranslation('production')
+
   const { formatCents } = useCurrency()
   const [showCreate, setShowCreate] = useState(false)
   const [showImport, setShowImport] = useState(false)
@@ -62,14 +67,14 @@ export default function Projects() {
     try {
       const { added, missing } = await enqueueProjectParts(projectId)
       if (added > 0) {
-        setToastMessage(`Adicionado ${added} item(s) do projeto na fila de impressão`)
+        setToastMessage(t("Added {{count}} project item to the print queue", { count: added }))
       } else if (missing > 0) {
-        setToastMessage(`Nenhum G-code encontrado. ${missing} part(s) sem G-code válido.`)
+        setToastMessage(t("No G-code found. {{count}} part has no valid G-code.", { count: missing }))
       } else {
-        setToastMessage('Nenhum item adicionado à fila.')
+        setToastMessage(t("No items were added to the queue."))
       }
     } catch (err) {
-      setToastMessage('Failed to queue project: ' + (err instanceof Error ? err.message : String(err)))
+      setToastMessage(t("Failed to queue project: ") + (err instanceof Error ? err.message : String(err)))
     } finally {
       setPrintingId(null)
       setTimeout(() => setToastMessage(''), 3500)
@@ -158,7 +163,7 @@ export default function Projects() {
       const preview = await modelImportApi.preview(importUrl)
       setImportPreview(preview)
     } catch (err) {
-      setToastMessage(err instanceof Error ? err.message : 'Failed to preview URL')
+      setToastMessage(err instanceof Error ? err.message : t("Failed to preview URL"))
       setTimeout(() => setToastMessage(''), 3500)
     } finally {
       setImportBusy('')
@@ -172,11 +177,11 @@ export default function Projects() {
       setShowImport(false)
       setImportPreview(null)
       setImportUrl('')
-      setToastMessage('Projeto importado com sucesso')
+      setToastMessage(t("Project imported successfully"))
       setTimeout(() => setToastMessage(''), 3500)
       window.location.reload()
     } catch (err) {
-      setToastMessage(err instanceof Error ? err.message : 'Failed to import URL')
+      setToastMessage(err instanceof Error ? err.message : t("Failed to import URL"))
       setTimeout(() => setToastMessage(''), 3500)
     } finally {
       setImportBusy('')
@@ -197,8 +202,8 @@ export default function Projects() {
     if (seconds <= 0) return '-'
     const hours = Math.floor(seconds / 3600)
     const mins = Math.floor((seconds % 3600) / 60)
-    if (hours > 0) return `${hours}h ${mins}m`
-    return `${mins}m`
+    if (hours > 0) return t('{{hours}}h {{minutes}}m', { hours, minutes: mins })
+    return t('{{minutes}}m', { minutes: mins })
   }
 
   return (
@@ -208,24 +213,20 @@ export default function Projects() {
       <div className="flex items-center justify-between mb-8">
         <div>
           <h1 className="text-3xl font-display font-bold text-surface-100">
-            Projects
-          </h1>
+            {t("Projects")}</h1>
           <p className="text-surface-400 mt-1">
-            Manage your maker projects
-          </p>
+            {t("Manage your maker projects")}</p>
         </div>
         <div className="flex gap-2">
           <button onClick={() => setShowImport(true)} className="btn btn-secondary">
             <LinkIcon className="h-4 w-4 mr-2" />
-            Import URL
-          </button>
+            {t("Import URL")}</button>
           <button
             onClick={() => setShowCreate(true)}
             className="btn btn-primary"
           >
             <Plus className="h-4 w-4 mr-2" />
-            New Project
-          </button>
+            {t("New Project")}</button>
         </div>
       </div>
 
@@ -238,7 +239,7 @@ export default function Projects() {
               'p-1.5 rounded transition-colors',
               viewMode === 'grid' ? 'bg-surface-700 text-surface-100' : 'text-surface-500 hover:text-surface-300'
             )}
-            title="Grid view"
+            title={t("Grid view")}
           >
             <LayoutGrid className="h-4 w-4" />
           </button>
@@ -248,7 +249,7 @@ export default function Projects() {
               'p-1.5 rounded transition-colors',
               viewMode === 'table' ? 'bg-surface-700 text-surface-100' : 'text-surface-500 hover:text-surface-300'
             )}
-            title="Table view"
+            title={t("Table view")}
           >
             <Table className="h-4 w-4" />
           </button>
@@ -257,30 +258,27 @@ export default function Projects() {
 
       {isError && (
         <div role="alert" className="mb-6 rounded-lg border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-400">
-          <p>Failed to load projects. {projects.length > 0 && 'Showing previously loaded projects; data may be outdated. '}{error instanceof Error ? error.message : 'Please try again.'}</p>
-          <button type="button" onClick={() => refetch()} disabled={isFetching} className="btn btn-secondary mt-3">{isFetching ? 'Retrying...' : 'Retry'}</button>
+          <p>{t("Failed to load projects.")}{projects.length > 0 && t("Showing previously loaded projects; data may be outdated. ")}{error instanceof Error ? error.message : t("Please try again.")}</p>
+          <button type="button" onClick={() => refetch()} disabled={isFetching} className="btn btn-secondary mt-3">{isFetching ? t("Retrying...") : t("Retry")}</button>
         </div>
       )}
 
       {/* Projects */}
       {isLoading ? (
-        <div className="text-surface-500">Loading...</div>
+        <div className="text-surface-500">{t("Loading...")}</div>
       ) : isError && projects.length === 0 ? null : projects.length === 0 ? (
         <div className="text-center py-16">
           <FolderKanban className="h-16 w-16 mx-auto mb-4 text-surface-600" />
           <h3 className="text-xl font-semibold text-surface-300 mb-2">
-            No projects found
-          </h3>
+            {t("No projects found")}</h3>
           <p className="text-surface-500 mb-4">
-            Create your first project to get started
-          </p>
+            {t("Create your first project to get started")}</p>
           <button
             onClick={() => setShowCreate(true)}
             className="btn btn-primary"
           >
             <Plus className="h-4 w-4 mr-2" />
-            Create Project
-          </button>
+            {t("Create Project")}</button>
         </div>
       ) : viewMode === 'table' ? (
         /* Table View */
@@ -289,13 +287,13 @@ export default function Projects() {
             <table className="w-full">
               <thead>
                 <tr className="border-b border-surface-800">
-                  <th className="text-left p-3"><SortHeader field="name" currentField={sortField} onSort={handleSort}>Name</SortHeader></th>
-                  <th className="text-right p-3"><SortHeader field="revenue" currentField={sortField} onSort={handleSort}>Revenue</SortHeader></th>
-                  <th className="text-right p-3"><SortHeader field="profit" currentField={sortField} onSort={handleSort}>Profit</SortHeader></th>
-                  <th className="text-right p-3"><SortHeader field="profit_per_hour" currentField={sortField} onSort={handleSort}>Profit/hr</SortHeader></th>
-                  <th className="text-right p-3"><SortHeader field="success_rate" currentField={sortField} onSort={handleSort}>Success</SortHeader></th>
-                  <th className="text-right p-3"><SortHeader field="print_time" currentField={sortField} onSort={handleSort}>Print Time</SortHeader></th>
-              <th className="text-right p-3"><SortHeader field="updated_at" currentField={sortField} onSort={handleSort}>Updated</SortHeader></th>
+                  <th className="text-left p-3"><SortHeader field="name" currentField={sortField} onSort={handleSort}>{t("Name")}</SortHeader></th>
+                  <th className="text-right p-3"><SortHeader field="revenue" currentField={sortField} onSort={handleSort}>{t("Revenue")}</SortHeader></th>
+                  <th className="text-right p-3"><SortHeader field="profit" currentField={sortField} onSort={handleSort}>{t("Profit")}</SortHeader></th>
+                  <th className="text-right p-3"><SortHeader field="profit_per_hour" currentField={sortField} onSort={handleSort}>{t("Profit/hr")}</SortHeader></th>
+                  <th className="text-right p-3"><SortHeader field="success_rate" currentField={sortField} onSort={handleSort}>{t("Success")}</SortHeader></th>
+                  <th className="text-right p-3"><SortHeader field="print_time" currentField={sortField} onSort={handleSort}>{t("Print Time")}</SortHeader></th>
+              <th className="text-right p-3"><SortHeader field="updated_at" currentField={sortField} onSort={handleSort}>{t("Updated")}</SortHeader></th>
               <th className="w-8"></th>
             </tr>
               </thead>
@@ -332,11 +330,11 @@ export default function Projects() {
                       </td>
                       <td className="p-3 text-right">
                         <div className="flex justify-end gap-1">
-                        <button onClick={() => void handlePrintProject(project.id)} disabled={printingId === project.id} className="rounded p-1 text-surface-500 hover:bg-emerald-500/10 hover:text-emerald-400" title="Print project">
+                        <button onClick={() => void handlePrintProject(project.id)} disabled={printingId === project.id} className="rounded p-1 text-surface-500 hover:bg-emerald-500/10 hover:text-emerald-400" title={t("Print project")}>
                           <Play className="h-4 w-4" />
                         </button>
                         <button onClick={() => handleDelete(project.id)} className="rounded p-1 text-surface-500 hover:bg-red-500/10 hover:text-red-400">
-                          {confirmDelete === project.id ? <span className="text-xs text-red-300">Confirm?</span> : <Trash2 className="h-4 w-4" />}
+                          {confirmDelete === project.id ? <span className="text-xs text-red-300">{t("Delete this project? This cannot be undone.")}</span> : <Trash2 className="h-4 w-4" />}
                         </button>
                         </div>
                       </td>
@@ -366,16 +364,16 @@ export default function Projects() {
                   onClick={(e) => { e.preventDefault(); e.stopPropagation(); void handlePrintProject(project.id) }}
                   disabled={printingId === project.id}
                   className="rounded-lg p-1.5 text-surface-500 hover:bg-emerald-500/10 hover:text-emerald-400"
-                  title="Print project"
+                  title={t("Print project")}
                 >
                   <Play className="h-4 w-4" />
                 </button>
                 <button
                   onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleDelete(project.id) }}
                   className="rounded-lg p-1.5 text-surface-500 hover:bg-red-500/10 hover:text-red-400"
-                  title="Delete project"
+                  title={t("Delete project")}
                 >
-                  {confirmDelete === project.id ? <span className="text-xs text-red-300">Confirm?</span> : <Trash2 className="h-4 w-4" />}
+                  {confirmDelete === project.id ? <span className="text-xs text-red-300">{t("Confirm?")}</span> : <Trash2 className="h-4 w-4" />}
                 </button>
                 </div>
               </div>
@@ -388,8 +386,8 @@ export default function Projects() {
 
               {(project.source_url || project.source_license) && (
                 <div className="flex flex-wrap gap-2 mb-4 text-xs">
-                  {project.source_url && <span className="text-accent-400">Source link</span>}
-                  {project.source_license && <span className="text-surface-500">License: {project.source_license}</span>}
+                  {project.source_url && <span className="text-accent-400">{t("Source link")}</span>}
+                  {project.source_license && <span className="text-surface-500">{t("License:")}{' '}{project.source_license}</span>}
                 </div>
               )}
 
@@ -401,8 +399,7 @@ export default function Projects() {
                 {project.tags.length > 0 && (
                   <div className="flex items-center gap-1">
                     <Tag className="h-3.5 w-3.5" />
-                    {project.tags.length} tags
-                  </div>
+                    {t("{{count}} tag", { count: project.tags.length })}</div>
                 )}
               </div>
             </Link>
@@ -413,13 +410,13 @@ export default function Projects() {
       {showImport && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
           <div className="card w-full max-w-2xl p-6">
-            <h2 className="text-xl font-semibold text-surface-100 mb-4">Importar de URL</h2>
+            <h2 className="text-xl font-semibold text-surface-100 mb-4">{t("Import from URL")}</h2>
             <div className="space-y-4">
-              <label className="block"><span className="block text-sm font-medium text-surface-300 mb-1">MakerWorld / Printables URL</span><input value={importUrl} onChange={e => setImportUrl(e.target.value)} className="input" placeholder="https://www.printables.com/model/..." autoFocus /></label>
-              {importPreview && <div className="rounded-xl border border-surface-800 bg-surface-900/70 p-4"><div className="flex gap-4">{importPreview.image_url && <img src={importPreview.image_url} className="h-24 w-24 rounded-lg object-cover" />}<div className="min-w-0"><div className="text-xs text-accent-300">{importPreview.provider}</div><div className="text-lg font-semibold text-surface-100 truncate">{importPreview.title}</div><p className="mt-1 line-clamp-3 text-sm text-surface-400">{importPreview.description}</p><div className="mt-2 text-xs text-surface-500">{importPreview.stl_files.length} STL detectado(s)</div></div></div></div>}
-              <div className="rounded-lg border border-surface-800 bg-surface-950/40 p-3 text-xs text-surface-500">Somente arquivos STL serão importados para Files e vinculados ao projeto. 3MF/G-code/perfis são ignorados.</div>
+              <label className="block"><span className="block text-sm font-medium text-surface-300 mb-1">{t("MakerWorld / Printables URL")}</span><input value={importUrl} onChange={e => setImportUrl(e.target.value)} className="input" placeholder={t("https://www.printables.com/model/...")} autoFocus /></label>
+              {importPreview && <div className="rounded-xl border border-surface-800 bg-surface-900/70 p-4"><div className="flex gap-4">{importPreview.image_url && <img src={importPreview.image_url} className="h-24 w-24 rounded-lg object-cover" />}<div className="min-w-0"><div className="text-xs text-accent-300">{importPreview.provider}</div><div className="text-lg font-semibold text-surface-100 truncate">{importPreview.title}</div><p className="mt-1 line-clamp-3 text-sm text-surface-400">{importPreview.description}</p><div className="mt-2 text-xs text-surface-500">{t("{{count}} STL file detected", { count: importPreview.stl_files.length })}</div></div></div></div>}
+              <div className="rounded-lg border border-surface-800 bg-surface-950/40 p-3 text-xs text-surface-500">{t("Only STL files are imported into Files and linked to the project. 3MF, G-code and profiles are ignored.")}</div>
             </div>
-            <div className="flex justify-end gap-3 mt-6"><button type="button" onClick={() => setShowImport(false)} className="btn btn-ghost">Cancel</button><button type="button" disabled={!importUrl || !!importBusy} onClick={previewImportUrl} className="btn btn-secondary">{importBusy === 'preview' ? 'Loading...' : 'Preview'}</button><button type="button" disabled={!importPreview || !!importBusy} onClick={importFromUrl} className="btn btn-primary">{importBusy === 'import' ? 'Importing...' : 'Import Project'}</button></div>
+            <div className="flex justify-end gap-3 mt-6"><button type="button" onClick={() => setShowImport(false)} className="btn btn-ghost">{t("Cancel")}</button><button type="button" disabled={!importUrl || !!importBusy} onClick={previewImportUrl} className="btn btn-secondary">{importBusy === 'preview' ? t("Loading...") : t("Preview")}</button><button type="button" disabled={!importPreview || !!importBusy} onClick={importFromUrl} className="btn btn-primary">{importBusy === 'import' ? t("Importing...") : t("Import Project")}</button></div>
           </div>
         </div>
       )}
@@ -429,54 +426,49 @@ export default function Projects() {
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
           <div className="card w-full max-w-md p-6">
             <h2 className="text-xl font-semibold text-surface-100 mb-4">
-              Create Project
-            </h2>
+              {t("Create Project")}</h2>
             <form onSubmit={handleCreate}>
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-surface-300 mb-1">
-                    Project Name
-                  </label>
+                    {t("Project Name")}</label>
                   <input
                     type="text"
                     name="name"
                     required
                     className="input"
-                    placeholder="My Awesome Project"
+                    placeholder={t("My Awesome Project")}
                     autoFocus
                   />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-surface-300 mb-1">
-                    Description
-                  </label>
+                    {t("Description")}</label>
                   <textarea
                     name="description"
                     rows={3}
                     className="input resize-none"
-                    placeholder="What are you building?"
+                    placeholder={t("What are you building?")}
                   />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-surface-300 mb-1">
-                    Project/source URL
-                  </label>
+                    {t("Project/source URL")}</label>
                   <input
                     type="url"
                     name="source_url"
                     className="input"
-                    placeholder="https://..."
+                    placeholder={t("https://...")}
                   />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-surface-300 mb-1">
-                    License
-                  </label>
+                    {t("License")}</label>
                   <input
                     type="text"
                     name="source_license"
                     className="input"
-                    placeholder="CC BY, MIT, Commercial use..."
+                    placeholder={t("CC BY, MIT, Commercial use...")}
                   />
                 </div>
               </div>
@@ -486,14 +478,13 @@ export default function Projects() {
                   onClick={() => setShowCreate(false)}
                   className="btn btn-ghost"
                 >
-                  Cancel
-                </button>
+                  {t("Cancel")}</button>
                 <button
                   type="submit"
                   disabled={createProject.isPending}
                   className="btn btn-primary"
                 >
-                  {createProject.isPending ? 'Creating...' : 'Create Project'}
+                  {createProject.isPending ? t("Creating...") : t("Create Project")}
                 </button>
               </div>
             </form>

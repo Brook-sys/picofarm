@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import { useEffect, useState } from 'react'
 import { AlertTriangle, X, Clock, Bell } from 'lucide-react'
 import { alertsApi } from '../api/client'
@@ -8,16 +9,10 @@ interface AlertBannerProps {
 }
 
 export function AlertBanner({ className = '' }: AlertBannerProps) {
+  const { t } = useTranslation('components')
   const [alerts, setAlerts] = useState<Alert[]>([])
   const [loading, setLoading] = useState(true)
   const [dismissingId, setDismissingId] = useState<string | null>(null)
-
-  useEffect(() => {
-    loadAlerts()
-    // Poll for updates every 30 seconds
-    const interval = setInterval(loadAlerts, 30000)
-    return () => clearInterval(interval)
-  }, [])
 
   const loadAlerts = async () => {
     try {
@@ -29,6 +24,13 @@ export function AlertBanner({ className = '' }: AlertBannerProps) {
       setLoading(false)
     }
   }
+
+  useEffect(() => {
+    loadAlerts()
+    // Poll for updates every 30 seconds
+    const interval = setInterval(loadAlerts, 30000)
+    return () => clearInterval(interval)
+  }, [])
 
   const handleDismiss = async (alert: Alert, duration: string) => {
     setDismissingId(alert.id)
@@ -67,7 +69,7 @@ export function AlertBanner({ className = '' }: AlertBannerProps) {
   const snoozeDurations = ['1h', '4h', '24h', 'permanent']
 
   return (
-    <div className={`space-y-2 ${className}`} role="region" aria-label="Active alerts">
+    <div className={`space-y-2 ${className}`} role="region" aria-label={t("Active alerts")}>
       {sortedAlerts.slice(0, 3).map(alert => (
         <div
           key={alert.id}
@@ -85,7 +87,7 @@ export function AlertBanner({ className = '' }: AlertBannerProps) {
                 onClick={() => handleDismiss(alert, '1h')}
                 disabled={dismissingId === alert.id}
                 className="p-1.5 rounded hover:bg-white/10 transition-colors"
-                title="Snooze for 1 hour"
+                title={t("Snooze for 1 hour")}
               >
                 <Clock className="w-4 h-4" />
               </button>
@@ -97,7 +99,7 @@ export function AlertBanner({ className = '' }: AlertBannerProps) {
                       onClick={() => handleDismiss(alert, duration)}
                       className="w-full px-3 py-1.5 text-left text-sm text-surface-300 hover:bg-surface-700 hover:text-surface-100"
                     >
-                      {duration === 'permanent' ? 'Dismiss permanently' : duration.replace('h', ' hour(s)')}
+                      {duration === 'permanent' ? t("Dismiss permanently") : t('Snooze for {{count}} hour', { count: Number(duration.replace('h', '')) })}
                     </button>
                   ))}
                 </div>
@@ -109,7 +111,7 @@ export function AlertBanner({ className = '' }: AlertBannerProps) {
               onClick={() => handleDismiss(alert, '1h')}
               disabled={dismissingId === alert.id}
               className="p-1.5 rounded hover:bg-white/10 transition-colors"
-              title="Dismiss"
+              title={t("Dismiss")}
             >
               <X className="w-4 h-4" />
             </button>

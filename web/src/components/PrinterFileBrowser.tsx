@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import { useEffect, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Folder, FileText, Upload, Trash2, HardDrive, PlaySquare, ArrowLeft, FolderPlus, Pencil, Download, MoveRight, CheckSquare, Square, Save } from 'lucide-react'
@@ -12,6 +13,7 @@ interface PrinterFileBrowserProps {
 }
 
 export function PrinterFileBrowser({ printerId, connectionType }: PrinterFileBrowserProps) {
+  const { t } = useTranslation('components')
   const queryClient = useQueryClient()
   const [currentPath, setCurrentPath] = useState(connectionType === 'moonraker' ? 'sda1' : '')
   const [uploading, setUploading] = useState(false)
@@ -57,16 +59,16 @@ export function PrinterFileBrowser({ printerId, connectionType }: PrinterFileBro
   const printMutation = useMutation({ mutationFn: (path: string) => printersApi.printFile(printerId, path) })
   const saveToLibraryMutation = useMutation({
     mutationFn: (path: string) => gcodeLibraryApi.saveFromPrinter({ printer_id: printerId, remote_path: path }),
-    onSuccess: () => showToast({ title: 'Saved to Library', message: 'File imported to G-code library successfully.', tone: 'success' }),
-    onError: (err) => showToast({ title: 'Import failed', message: err instanceof Error ? err.message : 'Unknown error', tone: 'error' })
+    onSuccess: () => showToast({ title: t("Saved to Library"), message: t("File imported to G-code library successfully."), tone: 'success' }),
+    onError: (err) => showToast({ title: t("Import failed"), message: err instanceof Error ? err.message : t("Unknown error"), tone: 'error' })
   })
 
   if (connectionType !== 'moonraker' && connectionType !== 'octoprint') {
     return (
       <div className="flex flex-col items-center justify-center p-8 text-center bg-surface-900 rounded-lg border border-surface-800">
         <HardDrive className="h-10 w-10 text-surface-500 mb-3" />
-        <h3 className="text-sm font-medium text-surface-200">Not Supported</h3>
-        <p className="text-sm text-surface-500 mt-1">File browsing is currently only available for Moonraker/Fluidd/Mainsail and OctoPrint connected printers.</p>
+        <h3 className="text-sm font-medium text-surface-200">{t("Not Supported")}</h3>
+        <p className="text-sm text-surface-500 mt-1">{t("File browsing is currently only available for Moonraker/Fluidd/Mainsail and OctoPrint connected printers.")}</p>
       </div>
     )
   }
@@ -104,13 +106,13 @@ export function PrinterFileBrowser({ printerId, connectionType }: PrinterFileBro
   }
 
   const createDirectory = async () => {
-    const name = prompt('Folder name')?.trim()
+    const name = prompt(t('Folder name'))?.trim()
     if (!name) return
     await mkdirMutation.mutateAsync(joinPath(currentPath, name))
   }
 
   const renameEntry = async (file: PrinterFileEntry) => {
-    const name = prompt('New name', file.name)?.trim()
+    const name = prompt(t('New name'), file.name)?.trim()
     if (!name || name === file.name) return
     await renameMutation.mutateAsync({ path: file.path, newPath: joinPath(parentPath(file.path), name) })
   }
@@ -131,20 +133,20 @@ export function PrinterFileBrowser({ printerId, connectionType }: PrinterFileBro
       setPreviewFile(null)
       setCurrentPath(targetDir)
       queryClient.invalidateQueries({ queryKey: ['printer-files', printerId] })
-      showToast({ title: 'Moved', message: `${files.length} item${files.length === 1 ? '' : 's'} moved to /${targetDir}.`, tone: 'success' })
+      showToast({ title: t("Moved"), message: t("{{count}} item moved to /{{destination}}.", { count: files.length, destination: targetDir }), tone: 'success' })
     } catch (err) {
-      showToast({ title: 'Move failed', message: err instanceof Error ? err.message : 'Failed to move file', tone: 'error' })
+      showToast({ title: t("Move failed"), message: err instanceof Error ? err.message : t("Failed to move file"), tone: 'error' })
     }
   }
 
   const deleteEntries = async (paths: string[]) => {
     const files = paths.map(path => fileByPath.get(path)).filter(Boolean) as PrinterFileEntry[]
-    if (!files.length || !confirm(`Delete ${files.length} item(s)?`)) return
+    if (!files.length || !confirm(t('Delete {{count}} item?', { count: files.length }))) return
     try {
       for (const file of files) await deleteMutation.mutateAsync(file)
-      showToast({ title: 'Deleted', message: `${files.length} item${files.length === 1 ? '' : 's'} deleted.`, tone: 'success' })
+      showToast({ title: t("Deleted"), message: t("{{count}} item deleted.", { count: files.length }), tone: 'success' })
     } catch (err) {
-      showToast({ title: 'Delete failed', message: err instanceof Error ? err.message : 'Failed to delete item', tone: 'error' })
+      showToast({ title: t("Delete failed"), message: err instanceof Error ? err.message : t("Failed to delete item"), tone: 'error' })
     }
   }
 
@@ -159,19 +161,19 @@ export function PrinterFileBrowser({ printerId, connectionType }: PrinterFileBro
           <button disabled={!currentPath || (connectionType === 'moonraker' && currentPath === 'sda1')} onClick={navigateUp} className="p-1.5 rounded-md hover:bg-surface-700 disabled:opacity-30">
             <ArrowLeft className="h-4 w-4" />
           </button>
-          <span className="text-sm font-medium text-surface-300 truncate">/{currentPath || 'root'}</span>
+          <span className="text-sm font-medium text-surface-300 truncate">/{currentPath || t('root')}</span>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {selected.length > 0 && (
             <>
-              <span className="text-xs text-surface-400">{selected.length} selected</span>
-              <button onClick={() => openMoveDialog(selected)} className="btn btn-secondary text-xs"><MoveRight className="h-3.5 w-3.5 mr-1.5" />Move</button>
-              <button onClick={() => deleteEntries(selected)} className="btn btn-secondary text-xs text-red-300"><Trash2 className="h-3.5 w-3.5 mr-1.5" />Delete</button>
+              <span className="text-xs text-surface-400">{t("{{count}} selected", { count: selected.length })}</span>
+              <button onClick={() => openMoveDialog(selected)} className="btn btn-secondary text-xs"><MoveRight className="h-3.5 w-3.5 mr-1.5" />{t("Move")}</button>
+              <button onClick={() => deleteEntries(selected)} className="btn btn-secondary text-xs text-red-300"><Trash2 className="h-3.5 w-3.5 mr-1.5" />{t("Delete")}</button>
             </>
           )}
-          <button onClick={createDirectory} className="btn btn-secondary text-xs"><FolderPlus className="h-3.5 w-3.5 mr-1.5" />New Folder</button>
+          <button onClick={createDirectory} className="btn btn-secondary text-xs"><FolderPlus className="h-3.5 w-3.5 mr-1.5" />{t("New Folder")}</button>
           <label className="btn btn-primary text-xs cursor-pointer">
-            <Upload className="h-3.5 w-3.5 mr-1.5" />{uploading ? 'Uploading...' : 'Upload'}
+            <Upload className="h-3.5 w-3.5 mr-1.5" />{uploading ? t("Uploading...") : t("Upload")}
             <input type="file" multiple className="hidden" onChange={handleUpload} disabled={uploading} accept=".gcode,.bgcode,.3mf" />
           </label>
         </div>
@@ -180,9 +182,9 @@ export function PrinterFileBrowser({ printerId, connectionType }: PrinterFileBro
       <div className="flex min-h-[520px] flex-1 overflow-hidden">
         <div className="flex-1 overflow-y-auto">
         {isLoading ? (
-          <div className="p-8 text-center text-surface-500">Loading files...</div>
+          <div className="p-8 text-center text-surface-500">{t("Loading files...")}</div>
         ) : entries.length === 0 ? (
-          <div className="p-8 text-center text-surface-500">Empty directory</div>
+          <div className="p-8 text-center text-surface-500">{t("Empty directory")}</div>
         ) : (
           <table className="w-full text-left text-sm whitespace-nowrap">
             <thead className="sticky top-0 bg-surface-900 shadow-sm z-10 text-surface-400">
@@ -192,10 +194,10 @@ export function PrinterFileBrowser({ printerId, connectionType }: PrinterFileBro
                     {allSelected ? <CheckSquare className="h-4 w-4" /> : <Square className="h-4 w-4" />}
                   </button>
                 </th>
-                <th className="px-4 py-2 font-medium">Name</th>
-                <th className="px-4 py-2 font-medium">Size</th>
-                <th className="px-4 py-2 font-medium">Modified</th>
-                <th className="px-4 py-2 font-medium text-right">Actions</th>
+                <th className="px-4 py-2 font-medium">{t("Name")}</th>
+                <th className="px-4 py-2 font-medium">{t("Size")}</th>
+                <th className="px-4 py-2 font-medium">{t("Modified")}</th>
+                <th className="px-4 py-2 font-medium text-right">{t("Actions")}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-surface-800">
@@ -222,13 +224,13 @@ export function PrinterFileBrowser({ printerId, connectionType }: PrinterFileBro
                     <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                       {file.type === 'file' && (
                         <>
-                          <a href={printersApi.downloadFileUrl(printerId, file.path)} className="p-1.5 text-surface-300 hover:bg-surface-700 rounded" title="Download"><Download className="h-4 w-4" /></a>
-                          <button onClick={() => confirm(`Print ${file.name}?`) && printMutation.mutate(file.path)} className="p-1.5 text-accent-400 hover:bg-accent-500/10 rounded" title="Print"><PlaySquare className="h-4 w-4" /></button>
+                          <a href={printersApi.downloadFileUrl(printerId, file.path)} className="p-1.5 text-surface-300 hover:bg-surface-700 rounded" title={t("Download")}><Download className="h-4 w-4" /></a>
+                          <button onClick={() => confirm(t('Print {{name}}?', { name: file.name })) && printMutation.mutate(file.path)} className="p-1.5 text-accent-400 hover:bg-accent-500/10 rounded" title={t("Print")}><PlaySquare className="h-4 w-4" /></button>
                         </>
                       )}
-                      <button onClick={() => renameEntry(file)} className="p-1.5 text-surface-300 hover:bg-surface-700 rounded" title="Rename"><Pencil className="h-4 w-4" /></button>
-                      <button onClick={() => openMoveDialog([file.path])} className="p-1.5 text-surface-300 hover:bg-surface-700 rounded" title="Move"><MoveRight className="h-4 w-4" /></button>
-                      <button onClick={() => deleteEntries([file.path])} className="p-1.5 text-red-400 hover:bg-red-500/10 rounded" title="Delete"><Trash2 className="h-4 w-4" /></button>
+                      <button onClick={() => renameEntry(file)} className="p-1.5 text-surface-300 hover:bg-surface-700 rounded" title={t("Rename")}><Pencil className="h-4 w-4" /></button>
+                      <button onClick={() => openMoveDialog([file.path])} className="p-1.5 text-surface-300 hover:bg-surface-700 rounded" title={t("Move")}><MoveRight className="h-4 w-4" /></button>
+                      <button onClick={() => deleteEntries([file.path])} className="p-1.5 text-red-400 hover:bg-red-500/10 rounded" title={t("Delete")}><Trash2 className="h-4 w-4" /></button>
                     </div>
                   </td>
                 </tr>
@@ -248,44 +250,43 @@ export function PrinterFileBrowser({ printerId, connectionType }: PrinterFileBro
                   </div>
                   <div className="mt-1 break-all text-xs text-surface-500">{previewFile.path}</div>
                 </div>
-                <button onClick={() => setPreviewFile(null)} className="text-surface-500 hover:text-surface-200">×</button>
+                <button onClick={() => setPreviewFile(null)} className="text-surface-500 hover:text-surface-200">{t("×")}</button>
               </div>
 
               {previewFile.type === 'file' && metadata?.thumbnail_relative_path && (
-                <img src={printersApi.thumbnailUrl(printerId, metadata.thumbnail_relative_path)} alt="Preview" className="aspect-square w-full rounded-xl border border-surface-800 bg-surface-900 object-contain" />
+                <img src={printersApi.thumbnailUrl(printerId, metadata.thumbnail_relative_path)} alt={t("Preview")} className="aspect-square w-full rounded-xl border border-surface-800 bg-surface-900 object-contain" />
               )}
 
               <div className="grid grid-cols-2 gap-3 text-xs">
-                <PreviewMetric label="Size" value={formatBytes(metadata?.size || previewFile.size || 0)} />
-                <PreviewMetric label="Modified" value={(metadata?.modified || previewFile.modified) ? formatRelativeTime(new Date((metadata?.modified || previewFile.modified || 0) * 1000).toISOString()) : '—'} />
-                <PreviewMetric label="ETA" value={metadata?.estimated_time ? formatDuration(Math.round(metadata.estimated_time)) : '—'} />
-                <PreviewMetric label="Filament" value={metadata?.filament_total ? `${Math.round(metadata.filament_total / 1000)}m` : '—'} />
-                <PreviewMetric label="Layer" value={metadata?.layer_height ? `${metadata.layer_height}mm` : '—'} />
-                <PreviewMetric label="Height" value={metadata?.object_height ? `${metadata.object_height}mm` : '—'} />
-                <PreviewMetric label="Bed" value={metadata?.first_layer_bed_temp ? `${metadata.first_layer_bed_temp}°C` : '—'} />
-                <PreviewMetric label="Nozzle" value={metadata?.first_layer_extr_temp ? `${metadata.first_layer_extr_temp}°C` : '—'} />
+                <PreviewMetric label={t("Size")} value={formatBytes(metadata?.size || previewFile.size || 0)} />
+                <PreviewMetric label={t("Modified")} value={(metadata?.modified || previewFile.modified) ? formatRelativeTime(new Date((metadata?.modified || previewFile.modified || 0) * 1000).toISOString()) : '—'} />
+                <PreviewMetric label={t("ETA")} value={metadata?.estimated_time ? formatDuration(Math.round(metadata.estimated_time)) : '—'} />
+                <PreviewMetric label={t("Filament")} value={metadata?.filament_total ? t("{{name}}m", { name: Math.round(metadata.filament_total / 1000) }) : '—'} />
+                <PreviewMetric label={t("Layer")} value={metadata?.layer_height ? t("{{name}}mm", { name: metadata.layer_height }) : '—'} />
+                <PreviewMetric label={t("Height")} value={metadata?.object_height ? t("{{name}}mm", { name: metadata.object_height }) : '—'} />
+                <PreviewMetric label={t("Bed")} value={metadata?.first_layer_bed_temp ? t("{{name}}°C", { name: metadata.first_layer_bed_temp }) : '—'} />
+                <PreviewMetric label={t("Nozzle")} value={metadata?.first_layer_extr_temp ? t("{{name}}°C", { name: metadata.first_layer_extr_temp }) : '—'} />
               </div>
 
               <div className="rounded-lg border border-surface-800 bg-surface-900/70 p-3 text-xs text-surface-400">
-                <div className="text-surface-500">Slicer</div>
-                <div className="mt-1 text-surface-200">{metadataLoading ? 'Loading...' : metadata?.slicer ? `${metadata.slicer} ${metadata.slicer_version || ''}` : '—'}</div>
+                <div className="text-surface-500">{t("Slicer")}</div>
+                <div className="mt-1 text-surface-200">{metadataLoading ? t("Loading...") : metadata?.slicer ? `${metadata.slicer} ${metadata.slicer_version || ''}` : '—'}</div>
               </div>
 
               {previewFile.type === 'file' && (
                 <div className="flex flex-col gap-2">
                   <div className="flex gap-2">
-                    <a href={printersApi.downloadFileUrl(printerId, previewFile.path)} className="btn btn-secondary flex-1 text-xs"><Download className="mr-1.5 h-3.5 w-3.5" />Download</a>
-                    <button onClick={() => confirm(`Print ${previewFile.name}?`) && printMutation.mutate(previewFile.path)} className="btn btn-primary flex-1 text-xs"><PlaySquare className="mr-1.5 h-3.5 w-3.5" />Print</button>
+                    <a href={printersApi.downloadFileUrl(printerId, previewFile.path)} className="btn btn-secondary flex-1 text-xs"><Download className="mr-1.5 h-3.5 w-3.5" />{t("Download")}</a>
+                    <button onClick={() => confirm(t('Print {{name}}?', { name: previewFile.name })) && printMutation.mutate(previewFile.path)} className="btn btn-primary flex-1 text-xs"><PlaySquare className="mr-1.5 h-3.5 w-3.5" />{t("Print")}</button>
                   </div>
-                  <button onClick={() => saveToLibraryMutation.mutate(previewFile.path)} disabled={saveToLibraryMutation.isPending} className="btn btn-secondary text-xs w-full"><Save className="mr-1.5 h-3.5 w-3.5" />{saveToLibraryMutation.isPending ? 'Saving...' : 'Save to G-code Library'}</button>
+                  <button onClick={() => saveToLibraryMutation.mutate(previewFile.path)} disabled={saveToLibraryMutation.isPending} className="btn btn-secondary text-xs w-full"><Save className="mr-1.5 h-3.5 w-3.5" />{saveToLibraryMutation.isPending ? t("Saving...") : t("Save to G-code Library")}</button>
                 </div>
               )}
             </div>
           ) : (
             <div className="flex h-full flex-col items-center justify-center text-center text-sm text-surface-500">
               <HardDrive className="mb-3 h-8 w-8 text-surface-600" />
-              Select a file to view metadata
-            </div>
+              {t("Select a file to view metadata")}</div>
           )}
         </div>
       </div>
@@ -305,6 +306,7 @@ export function PrinterFileBrowser({ printerId, connectionType }: PrinterFileBro
 }
 
 function MoveFilesModal({ printerId, currentPath, files, busy, onClose, onMove }: { printerId: string; currentPath: string; files: PrinterFileEntry[]; busy: boolean; onClose: () => void; onMove: (targetDir: string) => void }) {
+  const { t } = useTranslation('components')
   const [browsePath, setBrowsePath] = useState(currentPath)
   const [manualPath, setManualPath] = useState(currentPath)
   const { data, isLoading } = useQuery({
@@ -335,32 +337,32 @@ function MoveFilesModal({ printerId, currentPath, files, busy, onClose, onMove }
         <div className="border-b border-surface-800 bg-surface-900/80 p-5">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <h2 className="text-xl font-semibold text-surface-100">Move files</h2>
-              <p className="mt-1 text-sm text-surface-500">Choose the destination folder inside the printer storage.</p>
+              <h2 className="text-xl font-semibold text-surface-100">{t("Move files")}</h2>
+              <p className="mt-1 text-sm text-surface-500">{t("Choose the destination folder inside the printer storage.")}</p>
             </div>
-            <button onClick={onClose} className="rounded-lg px-2 py-1 text-surface-500 hover:bg-surface-800 hover:text-surface-100">×</button>
+            <button onClick={onClose} className="rounded-lg px-2 py-1 text-surface-500 hover:bg-surface-800 hover:text-surface-100">{t("×")}</button>
           </div>
         </div>
 
         <div className="grid gap-0 md:grid-cols-[1fr_260px]">
           <div className="p-5">
             <div className="mb-3 flex flex-wrap items-center gap-2 text-sm">
-              <button onClick={() => { setBrowsePath(''); setManualPath('') }} className="rounded-lg border border-surface-700 bg-surface-900 px-2.5 py-1 text-surface-300 hover:bg-surface-800">root</button>
+              <button onClick={() => { setBrowsePath(''); setManualPath('') }} className="rounded-lg border border-surface-700 bg-surface-900 px-2.5 py-1 text-surface-300 hover:bg-surface-800">{t("root")}</button>
               {parts.map((part, index) => (
                 <button key={`${part}-${index}`} onClick={() => chooseCrumb(index)} className="rounded-lg border border-surface-700 bg-surface-900 px-2.5 py-1 text-surface-300 hover:bg-surface-800">/{part}</button>
               ))}
             </div>
 
             <div className="mb-3 flex gap-2">
-              <button disabled={!browsePath} onClick={goUp} className="btn btn-secondary text-xs disabled:opacity-40"><ArrowLeft className="mr-1.5 h-3.5 w-3.5" />Up</button>
-              <input value={manualPath} onChange={e => setManualPath(e.target.value)} className="input flex-1 text-sm" placeholder="Destination folder" />
+              <button disabled={!browsePath} onClick={goUp} className="btn btn-secondary text-xs disabled:opacity-40"><ArrowLeft className="mr-1.5 h-3.5 w-3.5" />{t("Up")}</button>
+              <input value={manualPath} onChange={e => setManualPath(e.target.value)} className="input flex-1 text-sm" placeholder={t("Destination folder")} />
             </div>
 
             <div className="h-72 overflow-y-auto rounded-xl border border-surface-800 bg-surface-900/40">
               {isLoading ? (
-                <div className="p-6 text-center text-sm text-surface-500">Loading folders...</div>
+                <div className="p-6 text-center text-sm text-surface-500">{t("Loading folders...")}</div>
               ) : folders.length === 0 ? (
-                <div className="p-6 text-center text-sm text-surface-500">No subfolders here. You can move directly to this folder.</div>
+                <div className="p-6 text-center text-sm text-surface-500">{t("No subfolders here. You can move directly to this folder.")}</div>
               ) : (
                 folders.map(folder => (
                   <button key={folder.path} onClick={() => chooseFolder(folder)} className="flex w-full items-center gap-3 border-b border-surface-800 px-4 py-3 text-left text-sm text-surface-200 last:border-b-0 hover:bg-surface-800/70">
@@ -373,7 +375,7 @@ function MoveFilesModal({ printerId, currentPath, files, busy, onClose, onMove }
           </div>
 
           <div className="border-t border-surface-800 bg-surface-900/50 p-5 md:border-l md:border-t-0">
-            <div className="mb-3 text-xs font-semibold uppercase tracking-wide text-surface-500">Moving {files.length} item{files.length === 1 ? '' : 's'}</div>
+            <div className="mb-3 text-xs font-semibold uppercase tracking-wide text-surface-500">{t('Moving {{count}} item', { count: files.length })}</div>
             <div className="mb-5 max-h-48 space-y-2 overflow-y-auto">
               {files.map(file => (
                 <div key={file.path} className="flex items-center gap-2 rounded-lg border border-surface-800 bg-surface-950/60 px-3 py-2 text-xs text-surface-300">
@@ -383,15 +385,14 @@ function MoveFilesModal({ printerId, currentPath, files, busy, onClose, onMove }
               ))}
             </div>
             <div className="rounded-lg border border-surface-800 bg-surface-950/70 p-3 text-xs text-surface-500">
-              Destination
-              <div className="mt-1 break-all font-mono text-surface-200">gcodes/{manualPath || ''}</div>
+              {t("Destination")}<div className="mt-1 break-all font-mono text-surface-200">{"gcodes/"}{manualPath || ''}</div>
             </div>
           </div>
         </div>
 
         <div className="flex justify-end gap-2 border-t border-surface-800 bg-surface-900/80 p-4">
-          <button onClick={onClose} className="btn btn-secondary">Cancel</button>
-          <button disabled={busy} onClick={() => onMove(manualPath.trim())} className="btn btn-primary"><MoveRight className="mr-2 h-4 w-4" />{busy ? 'Moving...' : 'Move here'}</button>
+          <button onClick={onClose} className="btn btn-secondary">{t("Cancel")}</button>
+          <button disabled={busy} onClick={() => onMove(manualPath.trim())} className="btn btn-primary"><MoveRight className="mr-2 h-4 w-4" />{busy ? t("Moving...") : t("Move here")}</button>
         </div>
       </div>
     </div>
@@ -399,9 +400,10 @@ function MoveFilesModal({ printerId, currentPath, files, busy, onClose, onMove }
 }
 
 function PreviewMetric({ label, value }: { label: string; value: string }) {
+  const { t } = useTranslation('components')
   return (
     <div className="rounded-lg border border-surface-800 bg-surface-900/70 p-3">
-      <div className="text-surface-500">{label}</div>
+      <div className="text-surface-500">{t(label)}</div>
       <div className="mt-1 font-medium text-surface-100">{value}</div>
     </div>
   )

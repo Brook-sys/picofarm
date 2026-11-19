@@ -31,6 +31,43 @@ export function resourceURL(path: string): string {
   return /^\/(?:api(?:\/|\?|$)|uploads(?:\/|$))/.test(path) ? `${apiBaseURL()}${path}` : path
 }
 
+/** Storage may be blocked by privacy settings or desktop policies; never throw. */
+export function readStorage(key: string): string | null {
+  try {
+    return typeof window === 'undefined' ? null : window.localStorage.getItem(key)
+  } catch {
+    return null
+  }
+}
+
+export function writeStorage(key: string, value: string | null): boolean {
+  try {
+    if (typeof window === 'undefined') return false
+    if (value === null) window.localStorage.removeItem(key)
+    else window.localStorage.setItem(key, value)
+    return true
+  } catch {
+    return false
+  }
+}
+
+// Session-only fallback so authentication still works when persistence is
+// blocked. The token is kept in memory, never logged, and is lost on reload.
+let sessionToken: string | null = null
+let sessionTokenOverride = false
+
+export function readApiToken(): string | null {
+  return sessionTokenOverride ? sessionToken : readStorage('API_TOKEN')
+}
+
+/** Returns true when the token was also persisted across reloads. */
+export function writeApiToken(token: string | null): boolean {
+  sessionToken = token
+  const persisted = writeStorage('API_TOKEN', token)
+  sessionTokenOverride = !persisted
+  return persisted
+}
+
 export function webSocketURL(): string {
   const configured = desktopRuntime()?.wsBaseURL ?? import.meta.env?.VITE_WS_URL
   const url = new URL(configured || `${apiBaseURL()}/ws`)
@@ -40,7 +77,7 @@ export function webSocketURL(): string {
     throw new Error('WebSocket URL must be WS(S) without credentials')
   }
   if (url.pathname === '/') url.pathname = '/ws'
-  const token = typeof window === 'undefined' ? null : window.localStorage.getItem('API_TOKEN')
+  const token = readApiToken()
   if (token) url.searchParams.set('token', token)
   return url.href
 }

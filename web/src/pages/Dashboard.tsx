@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import { useState, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
@@ -101,6 +102,8 @@ const createChartDefaults = (formatCents: (cents: number) => string) => ({
 } as const)
 
 export default function Dashboard() {
+  const { t } = useTranslation('production')
+
   const { formatCents } = useCurrency()
   const chartDefaults = useMemo(() => createChartDefaults(formatCents), [formatCents])
   const { data: projects = [], isLoading: projectsLoading } = useProjects()
@@ -170,7 +173,7 @@ export default function Dashboard() {
       await queueApi.start(nextReadyItem.item.id)
       await refetchQueue()
     } catch (err) {
-      setNextPrintError(err instanceof Error ? err.message : 'Failed to start next print')
+      setNextPrintError(err instanceof Error ? err.message : t("Failed to start next print"))
     } finally {
       setNextPrintBusy(false)
     }
@@ -178,10 +181,10 @@ export default function Dashboard() {
 
   const formatPrintHours = (hours: number) => {
     const totalMinutes = Math.round(hours * 60)
-    if (totalMinutes < 60) return `${totalMinutes} min`
+    if (totalMinutes < 60) return t("{{minutes}} min", { minutes: totalMinutes })
     const h = Math.floor(totalMinutes / 60)
     const m = totalMinutes % 60
-    return m > 0 ? `${h}h ${m} min` : `${h}h`
+    return m > 0 ? t("{{hours}}h {{minutes}} min", { hours: h, minutes: m }) : t("{{hours}}h", { hours: h })
   }
 
   const lineChartData = useMemo(() => {
@@ -190,7 +193,7 @@ export default function Dashboard() {
       labels: points.map(p => p.date),
       datasets: [
         {
-          label: 'Revenue',
+          label: t("Revenue"),
           data: points.map(p => p.revenue),
           borderColor: '#10b981',
           backgroundColor: 'rgba(16, 185, 129, 0.1)',
@@ -198,7 +201,7 @@ export default function Dashboard() {
           tension: 0.3,
         },
         {
-          label: 'Expenses',
+          label: t("Expenses"),
           data: points.map(p => p.expenses),
           borderColor: '#ef4444',
           backgroundColor: 'rgba(239, 68, 68, 0.1)',
@@ -206,7 +209,7 @@ export default function Dashboard() {
           tension: 0.3,
         },
         {
-          label: 'Profit',
+          label: t("Profit"),
           data: points.map(p => p.profit),
           borderColor: '#3b82f6',
           backgroundColor: 'rgba(59, 130, 246, 0.1)',
@@ -215,17 +218,17 @@ export default function Dashboard() {
         },
       ],
     }
-  }, [timeSeries])
+  }, [timeSeries, t])
 
   const barChartData = useMemo(() => ({
     labels: expensesByCategory.map(c => c.category),
     datasets: [{
-      label: 'Expenses',
+      label: t("Expenses"),
       data: expensesByCategory.map(c => c.total),
       backgroundColor: '#ef4444',
       borderRadius: 4,
     }],
-  }), [expensesByCategory])
+  }), [expensesByCategory, t])
 
   const doughnutData = useMemo(() => ({
     labels: salesByChannel.map(c => c.channel),
@@ -265,36 +268,34 @@ export default function Dashboard() {
       {/* Header */}
       <div className="mb-6 lg:mb-8">
         <h1 className="text-2xl lg:text-3xl font-display font-bold text-surface-100">
-          Dashboard
-        </h1>
+          {t("Dashboard")}</h1>
         <p className="text-surface-400 mt-1">
-          Overview of your print farm
-        </p>
+          {t("Overview of your print farm")}</p>
       </div>
 
       {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4 mb-6 lg:mb-8">
         <StatCard
           icon={FolderKanban}
-          label="Active Projects"
+          label={t("Active Projects")}
           value={activeProjects.length}
           color="text-blue-400"
         />
         <StatCard
           icon={Play}
-          label="Printing Now"
+          label={t("Printing Now")}
           value={printingPrinters.length}
           color="text-emerald-400"
         />
         <StatCard
           icon={Clock}
-          label="Idle Printers"
+          label={t("Idle Printers")}
           value={idlePrinters.length}
           color="text-surface-400"
         />
         <StatCard
           icon={AlertCircle}
-          label="Errors"
+          label={t("Errors")}
           value={errorPrinters.length}
           color="text-red-400"
         />
@@ -304,14 +305,14 @@ export default function Dashboard() {
         <div className="card p-4 mb-6 lg:mb-8 border-emerald-500/20 bg-emerald-500/[0.03]">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h2 className="text-base font-semibold text-surface-100">Idle printer available</h2>
+              <h2 className="text-base font-semibold text-surface-100">{t("Idle printer available")}</h2>
               <p className="text-sm text-surface-500">
-                {nextReadyItem ? `Next ready print: ${nextReadyItem.item.display_name || nextReadyItem.item.file_name}` : 'No ready queue item available.'}
+                {nextReadyItem ? t("Next ready print: {{value1}}", { value1: nextReadyItem.item.display_name || nextReadyItem.item.file_name }) : t("No ready queue item available.")}
               </p>
               {nextPrintError && <p className="mt-1 text-sm text-red-400">{nextPrintError}</p>}
             </div>
             <button disabled={!nextReadyItem || nextPrintBusy} onClick={sendNextPrint} className="btn btn-primary whitespace-nowrap disabled:cursor-not-allowed disabled:opacity-60">
-              <Play className="h-4 w-4 mr-2" />{nextPrintBusy ? 'Sending...' : `Mandar próxima impressão${nextIdlePrinter ? ` para ${nextIdlePrinter.name}` : ''}`}
+              <Play className="h-4 w-4 mr-2" />{nextPrintBusy ? t("Sending...") : t("Send next print to {{name}}", { name: nextIdlePrinter?.name || t("Available printer") })}
             </button>
           </div>
         </div>
@@ -320,8 +321,8 @@ export default function Dashboard() {
       {/* Period Selector */}
       <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <div className="text-sm font-medium text-surface-200">Performance period</div>
-          <div className="text-xs text-surface-500">Applies to usage metrics and financial overview</div>
+          <div className="text-sm font-medium text-surface-200">{t("Performance period")}</div>
+          <div className="text-xs text-surface-500">{t("Applies to usage metrics and financial overview")}</div>
         </div>
         <div className="inline-flex w-full overflow-hidden rounded-xl border border-surface-800 bg-surface-950/70 p-1 shadow-inner shadow-black/20 sm:w-auto">
           {periodOptions.map((opt) => (
@@ -333,7 +334,7 @@ export default function Dashboard() {
                 chartPeriod === opt.value && 'bg-accent-500 text-white shadow-sm shadow-accent-950/40 hover:bg-accent-500 hover:text-white'
               )}
             >
-              {opt.label}
+              {t(opt.label)}
             </button>
           ))}
         </div>
@@ -341,12 +342,12 @@ export default function Dashboard() {
 
       {/* Usage Metrics */}
       <div className="grid grid-cols-2 lg:grid-cols-6 gap-3 lg:gap-4 mb-6 lg:mb-8">
-        <StatCard icon={Play} label="Total Prints" value={usage?.total_prints ?? 0} color="text-blue-400" />
-        <StatCard icon={CheckCircle} label="Successful Prints" value={usage?.successful_prints ?? 0} color="text-emerald-400" />
-        <StatCard icon={AlertCircle} label="Failed Prints" value={usage?.failed_prints ?? 0} color="text-red-400" />
-        <StatCard icon={Clock} label="Print Hours" value={formatPrintHours(usage?.total_print_hours ?? 0)} color="text-emerald-400" />
-        <StatCard icon={Package} label="Filament Used (g)" value={(usage?.total_filament_used_grams ?? 0).toFixed(0)} color="text-purple-400" />
-        <StatCard icon={AlertCircle} label="Wasted (g)" value={(usage?.total_filament_wasted_grams ?? 0).toFixed(0)} color="text-amber-400" />
+        <StatCard icon={Play} label={t("Total Prints")} value={usage?.total_prints ?? 0} color="text-blue-400" />
+        <StatCard icon={CheckCircle} label={t("Successful Prints")} value={usage?.successful_prints ?? 0} color="text-emerald-400" />
+        <StatCard icon={AlertCircle} label={t("Failed Prints")} value={usage?.failed_prints ?? 0} color="text-red-400" />
+        <StatCard icon={Clock} label={t("Print Hours")} value={formatPrintHours(usage?.total_print_hours ?? 0)} color="text-emerald-400" />
+        <StatCard icon={Package} label={t("Filament Used (g)")} value={(usage?.total_filament_used_grams ?? 0).toFixed(0)} color="text-purple-400" />
+        <StatCard icon={AlertCircle} label={t("Wasted (g)")} value={(usage?.total_filament_wasted_grams ?? 0).toFixed(0)} color="text-amber-400" />
       </div>
 
 
@@ -355,44 +356,37 @@ export default function Dashboard() {
         <div className="card p-6 mb-8">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold text-surface-100">
-              Financial Overview
-            </h2>
+              {t("Financial Overview")}</h2>
             <Link
               to="/expenses"
               className="text-sm text-accent-400 hover:text-accent-300"
             >
-              Manage expenses →
-            </Link>
+              {t("Manage expenses →")}</Link>
           </div>
 
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6">
             <div>
               <div className="flex items-center gap-2 text-sm text-surface-500 mb-1">
                 <DollarSign className="h-4 w-4" />
-                Total Revenue
-              </div>
+                {t("Total Revenue")}</div>
               <div className="text-2xl font-bold text-emerald-400">
                 {formatCents(financials.total_sales_gross_cents)}
               </div>
               <div className="text-xs text-surface-500 mt-1">
-                {financials.sales_count} sales
-              </div>
+                {t("{{count}} sales", { count: financials.sales_count })}</div>
             </div>
 
             <div>
               <div className="flex items-center gap-2 text-sm text-surface-500 mb-1">
                 <Receipt className="h-4 w-4" />
-                Total Expenses
-              </div>
+                {t("Total Expenses")}</div>
               <div className="text-2xl font-bold text-red-400">
                 {formatCents(financials.total_expenses_cents)}
               </div>
               <div className="text-xs text-surface-500 mt-1">
-                {financials.confirmed_expense_count} confirmed
-                {financials.pending_expense_count > 0 && (
+                {t("{{count}} confirmed", { count: financials.confirmed_expense_count })}{financials.pending_expense_count > 0 && (
                   <span className="text-amber-400 ml-1">
-                    ({financials.pending_expense_count} pending)
-                  </span>
+                    {t("({{count}} pending)", { count: financials.pending_expense_count })}</span>
                 )}
               </div>
             </div>
@@ -400,14 +394,12 @@ export default function Dashboard() {
             <div>
               <div className="flex items-center gap-2 text-sm text-surface-500 mb-1">
                 <Play className="h-4 w-4" />
-                Material Used
-              </div>
+                {t("Material Used")}</div>
               <div className="text-2xl font-bold text-blue-400">
                 {formatGrams(financials.total_material_used_grams)}
               </div>
               <div className="text-xs text-surface-500 mt-1">
-                {formatCents(Math.round(financials.total_material_cost * 100))} material cost
-              </div>
+                {t("{{amount}} material cost", { amount: formatCents(Math.round(financials.total_material_cost * 100)) })}</div>
             </div>
 
             <div>
@@ -419,8 +411,7 @@ export default function Dashboard() {
                 ) : (
                   <TrendingDown className="h-4 w-4 text-red-400" />
                 )}
-                Net Profit
-              </div>
+                {t("Net Profit")}</div>
               <div
                 className={cn(
                   'text-2xl font-bold',
@@ -436,11 +427,9 @@ export default function Dashboard() {
               <div className="text-xs text-surface-500 mt-1">
                 {financials.profit_mixed_currency ? (
                   <span className="text-amber-400/90">
-                    costs are in {financials.cost_basis_currency || 'another currency'}, revenue in{' '}
-                    {financials.currency || 'the configured currency'} — profit has no unit
-                  </span>
+                    {t("Costs are in {{costCurrency}}, revenue in {{revenueCurrency}} — profit cannot be compared across currencies.", { costCurrency: financials.cost_basis_currency || t('another currency'), revenueCurrency: financials.currency || t('the configured currency') })}</span>
                 ) : (
-                  <>{formatCents(financials.total_cogs_cents)} COGS</>
+                  <>{formatCents(financials.total_cogs_cents)} {t("COGS")}</>
                 )}
               </div>
             </div>
@@ -452,8 +441,7 @@ export default function Dashboard() {
       {lineChartData.labels.length > 0 && (
         <div className="card p-6 mb-6">
           <h2 className="text-lg font-semibold text-surface-100 mb-4">
-            Revenue & Profit
-          </h2>
+            {t("Revenue & Profit")}</h2>
           <div className="h-[300px]">
             <Line data={lineChartData} options={chartDefaults} />
           </div>
@@ -467,8 +455,7 @@ export default function Dashboard() {
           {expensesByCategory.length > 0 && (
             <div className="card p-6">
               <h2 className="text-lg font-semibold text-surface-100 mb-4">
-                Expenses by Category
-              </h2>
+                {t("Expenses by Category")}</h2>
               <div className="h-[250px]">
                 <Bar data={barChartData} options={chartDefaults} />
               </div>
@@ -479,8 +466,7 @@ export default function Dashboard() {
           {salesByChannel.length > 0 && (
             <div className="card p-6">
               <h2 className="text-lg font-semibold text-surface-100 mb-4">
-                Sales by Channel
-              </h2>
+                {t("Sales by Channel")}</h2>
               <div className="h-[250px]">
                 <Doughnut data={doughnutData} options={doughnutOptions} />
               </div>
@@ -494,28 +480,25 @@ export default function Dashboard() {
         <div className="card p-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold text-surface-100">
-              Printer Fleet
-            </h2>
+              {t("Printer Fleet")}</h2>
             <Link
               to="/printers"
               className="text-sm text-accent-400 hover:text-accent-300"
             >
-              View all →
-            </Link>
+              {t("View all →")}</Link>
           </div>
 
           {printersLoading ? (
-            <div className="text-surface-500">Loading...</div>
+            <div className="text-surface-500">{t("Loading...")}</div>
           ) : printers.length === 0 ? (
             <div className="text-center py-8 text-surface-500">
               <Printer className="h-12 w-12 mx-auto mb-3 opacity-50" />
-              <p>No printers configured</p>
+              <p>{t("No printers configured")}</p>
               <Link
                 to="/printers"
                 className="text-accent-400 hover:text-accent-300 text-sm"
               >
-                Add your first printer
-              </Link>
+                {t("Add your first printer")}</Link>
             </div>
           ) : (
             <div className="space-y-3">
@@ -539,7 +522,7 @@ export default function Dashboard() {
                           {printer.name}
                         </div>
                         <div className="text-xs text-surface-500">
-                          {printer.model || printer.manufacturer || 'Unknown model'}
+                          {printer.model || printer.manufacturer || t("Unknown model")}
                         </div>
                       </div>
                     </div>
@@ -548,7 +531,7 @@ export default function Dashboard() {
                         'badge',
                         getStatusBadge(state?.status || 'offline')
                       )}>
-                        {state?.status || 'offline'}
+                        {t(({ pending: 'Pending', in_progress: 'In Progress', completed: 'Completed', cancelled: 'Cancelled', printing: 'Printing', paused: 'Paused', failed: 'Failed', queued: 'Queued', idle: 'Idle', offline: 'Offline', online: 'Online', error: 'Error', ready: 'Ready', sent: 'Sent', info: 'Info', success: 'Success', warning: 'Warning', critical: 'Critical', channels: 'Channels', templates: 'Templates', deliveries: 'Deliveries' } as Record<string, string>)[state?.status || 'offline'] || state?.status || 'offline')}
                       </span>
                       {state?.status === 'printing' && state.progress > 0 && (
                         <div className="text-xs text-surface-400 mt-1">
@@ -567,28 +550,25 @@ export default function Dashboard() {
         <div className="card p-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold text-surface-100">
-              Active Projects
-            </h2>
+              {t("Active Projects")}</h2>
             <Link
               to="/projects"
               className="text-sm text-accent-400 hover:text-accent-300"
             >
-              View all →
-            </Link>
+              {t("View all →")}</Link>
           </div>
 
           {projectsLoading ? (
-            <div className="text-surface-500">Loading...</div>
+            <div className="text-surface-500">{t("Loading...")}</div>
           ) : activeProjects.length === 0 ? (
             <div className="text-center py-8 text-surface-500">
               <FolderKanban className="h-12 w-12 mx-auto mb-3 opacity-50" />
-              <p>No active projects</p>
+              <p>{t("No active projects")}</p>
               <Link
                 to="/projects"
                 className="text-accent-400 hover:text-accent-300 text-sm"
               >
-                Create a project
-              </Link>
+                {t("Create a project")}</Link>
             </div>
           ) : (
             <div className="space-y-3">
@@ -629,6 +609,8 @@ function StatCard({
   value: number | string
   color: string
 }) {
+  useTranslation('production')
+
   return (
     <div className="card p-4">
       <div className="flex items-center gap-3">

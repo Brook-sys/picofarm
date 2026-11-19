@@ -1,10 +1,13 @@
-import { desktopRuntime } from './platform'
+import { desktopRuntime, writeStorage } from './platform'
+import i18n from '../i18n'
 
 export const notificationDefaults = { finished: true, failed: true, critical: true }
 export type NotificationPreferences = typeof notificationDefaults
 const storageKey = 'picofarm.desktop.notifications'
+let sessionPreferences: NotificationPreferences | null = null
 
 export function notificationPreferences(): NotificationPreferences {
+  if (sessionPreferences) return { ...sessionPreferences }
   try {
     const saved = JSON.parse(localStorage.getItem(storageKey) || '{}')
     return Object.fromEntries(Object.entries(notificationDefaults).map(([key, value]) =>
@@ -14,7 +17,8 @@ export function notificationPreferences(): NotificationPreferences {
 }
 
 export function saveNotificationPreferences(preferences: NotificationPreferences): void {
-  localStorage.setItem(storageKey, JSON.stringify(preferences))
+  // Blocked storage keeps the in-memory UI state for this session only.
+  sessionPreferences = writeStorage(storageKey, JSON.stringify(preferences)) ? null : { ...preferences }
 }
 
 // Bounded, session-only identities. Never persist event/customer payloads.
@@ -29,7 +33,8 @@ function send(kind: keyof NotificationPreferences, id: unknown) {
   if (seen.has(key)) return
   if (seen.size >= 500) seen.delete(seen.keys().next().value!)
   seen.set(key, now)
-  const body = { finished: 'A print job finished.', failed: 'A print job failed.', critical: 'A critical alert needs attention.' }[kind]
+  const message = { finished: 'A print job finished.', failed: 'A print job failed.', critical: 'A critical alert needs attention.' }[kind]
+  const body = i18n.t(message, { ns: 'runtime' })
   // Tags contain no backend identity; all user-visible text is fixed, not event content.
   try { void Promise.resolve(notify({ title: 'PicoFarm', body, tag: `picofarm-${kind}` })).catch(() => {}) } catch { /* Native delivery must not interrupt cache updates. */ }
 }

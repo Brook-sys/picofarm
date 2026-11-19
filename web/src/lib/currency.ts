@@ -1,3 +1,5 @@
+import { getLocale } from '../i18n'
+
 export const DEFAULT_CURRENCY = 'USD'
 
 export const CURRENCY_OPTIONS = [
@@ -25,20 +27,23 @@ export function normalizeCurrencyCode(value?: string | null): CurrencyCode {
   return (supportedCurrencies.has(normalized) ? normalized : DEFAULT_CURRENCY) as CurrencyCode
 }
 
-function resolveDisplayCurrency(value?: string | null): string {
+// Locale is an explicit optional parameter so React contexts can bind their
+// memoized formatters to one interface language. Stored amounts and currency
+// codes are never converted or rewritten by formatting.
+function resolveDisplayCurrency(value: string | null | undefined, locale: string): string {
   const normalized = value?.trim().toUpperCase() || DEFAULT_CURRENCY
   if (!/^[A-Z]{3}$/.test(normalized)) return DEFAULT_CURRENCY
   try {
-    new Intl.NumberFormat(undefined, { style: 'currency', currency: normalized }).format(0)
+    new Intl.NumberFormat(locale, { style: 'currency', currency: normalized }).format(0)
     return normalized
   } catch {
     return DEFAULT_CURRENCY
   }
 }
 
-export function formatMoney(amount: number, currencyCode: string = DEFAULT_CURRENCY): string {
-  const currency = resolveDisplayCurrency(currencyCode)
-  return new Intl.NumberFormat(undefined, {
+export function formatMoney(amount: number, currencyCode: string = DEFAULT_CURRENCY, locale: string = getLocale()): string {
+  const currency = resolveDisplayCurrency(currencyCode, locale)
+  return new Intl.NumberFormat(locale, {
     style: 'currency',
     currency,
     minimumFractionDigits: 2,
@@ -46,13 +51,27 @@ export function formatMoney(amount: number, currencyCode: string = DEFAULT_CURRE
   }).format(Number.isFinite(amount) ? amount : 0)
 }
 
-export function formatMoneyCents(cents: number, currencyCode: string = DEFAULT_CURRENCY): string {
-  return formatMoney(cents / 100, currencyCode)
+export function formatNumber(amount: number, digits = 2): string {
+  return new Intl.NumberFormat(getLocale(), {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+  }).format(Number.isFinite(amount) ? amount : 0)
 }
 
-export function currencySymbol(currencyCode: string = DEFAULT_CURRENCY): string {
-  const currency = resolveDisplayCurrency(currencyCode)
-  const part = new Intl.NumberFormat(undefined, {
+export function formatDateTime(dateString: string): string {
+  const date = new Date(dateString)
+  if (!Number.isFinite(date.getTime())) return '—'
+  return date.toLocaleString(getLocale(), { dateStyle: 'short', timeStyle: 'short' })
+}
+
+
+export function formatMoneyCents(cents: number, currencyCode: string = DEFAULT_CURRENCY, locale: string = getLocale()): string {
+  return formatMoney(cents / 100, currencyCode, locale)
+}
+
+export function currencySymbol(currencyCode: string = DEFAULT_CURRENCY, locale: string = getLocale()): string {
+  const currency = resolveDisplayCurrency(currencyCode, locale)
+  const part = new Intl.NumberFormat(locale, {
     style: 'currency',
     currency,
     currencyDisplay: 'narrowSymbol',

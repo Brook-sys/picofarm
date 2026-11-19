@@ -1,4 +1,6 @@
-import { openExternal } from '../lib/platform'
+import { useTranslation } from 'react-i18next'
+import { LANGUAGES, getLocale } from '../i18n'
+import { openExternal, readApiToken } from '../lib/platform'
 import { DesktopNotificationSettings } from '../components/DesktopNotificationSettings'
 import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
@@ -32,6 +34,7 @@ type SettingsTab = 'integrations' | 'api-keys' | 'api-tokens' | 'backups' | 'oth
 const OLX_INTEGRATION_ENABLED = false
 
 export default function Settings() {
+  const { t } = useTranslation('settings')
   const [searchParams, setSearchParams] = useSearchParams()
   const [activeTab, setActiveTab] = useState<SettingsTab>('integrations')
   const [etsyStatus, setEtsyStatus] = useState<EtsyIntegration | null>(null)
@@ -95,11 +98,11 @@ export default function Settings() {
   useEffect(() => {
     const etsyParam = searchParams.get('etsy')
     if (etsyParam === 'connected') {
-      setSuccessMessage('Successfully connected to Etsy!')
+      setSuccessMessage(t("Successfully connected to Etsy!"))
       searchParams.delete('etsy')
       setSearchParams(searchParams, { replace: true })
     } else if (etsyParam === 'error') {
-      const message = searchParams.get('message') || 'Connection failed'
+      const message = searchParams.get('message') || t("Connection failed")
       const description = searchParams.get('description')
       // Forwarded by the backend since the Etsy fix: Etsy answers a rejected
       // redirect URI with error_description, and internal failures carry a
@@ -112,14 +115,14 @@ export default function Settings() {
       if (reason) {
         detail = `${detail} (${reason})`
       }
-      setError(`Etsy connection error: ${detail}`)
+      setError(t('Etsy connection error: {{detail}}', { detail }))
       searchParams.delete('etsy')
       searchParams.delete('message')
       searchParams.delete('description')
       searchParams.delete('reason')
       setSearchParams(searchParams, { replace: true })
     }
-  }, [searchParams, setSearchParams])
+  }, [searchParams, setSearchParams, t])
 
   // Load Etsy status, Squarespace status, and API key settings
   useEffect(() => {
@@ -143,7 +146,7 @@ export default function Settings() {
       }
     } catch (err) {
       console.error('Failed to load Etsy status:', err)
-      setError('Failed to load Etsy integration status')
+      setError(t("Failed to load Etsy integration status"))
     } finally {
       setLoading(false)
     }
@@ -160,7 +163,7 @@ export default function Settings() {
 
   const handleConnectSquarespace = async () => {
     if (!squarespaceKey.trim()) {
-      setError('Please enter a Squarespace API key')
+      setError(t("Please enter a Squarespace API key"))
       return
     }
 
@@ -171,17 +174,17 @@ export default function Settings() {
       setSquarespaceStatus(result)
       setSquarespaceKey('')
       setShowSquarespaceKey(false)
-      setSuccessMessage('Successfully connected to Squarespace!')
+      setSuccessMessage(t("Successfully connected to Squarespace!"))
     } catch (err) {
       console.error('Failed to connect Squarespace:', err)
-      setError(err instanceof Error ? err.message : 'Failed to connect to Squarespace')
+      setError(err instanceof Error ? err.message : t("Failed to connect to Squarespace"))
     } finally {
       setConnectingSquarespace(false)
     }
   }
 
   const handleDisconnectSquarespace = async () => {
-    if (!confirm('Are you sure you want to disconnect your Squarespace store?')) {
+    if (!confirm(t("Are you sure you want to disconnect your Squarespace store?"))) {
       return
     }
 
@@ -190,10 +193,10 @@ export default function Settings() {
       setError(null)
       await squarespaceApi.disconnect()
       setSquarespaceStatus({ connected: false })
-      setSuccessMessage('Squarespace store disconnected')
+      setSuccessMessage(t("Squarespace store disconnected"))
     } catch (err) {
       console.error('Failed to disconnect Squarespace:', err)
-      setError(err instanceof Error ? err.message : 'Failed to disconnect Squarespace')
+      setError(err instanceof Error ? err.message : t("Failed to disconnect Squarespace"))
     } finally {
       setDisconnectingSquarespace(false)
     }
@@ -251,7 +254,7 @@ export default function Settings() {
       setSavingKey(true)
       setError(null)
       await settingsApi.set('anthropic_api_key', anthropicKey.trim())
-      setSuccessMessage('Anthropic API key saved')
+      setSuccessMessage(t("Anthropic API key saved"))
       setAnthropicKeyMasked(
         anthropicKey.trim().length > 8
           ? anthropicKey.trim().slice(0, 4) + '...' + anthropicKey.trim().slice(-4)
@@ -260,7 +263,7 @@ export default function Settings() {
       setAnthropicKey('')
       setShowAnthropicKey(false)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save API key')
+      setError(err instanceof Error ? err.message : t("Failed to save API key"))
     } finally {
       setSavingKey(false)
     }
@@ -273,12 +276,12 @@ export default function Settings() {
       setSavingThingiverseToken(true)
       setError(null)
       await settingsApi.set('thingiverse_api_token', thingiverseToken.trim())
-      setSuccessMessage('Thingiverse API token saved')
+      setSuccessMessage(t("Thingiverse API token saved"))
       setThingiverseTokenMasked('********')
       setThingiverseToken('')
       setShowThingiverseToken(false)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save Thingiverse token')
+      setError(err instanceof Error ? err.message : t("Failed to save Thingiverse token"))
     } finally {
       setSavingThingiverseToken(false)
     }
@@ -292,19 +295,19 @@ export default function Settings() {
       setError(null)
       const trimmed = olxKey.trim()
       await settingsApi.set('olx_api_key', trimmed)
-      setSuccessMessage('OLX Brasil API key saved')
+      setSuccessMessage(t("OLX Brasil API key saved"))
       setOlxKeyMasked(trimmed.length > 8 ? `${trimmed.slice(0, 4)}...${trimmed.slice(-4)}` : '****')
       setOlxKey('')
       setShowOlxKey(false)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save OLX API key')
+      setError(err instanceof Error ? err.message : t("Failed to save OLX API key"))
     } finally {
       setSavingOlxKey(false)
     }
   }
 
   const handleDeleteOlxKey = async () => {
-    if (!confirm('Remove the OLX Brasil API key?')) return
+    if (!confirm(t("Remove the OLX Brasil API key?"))) return
 
     try {
       setDeletingOlxKey(true)
@@ -312,9 +315,9 @@ export default function Settings() {
       await settingsApi.delete('olx_api_key')
       setOlxKey('')
       setOlxKeyMasked('')
-      setSuccessMessage('OLX Brasil API key removed')
+      setSuccessMessage(t("OLX Brasil API key removed"))
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to remove OLX API key')
+      setError(err instanceof Error ? err.message : t("Failed to remove OLX API key"))
     } finally {
       setDeletingOlxKey(false)
     }
@@ -329,13 +332,13 @@ export default function Settings() {
       await openExternal(url)
     } catch (err) {
       console.error('Failed to start Etsy OAuth:', err)
-      setError(err instanceof Error ? err.message : 'Failed to start Etsy connection')
+      setError(err instanceof Error ? err.message : t("Failed to start Etsy connection"))
       setConnecting(false)
     }
   }
 
   const handleDisconnectEtsy = async () => {
-    if (!confirm('Are you sure you want to disconnect your Etsy shop?')) {
+    if (!confirm(t("Are you sure you want to disconnect your Etsy shop?"))) {
       return
     }
 
@@ -344,10 +347,10 @@ export default function Settings() {
       setError(null)
       await etsyApi.disconnect()
       setEtsyStatus({ connected: false, configured: etsyStatus?.configured || false })
-      setSuccessMessage('Etsy shop disconnected')
+      setSuccessMessage(t("Etsy shop disconnected"))
     } catch (err) {
       console.error('Failed to disconnect Etsy:', err)
-      setError(err instanceof Error ? err.message : 'Failed to disconnect Etsy')
+      setError(err instanceof Error ? err.message : t("Failed to disconnect Etsy"))
     } finally {
       setDisconnecting(false)
     }
@@ -377,11 +380,11 @@ export default function Settings() {
       } else if (status.configured) {
         // Reconfigured: an existing token stays valid, and the operator can now
         // retry the connection with the corrected redirect URI.
-        setSuccessMessage('Etsy credentials updated')
+        setSuccessMessage(t("Etsy credentials updated"))
       }
     } catch (err) {
       console.error('Failed to configure Etsy:', err)
-      setError(err instanceof Error ? err.message : 'Failed to configure Etsy')
+      setError(err instanceof Error ? err.message : t("Failed to configure Etsy"))
     } finally {
       setConfiguringEtsy(false)
     }
@@ -393,17 +396,17 @@ export default function Settings() {
       setError(null)
       const backup = await backupsApi.create()
       setBackups(prev => [backup, ...prev])
-      setSuccessMessage('Backup created successfully')
+      setSuccessMessage(t("Backup created successfully"))
     } catch (err) {
       console.error('Failed to create backup:', err)
-      setError(err instanceof Error ? err.message : 'Failed to create backup')
+      setError(err instanceof Error ? err.message : t("Failed to create backup"))
     } finally {
       setCreatingBackup(false)
     }
   }
 
   const handleDeleteBackup = async (name: string) => {
-    if (!confirm(`Are you sure you want to delete backup "${name}"?`)) {
+    if (!confirm(t('Are you sure you want to delete backup "{{name}}"?', { name }))) {
       return
     }
 
@@ -412,17 +415,17 @@ export default function Settings() {
       setError(null)
       await backupsApi.delete(name)
       setBackups(prev => prev.filter(b => b.name !== name))
-      setSuccessMessage('Backup deleted')
+      setSuccessMessage(t("Backup deleted"))
     } catch (err) {
       console.error('Failed to delete backup:', err)
-      setError(err instanceof Error ? err.message : 'Failed to delete backup')
+      setError(err instanceof Error ? err.message : t("Failed to delete backup"))
     } finally {
       setDeletingBackup(null)
     }
   }
 
   const handleRestoreBackup = async (name: string) => {
-    if (!confirm(`Are you sure you want to restore from "${name}"?\n\nThis will replace your current database. The application will need to be restarted.`)) {
+    if (!confirm(t('Are you sure you want to restore from "{{name}}"?\n\nThis will replace your current database. The application will need to be restarted.', { name }))) {
       return
     }
 
@@ -430,18 +433,18 @@ export default function Settings() {
       setRestoringBackup(name)
       setError(null)
       const result = await backupsApi.restore(name)
-      setSuccessMessage(result.message + ' Please restart the application.')
+      setSuccessMessage(result.message + t(" Please restart the application."))
     } catch (err) {
       console.error('Failed to restore backup:', err)
-      setError(err instanceof Error ? err.message : 'Failed to restore backup')
+      setError(err instanceof Error ? err.message : t("Failed to restore backup"))
     } finally {
       setRestoringBackup(null)
     }
   }
 
   const formatDate = (dateStr?: string) => {
-    if (!dateStr) return 'Never'
-    return new Date(dateStr).toLocaleString()
+    if (!dateStr) return t("Never")
+    return new Date(dateStr).toLocaleString(getLocale())
   }
 
   const isTokenExpiringSoon = () => {
@@ -452,18 +455,18 @@ export default function Settings() {
   }
 
   const tabs: { id: SettingsTab; label: string; icon: React.ReactNode }[] = [
-    { id: 'integrations', label: 'Integrations', icon: <Store className="h-4 w-4" /> },
-    { id: 'api-keys', label: 'API Keys', icon: <Key className="h-4 w-4" /> },
-    { id: 'api-tokens', label: 'API Tokens', icon: <ShieldAlert className="h-4 w-4" /> },
-    { id: 'backups', label: 'Backups', icon: <Database className="h-4 w-4" /> },
-    { id: 'other', label: 'Other', icon: <SettingsIcon className="h-4 w-4" /> },
+    { id: 'integrations', label: t("Integrations"), icon: <Store className="h-4 w-4" /> },
+    { id: 'api-keys', label: t("API Keys"), icon: <Key className="h-4 w-4" /> },
+    { id: 'api-tokens', label: t("API Tokens"), icon: <ShieldAlert className="h-4 w-4" /> },
+    { id: 'backups', label: t("Backups"), icon: <Database className="h-4 w-4" /> },
+    { id: 'other', label: t("Other"), icon: <SettingsIcon className="h-4 w-4" /> },
   ]
 
   return (
     <div className="p-6">
       <div className="max-w-4xl">
         <h1 className="text-2xl font-display font-semibold text-surface-100 mb-6">
-          Settings
+          {t("Settings")}
         </h1>
 
         {/* Tab Navigation */}
@@ -472,6 +475,7 @@ export default function Settings() {
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
+              aria-current={activeTab === tab.id ? 'page' : undefined}
               className={cn(
                 'flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-t-lg transition-colors',
                 activeTab === tab.id
@@ -491,10 +495,11 @@ export default function Settings() {
             <CheckCircle2 className="h-5 w-5 text-green-400 flex-shrink-0" />
             <p className="text-green-300">{successMessage}</p>
             <button
+              aria-label={t('Dismiss message')}
               onClick={() => setSuccessMessage(null)}
               className="ml-auto text-green-400 hover:text-green-300"
             >
-              &times;
+              ×
             </button>
           </div>
         )}
@@ -505,10 +510,11 @@ export default function Settings() {
             <AlertCircle className="h-5 w-5 text-red-400 flex-shrink-0" />
             <p className="text-red-300">{error}</p>
             <button
+              aria-label={t('Dismiss message')}
               onClick={() => setError(null)}
               className="ml-auto text-red-400 hover:text-red-300"
             >
-              &times;
+              ×
             </button>
           </div>
         )}
@@ -522,9 +528,9 @@ export default function Settings() {
                 <Database className="h-6 w-6 text-blue-400" />
               </div>
               <div>
-                <h2 className="text-lg font-semibold text-surface-100">Database Backups</h2>
+                <h2 className="text-lg font-semibold text-surface-100">{t("Database Backups")}</h2>
                 <p className="text-sm text-surface-400">
-                  Create and restore database backups
+                  {t("Create and restore database backups")}
                 </p>
               </div>
             </div>
@@ -538,7 +544,7 @@ export default function Settings() {
               ) : (
                 <Plus className="h-4 w-4" />
               )}
-              Create Backup
+              {t("Create Backup")}
             </button>
           </div>
 
@@ -548,7 +554,7 @@ export default function Settings() {
             </div>
           ) : backups.length === 0 ? (
             <div className="bg-surface-800/50 rounded-lg p-4 text-center">
-              <p className="text-surface-400">No backups yet. Create your first backup to protect your data.</p>
+              <p className="text-surface-400">{t("No backups yet. Create your first backup to protect your data.")}</p>
             </div>
           ) : (
             <div className="space-y-2">
@@ -571,27 +577,27 @@ export default function Settings() {
                       onClick={() => handleRestoreBackup(backup.name)}
                       disabled={restoringBackup === backup.name}
                       className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-amber-400 hover:text-amber-300 hover:bg-amber-500/10 rounded transition-colors disabled:opacity-50"
-                      title="Restore this backup"
+                      title={t("Restore this backup")}
                     >
                       {restoringBackup === backup.name ? (
                         <RefreshCw className="h-3 w-3 animate-spin" />
                       ) : (
                         <RotateCcw className="h-3 w-3" />
                       )}
-                      Restore
+                      {t("Restore")}
                     </button>
                     <button
                       onClick={() => handleDeleteBackup(backup.name)}
                       disabled={deletingBackup === backup.name}
                       className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded transition-colors disabled:opacity-50"
-                      title="Delete this backup"
+                      title={t("Delete this backup")}
                     >
                       {deletingBackup === backup.name ? (
                         <RefreshCw className="h-3 w-3 animate-spin" />
                       ) : (
                         <Trash2 className="h-3 w-3" />
                       )}
-                      Delete
+                      {t("Delete")}
                     </button>
                   </div>
                 </div>
@@ -603,7 +609,7 @@ export default function Settings() {
           <BackupSettings />
 
           <p className="mt-4 text-xs text-surface-500">
-            Backups are stored locally in your data directory. Consider copying important backups to external storage.
+            {t("Backups are stored locally in your data directory. Consider copying important backups to external storage.")}
           </p>
         </div>
         )}
@@ -616,9 +622,9 @@ export default function Settings() {
               <Key className="h-6 w-6 text-purple-400" />
             </div>
             <div>
-              <h2 className="text-lg font-semibold text-surface-100">API Keys</h2>
+              <h2 className="text-lg font-semibold text-surface-100">{t("API Keys")}</h2>
               <p className="text-sm text-surface-400">
-                Configure API keys for AI-powered features
+                {t("Configure API keys for AI-powered features")}
               </p>
             </div>
           </div>
@@ -627,10 +633,10 @@ export default function Settings() {
             {/* Anthropic API Key */}
             <div>
               <label className="block text-sm font-medium text-surface-300 mb-2">
-                Anthropic API Key
+                {t("Anthropic API Key")}
               </label>
               <p className="text-xs text-surface-500 mb-2">
-                Required for AI receipt parsing. Get your key at{' '}
+                {t("Required for AI receipt parsing. Get your key at")}{' '}
                 <a
                   href="https://console.anthropic.com/settings/keys"
                   target="_blank"
@@ -644,7 +650,7 @@ export default function Settings() {
               {keyLoaded && anthropicKeyMasked && !anthropicKey && (
                 <div className="flex items-center gap-2 mb-2">
                   <CheckCircle2 className="h-4 w-4 text-green-400" />
-                  <span className="text-sm text-green-300">Key configured: {anthropicKeyMasked}</span>
+                  <span className="text-sm text-green-300">{t("Key configured:")} {anthropicKeyMasked}</span>
                 </div>
               )}
 
@@ -654,12 +660,13 @@ export default function Settings() {
                     type={showAnthropicKey ? 'text' : 'password'}
                     value={anthropicKey}
                     onChange={(e) => setAnthropicKey(e.target.value)}
-                    placeholder={anthropicKeyMasked ? 'Enter new key to update...' : 'sk-ant-...'}
+                    placeholder={anthropicKeyMasked ? t("Enter new key to update...") : 'sk-ant-...'}
                     className="w-full bg-surface-800 border border-surface-700 rounded-lg px-3 py-2 text-sm text-surface-100 placeholder-surface-500 focus:outline-none focus:ring-2 focus:ring-accent-500 focus:border-transparent pr-10"
                   />
                   <button
                     type="button"
-                    onClick={() => setShowAnthropicKey(!showAnthropicKey)}
+                    aria-label={showAnthropicKey ? t('Hide credential') : t('Show credential')}
+                     onClick={() => setShowAnthropicKey(!showAnthropicKey)}
                     className="absolute right-2 top-1/2 -translate-y-1/2 text-surface-400 hover:text-surface-300"
                   >
                     {showAnthropicKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
@@ -675,7 +682,7 @@ export default function Settings() {
                   ) : (
                     <Save className="h-4 w-4" />
                   )}
-                  Save
+                  {t("Save")}
                 </button>
                </div>
              </div>
@@ -691,9 +698,9 @@ export default function Settings() {
                <Globe className="h-6 w-6 text-blue-400" />
              </div>
              <div>
-               <h2 className="text-lg font-semibold text-surface-100">Thingiverse Integration</h2>
+               <h2 className="text-lg font-semibold text-surface-100">{t("Thingiverse Integration")}</h2>
                <p className="text-sm text-surface-400">
-                 Import models from Thingiverse using your Personal Access Token
+                 {t("Import models from Thingiverse using your Personal Access Token")}
                </p>
              </div>
            </div>
@@ -701,7 +708,7 @@ export default function Settings() {
            <div className="space-y-4">
              <div>
                <label className="block text-sm font-medium text-surface-300 mb-2">
-                 Thingiverse API Token
+                 {t("Thingiverse API Token")}
                </label>
                <div className="flex gap-2">
                  <div className="relative flex-1">
@@ -709,11 +716,12 @@ export default function Settings() {
                      type={showThingiverseToken ? 'text' : 'password'}
                      value={thingiverseToken}
                      onChange={(e) => setThingiverseToken(e.target.value)}
-                     placeholder={thingiverseTokenMasked ? 'Enter new token to update...' : 'Paste your Thingiverse token'}
+                     placeholder={thingiverseTokenMasked ? t("Enter new token to update...") : t("Paste your Thingiverse token")}
                      className="input pr-10 w-full"
                    />
                    <button
                      type="button"
+                     aria-label={showThingiverseToken ? t('Hide credential') : t('Show credential')}
                      onClick={() => setShowThingiverseToken(!showThingiverseToken)}
                      className="absolute right-3 top-1/2 -translate-y-1/2 text-surface-400 hover:text-surface-200"
                    >
@@ -730,22 +738,22 @@ export default function Settings() {
                    ) : (
                      <Save className="h-4 w-4" />
                    )}
-                   Save
+                   {t("Save")}
                  </button>
                </div>
                {thingiverseTokenMasked && !thingiverseToken && (
                  <div className="mt-2">
-                   <span className="text-sm text-green-300">Token configured: {thingiverseTokenMasked}</span>
+                   <span className="text-sm text-green-300">{t("Token configured:")} {thingiverseTokenMasked}</span>
                  </div>
                )}
                <p className="mt-2 text-xs text-surface-500">
-                 Get your token at <a href="https://www.thingiverse.com/settings/personal-access-tokens" target="_blank" rel="noreferrer" className="text-accent-400 hover:underline">Thingiverse Settings → Personal Access Tokens</a>
+                 {t("Get your token at")} <a href="https://www.thingiverse.com/settings/personal-access-tokens" target="_blank" rel="noreferrer" className="text-accent-400 hover:underline">{t("Thingiverse Settings → Personal Access Tokens")}</a>
                </p>
               </div>
             </div>
           </div>
           )}
- 
+
            {/* Etsy Integration Card */}
          {activeTab === 'integrations' && (
          <div className="bg-surface-900/50 border border-surface-800 rounded-xl p-6">
@@ -754,9 +762,9 @@ export default function Settings() {
               <Store className="h-6 w-6 text-orange-400" />
             </div>
             <div>
-              <h2 className="text-lg font-semibold text-surface-100">Etsy Integration</h2>
+              <h2 className="text-lg font-semibold text-surface-100">{t("Etsy Integration")}</h2>
               <p className="text-sm text-surface-400">
-                Connect your Etsy shop to sync orders automatically
+                {t("Connect your Etsy shop to sync orders automatically")}
               </p>
             </div>
           </div>
@@ -774,39 +782,39 @@ export default function Settings() {
               {showEtsyCredentials || !etsyStatus?.configured ? (
                 <div className="bg-surface-800/50 rounded-lg p-4">
                   <p className="text-surface-300 mb-3">
-                    Connect your Etsy shop to sync orders and listings.
+                    {t("Connect your Etsy shop to sync orders and listings.")}
                   </p>
                   <div className="space-y-3">
                     <div>
-                      <label className="block text-sm text-surface-400 mb-1">Etsy Client ID</label>
+                      <label className="block text-sm text-surface-400 mb-1">{t("Etsy Client ID")}</label>
                       <input
                         type="text"
                         value={etsyClientId}
                         onChange={e => setEtsyClientId(e.target.value)}
-                        placeholder="Paste your Etsy app's Client ID (Keystring)"
+                        placeholder={t("Paste your Etsy app's Client ID (Keystring)")}
                         className="input w-full"
                       />
                       <p className="text-xs text-surface-500 mt-1">
-                        Get this from the <a href="https://www.etsy.com/developers/your-apps" target="_blank" rel="noopener noreferrer" className="text-accent-400 hover:underline">Etsy Developer Portal</a>
+                        {t("Get this from the")} <a href="https://www.etsy.com/developers/your-apps" target="_blank" rel="noopener noreferrer" className="text-accent-400 hover:underline">{t("Etsy Developer Portal")}</a>
                       </p>
                     </div>
                     <div>
-                      <label htmlFor="etsy-shared-secret" className="block text-sm text-surface-400 mb-1">Etsy Shared Secret</label>
+                      <label htmlFor="etsy-shared-secret" className="block text-sm text-surface-400 mb-1">{t("Etsy Shared Secret")}</label>
                       <input
                         id="etsy-shared-secret"
                         type="password"
                         autoComplete="new-password"
                         value={etsySharedSecret}
                         onChange={e => setEtsySharedSecret(e.target.value)}
-                        placeholder={etsyStatus?.configured ? 'Leave blank to keep the existing secret' : "Paste your Etsy app's Shared Secret"}
+                        placeholder={etsyStatus?.configured ? t("Leave blank to keep the existing secret") : t("Paste your Etsy app's Shared Secret")}
                         className="input w-full"
                       />
                       <p className="text-xs text-surface-500 mt-1">
-                        From the Etsy Developer Portal, alongside your Keystring. This is not the webhook signing secret. Leave blank only to keep a previously saved value.
+                        {t("From the Etsy Developer Portal, alongside your Keystring. This is not the webhook signing secret. Leave blank only to keep a previously saved value.")}
                       </p>
                     </div>
                     <div>
-                      <label className="block text-sm text-surface-400 mb-1">Redirect URI</label>
+                      <label className="block text-sm text-surface-400 mb-1">{t("Redirect URI")}</label>
                       <input
                         type="text"
                         value={etsyRedirectUri}
@@ -815,9 +823,7 @@ export default function Settings() {
                         className="input w-full font-mono text-sm"
                       />
                       <p className="text-xs text-surface-500 mt-1">
-                        Must be registered as a Callback URL on your app in the <a href="https://www.etsy.com/developers/your-apps" target="_blank" rel="noopener noreferrer" className="text-accent-400 hover:underline">Etsy Developer Portal</a>.
-                        Etsy rejects an unregistered value with "The requested redirect URL is not permitted.".
-                        It must also be reachable in your browser when Etsy sends it back. Leave it empty to use the default.
+                        {t("Must be registered as a Callback URL on your app in the")} <a href="https://www.etsy.com/developers/your-apps" target="_blank" rel="noopener noreferrer" className="text-accent-400 hover:underline">{t("Etsy Developer Portal")}</a>{t(". Etsy rejects an unregistered value with \"The requested redirect URL is not permitted.\". It must also be reachable in your browser when Etsy sends it back. Leave it empty to use the default.")}
                       </p>
                     </div>
                     <div className="flex items-center gap-2">
@@ -826,14 +832,14 @@ export default function Settings() {
                         disabled={!etsyClientId.trim() || (!etsyStatus?.configured && !etsySharedSecret.trim()) || configuringEtsy}
                         className="btn btn-primary"
                       >
-                        {configuringEtsy ? 'Saving...' : 'Save & Connect'}
+                        {configuringEtsy ? t("Saving...") : t("Save & Connect")}
                       </button>
                       {etsyStatus?.configured && (
                         <button
                           onClick={() => setShowEtsyCredentials(false)}
                           className="btn btn-ghost"
                         >
-                          Cancel
+                          {t("Cancel")}
                         </button>
                       )}
                     </div>
@@ -845,23 +851,23 @@ export default function Settings() {
                   <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-4">
                     <div className="flex items-center gap-2 mb-2">
                       <CheckCircle2 className="h-4 w-4 text-green-400" />
-                      <span className="text-green-300 font-medium">Connected</span>
+                      <span className="text-green-300 font-medium">{t("Connected")}</span>
                     </div>
                     <div className="grid grid-cols-2 gap-4 text-sm">
                       <div>
-                        <p className="text-surface-400">Shop Name</p>
+                        <p className="text-surface-400">{t("Shop Name")}</p>
                         <p className="text-surface-100 font-medium">{etsyStatus.shop_name}</p>
                       </div>
                       <div>
-                        <p className="text-surface-400">Shop ID</p>
+                        <p className="text-surface-400">{t("Shop ID")}</p>
                         <p className="text-surface-100 font-medium">{etsyStatus.shop_id}</p>
                       </div>
                       <div>
-                        <p className="text-surface-400">Last Synced</p>
+                        <p className="text-surface-400">{t("Last Synced")}</p>
                         <p className="text-surface-100">{formatDate(etsyStatus.last_sync_at)}</p>
                       </div>
                       <div>
-                        <p className="text-surface-400">Connected Since</p>
+                        <p className="text-surface-400">{t("Connected Since")}</p>
                         <p className="text-surface-100">{formatDate(etsyStatus.created_at)}</p>
                       </div>
                     </div>
@@ -869,12 +875,12 @@ export default function Settings() {
 
                   {/* Registered Redirect URI */}
                   <div className="bg-surface-800/50 rounded-lg p-3">
-                    <p className="text-sm text-surface-400 mb-1">Redirect URI</p>
+                    <p className="text-sm text-surface-400 mb-1">{t("Redirect URI")}</p>
                     <p className="text-xs text-surface-200 font-mono break-all">
-                      {etsyStatus.redirect_uri || 'not set'}
+                      {etsyStatus.redirect_uri || t("not set")}
                     </p>
                     <p className="text-xs text-surface-500 mt-1">
-                      Etsy only accepts addresses registered on your app. A different address means every reconnect fails.
+                      {t("Etsy only accepts addresses registered on your app. A different address means every reconnect fails.")}
                     </p>
                   </div>
 
@@ -883,14 +889,14 @@ export default function Settings() {
                     <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-3 flex items-center gap-2">
                       <AlertCircle className="h-4 w-4 text-yellow-400" />
                       <span className="text-sm text-yellow-300">
-                        Token expires soon. It will be automatically refreshed on next API call.
+                        {t("Token expires soon. It will be automatically refreshed on next API call.")}
                       </span>
                     </div>
                   )}
 
                   {/* Scopes */}
                   <div>
-                    <p className="text-sm text-surface-400 mb-2">Permissions</p>
+                    <p className="text-sm text-surface-400 mb-2">{t("Permissions")}</p>
                     <div className="flex flex-wrap gap-2">
                       {etsyStatus.scopes?.map((scope) => (
                         <span
@@ -911,7 +917,7 @@ export default function Settings() {
                       }}
                       className="px-4 py-2 text-sm font-medium text-surface-300 hover:text-surface-100 hover:bg-surface-700 rounded-lg transition-colors"
                     >
-                      Edit credentials
+                      {t("Edit credentials")}
                     </button>
                     <button
                       onClick={handleDisconnectEtsy}
@@ -923,24 +929,24 @@ export default function Settings() {
                       ) : (
                         <Unplug className="h-4 w-4" />
                       )}
-                      Disconnect Shop
+                      {t("Disconnect Shop")}
                     </button>
                   </div>
                 </div>
               ) : (
                 <div className="space-y-4">
                   <p className="text-surface-300">
-                    Connect your Etsy shop to automatically import orders and sync inventory.
+                    {t("Connect your Etsy shop to automatically import orders and sync inventory.")}
                   </p>
                   <div className="bg-surface-800/50 rounded-lg p-3">
-                    <p className="text-sm text-surface-400 mb-1">Redirect URI</p>
+                    <p className="text-sm text-surface-400 mb-1">{t("Redirect URI")}</p>
                     <p className="text-xs text-surface-200 font-mono break-all">
-                      {etsyStatus.redirect_uri || 'not set'}
+                      {etsyStatus.redirect_uri || t("not set")}
                     </p>
                     <p className="text-xs text-surface-500 mt-1">
                       {etsyStatus.redirect_uri
-                        ? 'This is the address Etsy is told to return to. It must be registered as a Callback URL on your app.'
-                        : 'Using the built-in default. It must be registered as a Callback URL on your app in the Etsy Developer Portal.'}
+                        ? t("This is the address Etsy is told to return to. It must be registered as a Callback URL on your app.")
+                        : t("Using the built-in default. It must be registered as a Callback URL on your app in the Etsy Developer Portal.")}
                     </p>
                   </div>
                   <div className="flex items-center gap-3">
@@ -954,7 +960,7 @@ export default function Settings() {
                       ) : (
                         <ExternalLink className="h-4 w-4" />
                       )}
-                      Connect to Etsy
+                      {t("Connect to Etsy")}
                     </button>
                     <button
                       onClick={() => {
@@ -963,7 +969,7 @@ export default function Settings() {
                       }}
                       className="px-4 py-2 text-sm font-medium text-surface-300 hover:text-surface-100 hover:bg-surface-700 rounded-lg transition-colors"
                     >
-                      Edit credentials
+                      {t("Edit credentials")}
                     </button>
                   </div>
                 </div>
@@ -981,9 +987,9 @@ export default function Settings() {
               <ShoppingBag className="h-6 w-6 text-purple-400" />
             </div>
             <div>
-              <h2 className="text-lg font-semibold text-surface-100">Squarespace Integration</h2>
+              <h2 className="text-lg font-semibold text-surface-100">{t("Squarespace Integration")}</h2>
               <p className="text-sm text-surface-400">
-                Connect your Squarespace store to sync orders automatically
+                {t("Connect your Squarespace store to sync orders automatically")}
               </p>
             </div>
           </div>
@@ -994,23 +1000,23 @@ export default function Settings() {
               <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-4">
                 <div className="flex items-center gap-2 mb-2">
                   <CheckCircle2 className="h-4 w-4 text-green-400" />
-                  <span className="text-green-300 font-medium">Connected</span>
+                  <span className="text-green-300 font-medium">{t("Connected")}</span>
                 </div>
                 <div className="grid grid-cols-2 gap-4 text-sm">
                   <div>
-                    <p className="text-surface-400">Site Title</p>
+                    <p className="text-surface-400">{t("Site Title")}</p>
                     <p className="text-surface-100 font-medium">{squarespaceStatus.site_title}</p>
                   </div>
                   <div>
-                    <p className="text-surface-400">Site ID</p>
+                    <p className="text-surface-400">{t("Site ID")}</p>
                     <p className="text-surface-100 font-medium">{squarespaceStatus.site_id}</p>
                   </div>
                   <div>
-                    <p className="text-surface-400">Last Order Sync</p>
+                    <p className="text-surface-400">{t("Last Order Sync")}</p>
                     <p className="text-surface-100">{formatDate(squarespaceStatus.last_order_sync_at)}</p>
                   </div>
                   <div>
-                    <p className="text-surface-400">Connected Since</p>
+                    <p className="text-surface-400">{t("Connected Since")}</p>
                     <p className="text-surface-100">{formatDate(squarespaceStatus.created_at)}</p>
                   </div>
                 </div>
@@ -1027,26 +1033,26 @@ export default function Settings() {
                 ) : (
                   <Unplug className="h-4 w-4" />
                 )}
-                Disconnect Store
+                {t("Disconnect Store")}
                 </button>
                 </div>
                 ) : (
                 <div className="space-y-4">
                 <p className="text-surface-300">
-                Connect your Squarespace store to automatically import orders.
+                {t("Connect your Squarespace store to automatically import orders.")}
                 </p>
                 <p className="text-xs text-surface-500">
-                Get your API key from{' '}
+                {t("Get your API key from")}{' '}
                 <a
                   href="https://support.squarespace.com/hc/en-us/articles/12880553888141-Commerce-APIs"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-accent-400 hover:underline"
                 >
-                  Squarespace Developer Settings
+                  {t("Squarespace Developer Settings")}
                 </a>
-                . You'll need the <code className="bg-surface-700 px-1 rounded">Orders Read</code> and{' '}
-                <code className="bg-surface-700 px-1 rounded">Products Read</code> permissions.
+                {t(". You'll need the")} <code className="bg-surface-700 px-1 rounded">{t("Orders Read")}</code> {t("and")}{' '}
+                <code className="bg-surface-700 px-1 rounded">{t("Products Read")}</code> {t("permissions.")}
                 </p>
 
                 <div className="flex gap-2">
@@ -1055,12 +1061,13 @@ export default function Settings() {
                     type={showSquarespaceKey ? 'text' : 'password'}
                     value={squarespaceKey}
                     onChange={(e) => setSquarespaceKey(e.target.value)}
-                    placeholder="Enter your Squarespace API key..."
+                    placeholder={t("Enter your Squarespace API key...")}
                     className="w-full bg-surface-800 border border-surface-700 rounded-lg px-3 py-2 text-sm text-surface-100 placeholder-surface-500 focus:outline-none focus:ring-2 focus:ring-accent-500 focus:border-transparent pr-10"
                   />
                   <button
                     type="button"
-                    onClick={() => setShowSquarespaceKey(!showSquarespaceKey)}
+                    aria-label={showSquarespaceKey ? t('Hide credential') : t('Show credential')}
+                     onClick={() => setShowSquarespaceKey(!showSquarespaceKey)}
                     className="absolute right-2 top-1/2 -translate-y-1/2 text-surface-400 hover:text-surface-300"
                   >
                     {showSquarespaceKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
@@ -1076,7 +1083,7 @@ export default function Settings() {
                   ) : (
                     <ExternalLink className="h-4 w-4" />
                   )}
-                  Connect
+                  {t("Connect")}
                 </button>
                 </div>
                 </div>
@@ -1092,24 +1099,24 @@ export default function Settings() {
                 <Globe className="h-6 w-6 text-emerald-400" />
                 </div>
                 <div>
-                <h2 className="text-lg font-semibold text-surface-100">OLX Brasil Integration</h2>
+                <h2 className="text-lg font-semibold text-surface-100">{t("OLX Brasil Integration")}</h2>
                 <p className="text-sm text-surface-400">
-                Configure your OLX API key for classifieds and lead sync
+                {t("Configure your OLX API key for classifieds and lead sync")}
                 </p>
                 </div>
                 </div>
 
                 <div className="space-y-4">
                 <p className="text-xs text-surface-500">
-                OLX API access requires integrator registration. Store your API key here; status will reflect validation via the OLX client.
+                {t("OLX API access requires integrator registration. Store your API key here; status will reflect validation via the OLX client.")}
                 </p>
 
                 <div>
-                <label className="block text-sm font-medium text-surface-300 mb-2">OLX API Key</label>
+                <label className="block text-sm font-medium text-surface-300 mb-2">{t("OLX API Key")}</label>
                 {olxKeyMasked && !olxKey && (
                 <div className="flex items-center gap-2 mb-2">
                   <CheckCircle2 className="h-4 w-4 text-green-400" />
-                  <span className="text-sm text-green-300">Key configured: {olxKeyMasked}</span>
+                  <span className="text-sm text-green-300">{t("Key configured:")} {olxKeyMasked}</span>
                 </div>
                 )}
                 <div className="flex gap-2">
@@ -1118,12 +1125,13 @@ export default function Settings() {
                     type={showOlxKey ? 'text' : 'password'}
                     value={olxKey}
                     onChange={(e) => setOlxKey(e.target.value)}
-                    placeholder={olxKeyMasked ? 'Enter new key to update...' : 'Paste your OLX API key'}
+                    placeholder={olxKeyMasked ? t("Enter new key to update...") : t("Paste your OLX API key")}
                     className="w-full bg-surface-800 border border-surface-700 rounded-lg px-3 py-2 text-sm text-surface-100 placeholder-surface-500 focus:outline-none focus:ring-2 focus:ring-accent-500 focus:border-transparent pr-10"
                   />
                   <button
                     type="button"
-                    onClick={() => setShowOlxKey(!showOlxKey)}
+                    aria-label={showOlxKey ? t('Hide credential') : t('Show credential')}
+                     onClick={() => setShowOlxKey(!showOlxKey)}
                     className="absolute right-2 top-1/2 -translate-y-1/2 text-surface-400 hover:text-surface-300"
                   >
                     {showOlxKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
@@ -1135,7 +1143,7 @@ export default function Settings() {
                   className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
                 >
                   {savingOlxKey ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                  Save
+                  {t("Save")}
                 </button>
                 {olxKeyMasked && (
                   <button
@@ -1144,7 +1152,7 @@ export default function Settings() {
                     className="flex items-center gap-2 px-3 py-2 text-sm text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg transition-colors disabled:opacity-50"
                   >
                     {deletingOlxKey ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-                    Remove
+                    {t("Remove")}
                   </button>
                 )}
                 </div>
@@ -1159,6 +1167,7 @@ export default function Settings() {
                 {/* General display and business information */}
                 {activeTab === 'other' && (
                   <>
+                    <LanguageSettings />
                     <DesktopNotificationSettings />
                     <CurrencySettings />
                     <FilamentTypeColorSettings />
@@ -1173,24 +1182,42 @@ export default function Settings() {
 }
 
 function CreditsFooter() {
+  const { t } = useTranslation('settings')
   return (
     <div className="mt-8 pt-6 border-t border-surface-800">
-      <h2 className="text-sm font-semibold text-surface-300">Credits</h2>
+      <h2 className="text-sm font-semibold text-surface-300">{t("Credits")}</h2>
       <p className="text-xs text-surface-500 mt-2">
-        PicoFarm is a fork evolved from{' '}
+        {t("PicoFarm is a fork evolved from")}{' '}
         <a href="https://github.com/philjestin/Daedalus" target="_blank" rel="noopener noreferrer" className="text-accent-400 hover:underline">
           Daedalus
         </a>
-        , created by the original Daedalus project contributors.
+        {t(", created by the original Daedalus project contributors.")}
       </p>
       <p className="text-xs text-surface-600 mt-2">
-        We keep this credit here to acknowledge the foundation inherited from Daedalus while PicoFarm moves toward a server/container-first print farm platform.
+        {t("We keep this credit here to acknowledge the foundation inherited from Daedalus while PicoFarm moves toward a server/container-first print farm platform.")}
       </p>
     </div>
   )
 }
 
+function LanguageSettings() {
+  const { t, i18n } = useTranslation('settings')
+  return (
+    <section className="bg-surface-900/50 border border-surface-800 rounded-xl p-6 mb-6" aria-labelledby="language-heading">
+      <h2 id="language-heading" className="text-lg font-semibold text-surface-100">{t('Language')}</h2>
+      <p id="language-help" className="text-sm text-surface-400 mt-2 mb-4">
+        {t('Applies immediately to this browser or device only. Your currency and stored data do not change. If browser storage is blocked, this choice lasts only for this session.')}
+      </p>
+      <label htmlFor="display-language" className="block text-sm font-medium text-surface-300 mb-2">{t('Display language')}</label>
+      <select id="display-language" value={getLocale()} onChange={event => { void i18n.changeLanguage(event.target.value) }} aria-describedby="language-help" className="input w-full">
+        {LANGUAGES.map(language => <option key={language.code} value={language.code} lang={language.code}>{language.label}</option>)}
+      </select>
+    </section>
+  )
+}
+
 function CurrencySettings() {
+  const { t } = useTranslation('settings')
   const queryClient = useQueryClient()
   const { data, isLoading } = useQuery({
     queryKey: ['settings', 'currency_code'],
@@ -1218,16 +1245,16 @@ function CurrencySettings() {
           <Globe className="h-6 w-6 text-emerald-400" />
         </div>
         <div>
-          <h2 className="text-lg font-semibold text-surface-100">Currency</h2>
+          <h2 className="text-lg font-semibold text-surface-100">{t("Currency")}</h2>
           <p className="text-sm text-surface-400">
-            Choose how PicoFarm displays costs, revenue, profit, quotes, and other monetary values. Existing amounts are not converted.
+            {t("Choose how PicoFarm displays costs, revenue, profit, quotes, and other monetary values. Existing amounts are not converted.")}
           </p>
         </div>
       </div>
 
       <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
         <label className="block">
-          <span className="block text-sm font-medium text-surface-300 mb-2">Display currency</span>
+          <span className="block text-sm font-medium text-surface-300 mb-2">{t("Display currency")}</span>
           <select
             value={currency}
             onChange={event => setCurrencyDraft(event.target.value)}
@@ -1235,11 +1262,11 @@ function CurrencySettings() {
             className="input w-full"
           >
             {CURRENCY_OPTIONS.map(option => (
-              <option key={option.code} value={option.code}>{option.code} — {option.label}</option>
+              <option key={option.code} value={option.code}>{option.code} — {t(option.label)}</option>
             ))}
           </select>
           <span className="mt-2 block text-xs text-surface-500">
-            Preview: {formatMoney(1234.56, currency)}
+            {t("Preview:")} {formatMoney(1234.56, currency)}
           </span>
         </label>
         <button
@@ -1248,12 +1275,12 @@ function CurrencySettings() {
           disabled={isLoading || saveCurrency.isPending}
           className="btn btn-primary min-w-28"
         >
-          {saveCurrency.isPending ? 'Saving...' : saved ? 'Saved' : 'Save'}
+          {saveCurrency.isPending ? t("Saving...") : saved ? t("Saved") : t("Save")}
         </button>
       </div>
       {saveCurrency.isError && (
         <p className="mt-3 text-sm text-red-400">
-          {saveCurrency.error instanceof Error ? saveCurrency.error.message : 'Failed to save currency'}
+          {saveCurrency.error instanceof Error ? saveCurrency.error.message : t("Failed to save currency")}
         </p>
       )}
     </div>
@@ -1266,6 +1293,7 @@ function CurrencySettings() {
  * so they survive backups like any other configuration.
  */
 function FilamentTypeColorSettings() {
+  const { t } = useTranslation('settings')
   const queryClient = useQueryClient()
   const { data, isLoading } = useQuery({
     queryKey: ['settings', FILAMENT_TYPE_COLORS_SETTING_KEY],
@@ -1322,10 +1350,9 @@ function FilamentTypeColorSettings() {
           <Palette className="h-6 w-6 text-sky-400" />
         </div>
         <div>
-          <h2 className="text-lg font-semibold text-surface-100">Filament label colors</h2>
+          <h2 className="text-lg font-semibold text-surface-100">{t("Filament label colors")}</h2>
           <p className="text-sm text-surface-400">
-            Each G-code on the Files screen shows a chip with its material type. Pick the color for each type; types you have not
-            configured use the built-in palette, and files with no detected material show a neutral label.
+            {t("Each G-code on the Files screen shows a chip with its material type. Pick the color for each type; types you have not configured use the built-in palette, and files with no detected material show a neutral label.")}
           </p>
         </div>
       </div>
@@ -1343,7 +1370,7 @@ function FilamentTypeColorSettings() {
               <div key={type} className="flex items-center gap-3 rounded-lg border border-surface-800 bg-surface-900/40 px-3 py-2">
                 <input
                   type="color"
-                  aria-label={`Color for ${type}`}
+                  aria-label={t('Color for {{type}}', { type })}
                   value={HEX_COLOR.test(color) ? color.toLowerCase() : '#ffffff'}
                   onChange={event => updateColor(type, event.target.value)}
                   className="h-8 w-10 cursor-pointer rounded border border-surface-700 bg-surface-900 p-0.5"
@@ -1353,14 +1380,14 @@ function FilamentTypeColorSettings() {
                 </div>
                 <div className="flex-1">
                   <span className="text-sm text-surface-300 font-mono uppercase">{type}</span>
-                  {!isCanonical && <span className="ml-2 text-[10px] text-surface-500">custom</span>}
+                  {!isCanonical && <span className="ml-2 text-[10px] text-surface-500">{t("custom")}</span>}
                 </div>
                 {!isCanonical && (
                   <button
                     type="button"
                     onClick={() => removeType(type)}
                     className="btn btn-ghost text-xs text-red-400"
-                    title="Remove this type"
+                    title={t("Remove this type")}
                   >
                     <Trash2 className="h-3.5 w-3.5" />
                   </button>
@@ -1374,17 +1401,16 @@ function FilamentTypeColorSettings() {
               value={newType}
               onChange={event => setNewType(event.target.value)}
               onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); addType() } }}
-              placeholder="Add another type (e.g. pc)"
+              placeholder={t("Add another type (e.g. pc)")}
               className="input h-9 text-sm flex-1"
             />
             <button type="button" onClick={addType} disabled={!newType.trim()} className="btn btn-secondary text-sm">
-              <Plus className="h-4 w-4 mr-1" />Add type
+              <Plus className="h-4 w-4 mr-1" />{t("Add type")}
             </button>
           </div>
 
           <p className="text-xs text-surface-500">
-            Names are normalized the same way the G-code parser normalizes material_type: lowercase, without spaces or separators.
-            That is why "PLA-CF" becomes PLA — it is what the file actually reports.
+            {t("Names are normalized the same way the G-code parser normalizes material_type: lowercase, without spaces or separators. That is why \"PLA-CF\" becomes PLA — it is what the file actually reports.")}
           </p>
 
           <div className="flex items-center gap-3 pt-2">
@@ -1394,7 +1420,7 @@ function FilamentTypeColorSettings() {
               disabled={saveColors.isPending}
               className="btn btn-primary min-w-28"
             >
-              {saveColors.isPending ? 'Saving...' : saved ? 'Saved' : 'Save'}
+              {saveColors.isPending ? t("Saving...") : saved ? t("Saved") : t("Save")}
             </button>
             <button
               type="button"
@@ -1402,12 +1428,12 @@ function FilamentTypeColorSettings() {
               disabled={saveColors.isPending}
               className="px-4 py-2 text-sm font-medium text-surface-300 hover:text-surface-100 hover:bg-surface-700 rounded-lg transition-colors"
             >
-              <RotateCcw className="h-4 w-4 mr-1 inline" />Restore built-in palette
+              <RotateCcw className="h-4 w-4 mr-1 inline" />{t("Restore built-in palette")}
             </button>
           </div>
           {saveColors.isError && (
             <p className="text-sm text-red-400">
-              {saveColors.error instanceof Error ? saveColors.error.message : 'Failed to save colors'}
+              {saveColors.error instanceof Error ? saveColors.error.message : t("Failed to save colors")}
             </p>
           )}
         </div>
@@ -1417,6 +1443,7 @@ function FilamentTypeColorSettings() {
 }
 
 function BusinessInfoSettings() {
+  const { t } = useTranslation('settings')
   const [businessName, setBusinessName] = useState('')
   const [phone, setPhone] = useState('')
   const [email, setEmail] = useState('')
@@ -1476,46 +1503,46 @@ function BusinessInfoSettings() {
           <Building className="h-6 w-6 text-accent-400" />
         </div>
         <div>
-          <h2 className="text-lg font-semibold text-surface-100">Business Information</h2>
-          <p className="text-sm text-surface-400">Shown on customer-facing quotes</p>
+          <h2 className="text-lg font-semibold text-surface-100">{t("Business Information")}</h2>
+          <p className="text-sm text-surface-400">{t("Shown on customer-facing quotes")}</p>
         </div>
       </div>
 
       <div className="space-y-3">
         <div>
-          <label className="block text-xs font-medium text-surface-400 mb-1">Business Name</label>
+          <label className="block text-xs font-medium text-surface-400 mb-1">{t("Business Name")}</label>
           <input value={businessName} onChange={e => setBusinessName(e.target.value)} className="w-full px-3 py-2 bg-surface-800 border border-surface-700 rounded-lg text-surface-100 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500" />
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="block text-xs font-medium text-surface-400 mb-1">Phone</label>
+            <label className="block text-xs font-medium text-surface-400 mb-1">{t("Phone")}</label>
             <input value={phone} onChange={e => setPhone(e.target.value)} className="w-full px-3 py-2 bg-surface-800 border border-surface-700 rounded-lg text-surface-100 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500" />
           </div>
           <div>
-            <label className="block text-xs font-medium text-surface-400 mb-1">Email</label>
+            <label className="block text-xs font-medium text-surface-400 mb-1">{t("Email")}</label>
             <input value={email} onChange={e => setEmail(e.target.value)} type="email" className="w-full px-3 py-2 bg-surface-800 border border-surface-700 rounded-lg text-surface-100 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500" />
           </div>
         </div>
         <div>
-          <label className="block text-xs font-medium text-surface-400 mb-1">Website</label>
+          <label className="block text-xs font-medium text-surface-400 mb-1">{t("Website")}</label>
           <input value={website} onChange={e => setWebsite(e.target.value)} className="w-full px-3 py-2 bg-surface-800 border border-surface-700 rounded-lg text-surface-100 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500" />
         </div>
         <div>
-          <label className="block text-xs font-medium text-surface-400 mb-1">Address</label>
+          <label className="block text-xs font-medium text-surface-400 mb-1">{t("Address")}</label>
           <div className="space-y-1.5">
-            <input value={address.line1} onChange={e => setAddress(a => ({ ...a, line1: e.target.value }))} placeholder="Address line 1" className="w-full px-3 py-1.5 bg-surface-800 border border-surface-700 rounded-lg text-surface-100 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500" />
-            <input value={address.line2} onChange={e => setAddress(a => ({ ...a, line2: e.target.value }))} placeholder="Address line 2" className="w-full px-3 py-1.5 bg-surface-800 border border-surface-700 rounded-lg text-surface-100 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500" />
+            <input value={address.line1} onChange={e => setAddress(a => ({ ...a, line1: e.target.value }))} placeholder={t("Address line 1")} className="w-full px-3 py-1.5 bg-surface-800 border border-surface-700 rounded-lg text-surface-100 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500" />
+            <input value={address.line2} onChange={e => setAddress(a => ({ ...a, line2: e.target.value }))} placeholder={t("Address line 2")} className="w-full px-3 py-1.5 bg-surface-800 border border-surface-700 rounded-lg text-surface-100 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500" />
             <div className="grid grid-cols-3 gap-1.5">
-              <input value={address.city} onChange={e => setAddress(a => ({ ...a, city: e.target.value }))} placeholder="City" className="px-3 py-1.5 bg-surface-800 border border-surface-700 rounded-lg text-surface-100 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500" />
-              <input value={address.state} onChange={e => setAddress(a => ({ ...a, state: e.target.value }))} placeholder="State" className="px-3 py-1.5 bg-surface-800 border border-surface-700 rounded-lg text-surface-100 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500" />
-              <input value={address.zip} onChange={e => setAddress(a => ({ ...a, zip: e.target.value }))} placeholder="Zip" className="px-3 py-1.5 bg-surface-800 border border-surface-700 rounded-lg text-surface-100 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500" />
+              <input value={address.city} onChange={e => setAddress(a => ({ ...a, city: e.target.value }))} placeholder={t("City")} className="px-3 py-1.5 bg-surface-800 border border-surface-700 rounded-lg text-surface-100 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500" />
+              <input value={address.state} onChange={e => setAddress(a => ({ ...a, state: e.target.value }))} placeholder={t("State")} className="px-3 py-1.5 bg-surface-800 border border-surface-700 rounded-lg text-surface-100 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500" />
+              <input value={address.zip} onChange={e => setAddress(a => ({ ...a, zip: e.target.value }))} placeholder={t("Zip")} className="px-3 py-1.5 bg-surface-800 border border-surface-700 rounded-lg text-surface-100 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500" />
             </div>
-            <input value={address.country} onChange={e => setAddress(a => ({ ...a, country: e.target.value }))} placeholder="Country" className="w-full px-3 py-1.5 bg-surface-800 border border-surface-700 rounded-lg text-surface-100 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500" />
+            <input value={address.country} onChange={e => setAddress(a => ({ ...a, country: e.target.value }))} placeholder={t("Country")} className="w-full px-3 py-1.5 bg-surface-800 border border-surface-700 rounded-lg text-surface-100 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500" />
           </div>
         </div>
         <button onClick={handleSave} disabled={saving} className="flex items-center gap-2 px-4 py-2 bg-accent-500 text-white rounded-lg hover:bg-accent-600 text-sm font-medium disabled:opacity-50">
           {saving ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-          {saved ? 'Saved!' : 'Save Business Info'}
+          {saved ? t("Saved!") : t("Save Business Info")}
         </button>
       </div>
     </div>
@@ -1524,6 +1551,7 @@ function BusinessInfoSettings() {
 
 
 function BackupSettings() {
+  const { t } = useTranslation('settings')
   const queryClient = useQueryClient()
 
   const { data: config, isLoading } = useQuery({
@@ -1548,7 +1576,7 @@ function BackupSettings() {
       <div className="mt-4 pt-4 border-t border-surface-800">
         <div className="flex items-center gap-2 text-surface-400 text-sm">
           <RefreshCw className="h-4 w-4 animate-spin" />
-          Loading backup settings...
+          {t("Loading backup settings...")}
         </div>
       </div>
     )
@@ -1558,15 +1586,15 @@ function BackupSettings() {
     <div className="mt-4 pt-4 border-t border-surface-800">
       <div className="flex items-center gap-2 mb-3">
         <SettingsIcon className="h-4 w-4 text-surface-400" />
-        <h3 className="text-sm font-medium text-surface-200">Automatic Backups</h3>
+        <h3 className="text-sm font-medium text-surface-200">{t("Automatic Backups")}</h3>
       </div>
 
       <div className="space-y-3">
         {/* Backup on startup */}
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-sm text-surface-300">Backup on startup</p>
-            <p className="text-xs text-surface-500">Create a backup before migrations run on each launch</p>
+            <p className="text-sm text-surface-300">{t("Backup on startup")}</p>
+            <p className="text-xs text-surface-500">{t("Create a backup before migrations run on each launch")}</p>
           </div>
           <button
             onClick={() => updateField('auto_on_startup', !config.auto_on_startup)}
@@ -1588,8 +1616,8 @@ function BackupSettings() {
         {/* Scheduled backups */}
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-sm text-surface-300">Scheduled backups</p>
-            <p className="text-xs text-surface-500">Automatically create backups on a schedule</p>
+            <p className="text-sm text-surface-300">{t("Scheduled backups")}</p>
+            <p className="text-xs text-surface-500">{t("Automatically create backups on a schedule")}</p>
           </div>
           <button
             onClick={() => updateField('schedule_enabled', !config.schedule_enabled)}
@@ -1611,15 +1639,15 @@ function BackupSettings() {
         {/* Schedule interval (only shown when schedule is enabled) */}
         {config.schedule_enabled && (
           <div className="flex items-center justify-between pl-4">
-            <p className="text-sm text-surface-300">Interval</p>
+            <p className="text-sm text-surface-300">{t("Interval")}</p>
             <select
               value={config.schedule_interval}
               onChange={(e) => updateField('schedule_interval', e.target.value as 'daily' | 'weekly')}
               disabled={updateMutation.isPending}
               className="input h-auto py-1.5 w-auto"
             >
-              <option value="daily">Daily</option>
-              <option value="weekly">Weekly</option>
+              <option value="daily">{t("Daily")}</option>
+              <option value="weekly">{t("Weekly")}</option>
             </select>
           </div>
         )}
@@ -1627,8 +1655,8 @@ function BackupSettings() {
         {/* Retention count */}
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-sm text-surface-300">Retention count</p>
-            <p className="text-xs text-surface-500">Auto-backups to keep per type (0 = unlimited)</p>
+            <p className="text-sm text-surface-300">{t("Retention count")}</p>
+            <p className="text-xs text-surface-500">{t("Auto-backups to keep per type (0 = unlimited)")}</p>
           </div>
           <input
             type="number"
@@ -1677,10 +1705,11 @@ function formatTimestamp(value?: string): string {
   if (!value) return '—'
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return '—'
-  return date.toLocaleString()
+  return date.toLocaleString(getLocale())
 }
 
 function ApiTokenSettings() {
+  const { t } = useTranslation('settings')
   const queryClient = useQueryClient()
   const [name, setName] = useState('')
   const [fullAccess, setFullAccess] = useState(true)
@@ -1751,7 +1780,7 @@ function ApiTokenSettings() {
   const tokens: APIToken[] = tokensQuery.data ?? []
   const activeTokens = tokens.filter(t => !t.revoked_at)
   const revokedTokens = tokens.filter(t => t.revoked_at)
-  const browserToken = typeof window !== 'undefined' ? window.localStorage.getItem('API_TOKEN') : null
+  const browserToken = readApiToken()
 
   return (
     <div className="space-y-6">
@@ -1762,9 +1791,9 @@ function ApiTokenSettings() {
             <ShieldAlert className="h-6 w-6 text-amber-400" />
           </div>
           <div>
-            <h2 className="text-lg font-semibold text-surface-100">API authentication status</h2>
+            <h2 className="text-lg font-semibold text-surface-100">{t("API authentication status")}</h2>
             <p className="text-sm text-surface-400">
-              Whether requests without a credential are currently being rejected.
+              {t("Whether requests without a credential are currently being rejected.")}
             </p>
           </div>
         </div>
@@ -1780,19 +1809,17 @@ function ApiTokenSettings() {
                 'badge',
                 statusQuery.data?.auth_enabled ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'
               )}>
-                {statusQuery.data?.auth_enabled ? 'Auth enabled' : 'Auth disabled'}
+                {statusQuery.data?.auth_enabled ? t("Auth enabled") : t("Auth disabled")}
               </span>
               <span className="text-sm text-surface-400">
-                {statusQuery.data?.active_count ?? 0} active · {statusQuery.data?.revoked_count ?? 0} revoked
+                {statusQuery.data?.active_count ?? 0} {t("active ·")} {statusQuery.data?.revoked_count ?? 0} {t("revoked")}
               </span>
             </div>
             {!statusQuery.data?.auth_enabled && (
               <div className="flex items-start gap-2 p-3 bg-amber-500/5 border border-amber-500/20 rounded-lg">
                 <AlertCircle className="h-4 w-4 text-amber-400 mt-0.5 flex-shrink-0" />
                 <p className="text-sm text-surface-300">
-                  No <code className="text-surface-200">API_TOKEN</code> is configured, so every request is accepted
-                  without a credential. Creating a token below does not close the API by itself — it only prepares a
-                  credential for when authentication is turned on.
+                  {t("No")} <code className="text-surface-200">API_TOKEN</code> {t("is configured, so every request is accepted without a credential. Creating a token below does not close the API by itself — it only prepares a credential for when authentication is turned on.")}
                 </p>
               </div>
             )}
@@ -1807,28 +1834,28 @@ function ApiTokenSettings() {
             <Plus className="h-6 w-6 text-purple-400" />
           </div>
           <div>
-            <h2 className="text-lg font-semibold text-surface-100">New token</h2>
+            <h2 className="text-lg font-semibold text-surface-100">{t("New token")}</h2>
             <p className="text-sm text-surface-400">
-              Name it after the integration that will use it. The token value is displayed only once.
+              {t("Name it after the integration that will use it. The token value is displayed only once.")}
             </p>
           </div>
         </div>
 
         <div className="space-y-4">
           <label className="block">
-            <span className="block text-sm font-medium text-surface-300 mb-2">Name</span>
+            <span className="block text-sm font-medium text-surface-300 mb-2">{t("Name")}</span>
             <input
               type="text"
               value={name}
               onChange={event => setName(event.target.value)}
-              placeholder="Integração Etsy"
+              placeholder={t("Etsy integration")}
               maxLength={64}
               className="input w-full"
             />
           </label>
 
           <div>
-            <span className="block text-sm font-medium text-surface-300 mb-2">Scope</span>
+            <span className="block text-sm font-medium text-surface-300 mb-2">{t("Scope")}</span>
             <label className="flex items-center gap-2 mb-2">
               <input
                 type="checkbox"
@@ -1836,7 +1863,7 @@ function ApiTokenSettings() {
                 onChange={event => setFullAccess(event.target.checked)}
                 className="rounded border-surface-700 bg-surface-900 text-accent-500 focus:ring-accent-500"
               />
-              <span className="text-sm text-surface-200">Full access (all routes)</span>
+              <span className="text-sm text-surface-200">{t("Full access (all routes)")}</span>
             </label>
             {!fullAccess && (
               <div className="space-y-3 pl-6">
@@ -1854,7 +1881,7 @@ function ApiTokenSettings() {
                   ))}
                 </div>
                 <label className="block">
-                  <span className="block text-xs text-surface-400 mb-1">Custom prefix under /api</span>
+                  <span className="block text-xs text-surface-400 mb-1">{t("Custom prefix under /api")}</span>
                   <input
                     type="text"
                     value={customScope}
@@ -1876,11 +1903,11 @@ function ApiTokenSettings() {
             className="flex items-center gap-2 px-4 py-2 bg-accent-600 hover:bg-accent-700 text-white font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
           >
             {createMutation.isPending ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-            Create token
+            {t("Create token")}
           </button>
           {createMutation.isError && (
             <p className="text-sm text-red-400">
-              {createMutation.error instanceof Error ? createMutation.error.message : 'Failed to create token'}
+              {createMutation.error instanceof Error ? createMutation.error.message : t("Failed to create token")}
             </p>
           )}
         </div>
@@ -1890,10 +1917,10 @@ function ApiTokenSettings() {
           <div className="mt-5 p-4 bg-green-500/5 border border-green-500/30 rounded-lg space-y-2">
             <div className="flex items-center gap-2">
               <CheckCircle2 className="h-4 w-4 text-green-400" />
-              <p className="text-sm font-medium text-green-300">Token created for {created.name}</p>
+              <p className="text-sm font-medium text-green-300">{t("Token created for")} {created.name}</p>
             </div>
             <p className="text-xs text-surface-400">
-              Copy it now. Only a hash is stored, so this value cannot be shown again.
+              {t("Copy it now. Only a hash is stored, so this value cannot be shown again.")}
             </p>
             <div className="flex items-center gap-2">
               <code className="flex-1 bg-surface-950 border border-surface-800 rounded-lg px-3 py-2 text-sm text-surface-100 break-all select-all">
@@ -1903,10 +1930,10 @@ function ApiTokenSettings() {
                 type="button"
                 onClick={() => handleCopy(created.token)}
                 className="btn btn-secondary"
-                title="Copy token"
+                title={t("Copy token")}
               >
                 <Copy className="h-4 w-4" />
-                {copied ? 'Copied' : 'Copy'}
+                {copied ? t("Copied") : t("Copy")}
               </button>
             </div>
           </div>
@@ -1920,9 +1947,9 @@ function ApiTokenSettings() {
             <Key className="h-6 w-6 text-blue-400" />
           </div>
           <div>
-            <h2 className="text-lg font-semibold text-surface-100">Tokens</h2>
+            <h2 className="text-lg font-semibold text-surface-100">{t("Tokens")}</h2>
             <p className="text-sm text-surface-400">
-              Revoking takes effect immediately; the row is kept as a record.
+              {t("Revoking takes effect immediately; the row is kept as a record.")}
             </p>
           </div>
         </div>
@@ -1933,7 +1960,7 @@ function ApiTokenSettings() {
           </div>
         ) : tokens.length === 0 ? (
           <div className="bg-surface-800/50 rounded-lg p-4 text-center">
-            <p className="text-surface-400">No tokens yet. Create one above to give an integration a named credential.</p>
+            <p className="text-surface-400">{t("No tokens yet. Create one above to give an integration a named credential.")}</p>
           </div>
         ) : (
           <div className="space-y-2">
@@ -1945,16 +1972,16 @@ function ApiTokenSettings() {
                     <span className="badge bg-surface-700 text-surface-300 font-mono">{token.prefix}…</span>
                   </div>
                   <p className="text-xs text-surface-500 mt-1">
-                    {token.scopes.includes('*') ? 'Full access' : token.scopes.join(', ')}
+                    {token.scopes.includes('*') ? t("Full access") : token.scopes.join(', ')}
                   </p>
                   <p className="text-xs text-surface-500">
-                    Created {formatTimestamp(token.created_at)} · Last used {formatTimestamp(token.last_used_at)}
+                    {t("Created")} {formatTimestamp(token.created_at)} {t("· Last used")} {formatTimestamp(token.last_used_at)}
                   </p>
                 </div>
                 <button
                   type="button"
                   onClick={() => {
-                    if (window.confirm(`Revoke the token "${token.name}"? Anything using it stops working at once.`)) {
+                    if (window.confirm(t('Revoke the token "{{name}}"? Anything using it stops working at once.', { name: token.name }))) {
                       revokeMutation.mutate(token.id)
                     }
                   }}
@@ -1962,24 +1989,24 @@ function ApiTokenSettings() {
                   className="flex items-center gap-1 px-3 py-1.5 text-sm text-red-400 hover:bg-red-500/10 rounded-lg transition-colors disabled:opacity-50"
                 >
                   <Trash2 className="h-4 w-4" />
-                  Revoke
+                  {t("Revoke")}
                 </button>
               </div>
             ))}
 
             {revokedTokens.length > 0 && (
               <div className="pt-2">
-                <p className="text-xs uppercase tracking-wide text-surface-500 mb-2">Revoked</p>
+                <p className="text-xs uppercase tracking-wide text-surface-500 mb-2">{t("Revoked")}</p>
                 {revokedTokens.map(token => (
                   <div key={token.id} className="flex items-start justify-between gap-4 bg-surface-800/30 rounded-lg p-3 mb-2 opacity-70">
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
                         <p className="text-sm font-medium text-surface-400 line-through">{token.name}</p>
                         <span className="badge bg-surface-700 text-surface-400 font-mono">{token.prefix}…</span>
-                        <span className="badge bg-red-500/10 text-red-400">revoked</span>
+                        <span className="badge bg-red-500/10 text-red-400">{t("revoked")}</span>
                       </div>
                       <p className="text-xs text-surface-500 mt-1">
-                        Created {formatTimestamp(token.created_at)} · Revoked {formatTimestamp(token.revoked_at)}
+                        {t("Created")} {formatTimestamp(token.created_at)} {t("· Revoked")} {formatTimestamp(token.revoked_at)}
                       </p>
                     </div>
                   </div>
@@ -1997,9 +2024,9 @@ function ApiTokenSettings() {
             <Eye className="h-6 w-6 text-surface-400" />
           </div>
           <div>
-            <h2 className="text-lg font-semibold text-surface-100">Token in this browser</h2>
+            <h2 className="text-lg font-semibold text-surface-100">{t("Token in this browser")}</h2>
             <p className="text-sm text-surface-400">
-              The value this browser sends on every API call. It lives in local storage.
+              {t("The value this browser sends on every API call. It lives in local storage.")}
             </p>
           </div>
         </div>
@@ -2010,12 +2037,12 @@ function ApiTokenSettings() {
             </code>
             <button type="button" onClick={() => handleCopy(browserToken)} className="btn btn-secondary">
               <Copy className="h-4 w-4" />
-              Copy
+              {t("Copy")}
             </button>
           </div>
         ) : (
           <p className="text-sm text-surface-400">
-            No token is stored here. This browser is relying on authentication being disabled.
+            {t("No token is stored here. This browser is relying on authentication being disabled.")}
           </p>
         )}
       </div>

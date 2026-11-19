@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import { useState, useEffect, useCallback } from 'react'
 import { Link as RouterLink } from 'react-router-dom'
 import { RefreshCw, Package, CheckCircle, Clock, ExternalLink, ShoppingBag, Store, Link, Unlink, Filter } from 'lucide-react'
@@ -48,7 +49,19 @@ interface UnifiedProduct {
   raw: SalesChannelExternalProduct | EtsyListing | SquarespaceProduct
 }
 
+const displayLabels: Record<string, string> = {
+  marketplace: 'Marketplace', etsy: 'Etsy', website: 'Website', direct: 'Direct', other: 'Other',
+  manual: 'Manual', imported: 'Imported',
+  pending: 'Pending', in_progress: 'In Progress', completed: 'Completed', shipped: 'Shipped', cancelled: 'Cancelled',
+  draft: 'Draft', sent: 'Sent', accepted: 'Accepted', rejected: 'Rejected', expired: 'Expired',
+  confirmed: 'Confirmed', processing: 'Processing...', failed: 'Parse Failed', pending_review: 'Pending Review',
+  queued: 'Queued', printing: 'Printing', paused: 'Paused',
+}
+
 export default function Channels() {
+  const { t, i18n } = useTranslation('commerce')
+  const locale = i18n.resolvedLanguage?.startsWith('en') ? 'en-US' : 'pt-BR'
+
   const { currencyCode } = useCurrency()
   const [tab, setTab] = useState<Tab>('orders')
   const [channel, setChannel] = useState<Channel>('all')
@@ -190,7 +203,7 @@ export default function Channels() {
           id: order.id,
           channel: order.channel,
           orderNumber: order.order_number || order.external_order_id,
-          customerName: order.customer_name || order.customer_email || 'Unknown customer',
+          customerName: order.customer_name || order.customer_email || t('Unknown customer'),
           customerEmail: order.customer_email,
           totalCents: order.total_cents,
           currency: order.currency,
@@ -213,11 +226,12 @@ export default function Channels() {
       unified.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
       setOrders(unified)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load orders')
+      console.error(err)
+      setError(t("Failed to load orders"))
     } finally {
       setLoading(false)
     }
-  }, [channel, orderFilter, etsyConnected, squarespaceConnected])
+  }, [channel, orderFilter, etsyConnected, squarespaceConnected, t])
 
   // Load products
   const loadProducts = useCallback(async () => {
@@ -302,11 +316,12 @@ export default function Channels() {
       unified.sort((a, b) => a.name.localeCompare(b.name))
       setProducts(unified)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load products')
+      console.error(err)
+      setError(t("Failed to load products"))
     } finally {
       setLoading(false)
     }
-  }, [channel, etsyConnected, squarespaceConnected])
+  }, [channel, etsyConnected, squarespaceConnected, t])
 
   // Load data when tab or filters change
   useEffect(() => {
@@ -327,7 +342,7 @@ export default function Channels() {
     try {
       const selectedChannel = salesChannels.find(({ descriptor }) => descriptor.id === syncChannel)
       if (!selectedChannel?.descriptor.capabilities.includes(tab === 'orders' ? 'orders_read' : 'products_read')) {
-        throw new Error(`${selectedChannel?.descriptor.display_name || syncChannel} does not support ${tab} sync`)
+        throw new Error(t("Failed to sync {{channel}}", { channel: selectedChannel?.descriptor.display_name || syncChannel }))
       }
       const { result } = await salesChannelsApi.sync(syncChannel, syncKind)
       setSyncResult({ channel: syncChannel, result })
@@ -338,7 +353,8 @@ export default function Channels() {
         await loadProducts()
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : `Failed to sync ${syncChannel}`)
+      console.error(err)
+      setError(t("Failed to sync {{channel}}", { channel: syncChannel }))
     } finally {
       setSyncing(null)
     }
@@ -369,7 +385,8 @@ export default function Channels() {
         await loadProducts()
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to sync')
+      console.error(err)
+      setError(t("Failed to sync"))
     } finally {
       setSyncing(null)
     }
@@ -389,7 +406,8 @@ export default function Channels() {
       }
       await loadOrders()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to process order')
+      console.error(err)
+      setError(t("Failed to process order"))
     } finally {
       setProcessingId(null)
     }
@@ -399,7 +417,7 @@ export default function Channels() {
   async function handleLink(product: UnifiedProduct) {
     const projectId = selectedProject[product.id]
     if (!projectId) {
-      setError('Please select a project')
+      setError(t("Please select a project"))
       return
     }
 
@@ -417,7 +435,8 @@ export default function Channels() {
       await loadProducts()
       setSelectedProject(prev => ({ ...prev, [product.id]: '' }))
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to link product')
+      console.error(err)
+      setError(t("Failed to link product"))
     } finally {
       setLinkingId(null)
     }
@@ -429,7 +448,7 @@ export default function Channels() {
   async function handleUnlink(product: UnifiedProduct) {
     const projectId = selectedProject[product.id]
     if (!projectId) {
-      setError('Please select the linked project')
+      setError(t("Please select the linked project"))
       return
     }
 
@@ -446,7 +465,8 @@ export default function Channels() {
       await loadProducts()
       setSelectedProject(prev => ({ ...prev, [product.id]: '' }))
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to unlink product')
+      console.error(err)
+      setError(t("Failed to unlink product"))
     } finally {
       setUnlinkingId(null)
     }
@@ -457,7 +477,7 @@ export default function Channels() {
   }
 
   function formatDate(dateStr: string) {
-    return new Date(dateStr).toLocaleDateString('en-US', {
+    return new Date(dateStr).toLocaleDateString(locale, {
       month: 'short',
       day: 'numeric',
       year: 'numeric',
@@ -508,10 +528,12 @@ export default function Channels() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-display font-semibold text-surface-100">
-            Sales Channels
+
+            {t("Sales Channels")}
           </h1>
           <p className="mt-1 text-sm text-surface-400">
-            Manage orders and products from connected marketplaces
+
+            {t("Manage orders and products from connected marketplaces")}
           </p>
         </div>
 
@@ -525,11 +547,11 @@ export default function Channels() {
                 channelTone(descriptor.id),
                 !status.connected && 'opacity-70'
               )}
-              title={status.connected ? 'Connected' : status.last_error || 'Not connected yet'}
+              title={status.connected ? t("Connected") : status.last_error || t("Not connected yet")}
             >
               {channelIcon(descriptor.id)}
               <span className="text-xs">{status.display_name || descriptor.display_name}</span>
-              {!status.connected && <span className="text-[10px] uppercase tracking-wide opacity-70">planned</span>}
+              {!status.connected && <span className="text-[10px] uppercase tracking-wide opacity-70">{t("planned")}</span>}
             </div>
           ))}
           {!hasConfiguredOrPlannedChannel && (
@@ -537,7 +559,8 @@ export default function Channels() {
               to="/settings"
               className="text-sm text-accent-400 hover:text-accent-300"
             >
-              Connect a channel in Settings
+
+              {t("Connect a channel in Settings")}
             </RouterLink>
           )}
         </div>
@@ -554,7 +577,8 @@ export default function Channels() {
               : 'border-transparent text-surface-400 hover:text-surface-200'
           )}
         >
-          Orders
+
+          {t("Orders")}
         </button>
         <button
           onClick={() => setTab('products')}
@@ -565,7 +589,8 @@ export default function Channels() {
               : 'border-transparent text-surface-400 hover:text-surface-200'
           )}
         >
-          Products / Listings
+
+          {t("Products / Listings")}
         </button>
       </div>
 
@@ -580,7 +605,7 @@ export default function Channels() {
               onChange={(e) => setChannel(e.target.value as Channel)}
               className="input h-auto py-1.5 w-auto"
             >
-              <option value="all">All Channels</option>
+              <option value="all">{t("All Channels")}</option>
               {visibleSalesChannels.map(({ descriptor }) => (
                 <option key={descriptor.id} value={descriptor.id}>{descriptor.display_name}</option>
               ))}
@@ -617,7 +642,7 @@ export default function Channels() {
               className="flex items-center gap-2 px-4 py-2 bg-accent-600 text-white rounded-lg hover:bg-accent-500 disabled:opacity-50 text-sm"
             >
               <RefreshCw className={cn('h-4 w-4', syncing && 'animate-spin')} />
-              {syncing ? 'Syncing...' : 'Sync All'}
+              {syncing ? t("Syncing...") : t("Sync All")}
             </button>
           ) : (
             <button
@@ -629,7 +654,7 @@ export default function Channels() {
               )}
             >
               <RefreshCw className={cn('h-4 w-4', syncing === channel && 'animate-spin')} />
-              {syncing === channel ? 'Syncing...' : `Sync ${visibleSalesChannels.find(({ descriptor }) => descriptor.id === channel)?.descriptor.display_name || channel}`}
+              {syncing === channel ? t("Syncing...") : t("Sync {{channel}}", { channel: visibleSalesChannels.find(({ descriptor }) => descriptor.id === channel)?.descriptor.display_name || channel })}
             </button>
           )}
         </div>
@@ -639,8 +664,9 @@ export default function Channels() {
       {syncResult && (
         <div className="mb-6 p-4 bg-green-500/10 border border-green-500/30 rounded-lg">
           <p className="text-green-400">
-            Synced {syncResult.result.total_fetched} {tab}: {syncResult.result.created} new, {syncResult.result.updated} updated
-            {syncResult.result.errors > 0 && `, ${syncResult.result.errors} errors`}
+
+            {t("Synced")} {syncResult.result.total_fetched} {tab}: {syncResult.result.created}  {t("new,")} {syncResult.result.updated}  {t("updated")}
+            {syncResult.result.errors > 0 && t("{{count}} sync errors", { count: syncResult.result.errors })}
           </p>
         </div>
       )}
@@ -656,22 +682,23 @@ export default function Channels() {
       {!hasConfiguredOrPlannedChannel ? (
         <div className="text-center py-12">
           <Package className="h-12 w-12 mx-auto text-surface-600 mb-3" />
-          <p className="text-surface-400">No sales channels connected</p>
+          <p className="text-surface-400">{t("No sales channels connected")}</p>
           <RouterLink
             to="/settings"
             className="mt-4 inline-block text-accent-400 hover:text-accent-300"
           >
-            Connect or plan a sales channel in Settings
+
+            {t("Connect or plan a sales channel in Settings")}
           </RouterLink>
         </div>
       ) : loading ? (
-        <div className="text-center py-12 text-surface-400">Loading...</div>
+        <div className="text-center py-12 text-surface-400">{t("Loading...")}</div>
       ) : tab === 'orders' ? (
         /* Orders List */
         orders.length === 0 ? (
           <div className="text-center py-12">
             <Package className="h-12 w-12 mx-auto text-surface-600 mb-3" />
-            <p className="text-surface-400">No orders found</p>
+            <p className="text-surface-400">{t("No orders match. Adjust the filters or sync orders.")}</p>
           </div>
         ) : (
           <div className="space-y-4">
@@ -694,17 +721,19 @@ export default function Channels() {
                       {order.isProcessed ? (
                         <span className="flex items-center gap-1 text-xs px-2 py-0.5 bg-green-500/20 text-green-400 rounded">
                           <CheckCircle className="h-3 w-3" />
-                          Processed
+
+                          {t("Processed")}
                         </span>
                       ) : (
                         <span className="flex items-center gap-1 text-xs px-2 py-0.5 bg-yellow-500/20 text-yellow-400 rounded">
                           <Clock className="h-3 w-3" />
-                          Pending
+
+                          {t("Pending")}
                         </span>
                       )}
                       {order.status && (
                         <span className="text-xs px-2 py-0.5 bg-surface-700 text-surface-300 rounded">
-                          {order.status}
+                          {t(displayLabels[order.status] || order.status)}
                         </span>
                       )}
                     </div>
@@ -728,7 +757,8 @@ export default function Channels() {
                               )}
                               {item.sku && (
                                 <span className="text-xs text-surface-600 font-mono">
-                                  SKU: {item.sku}
+
+                                  {t("SKU:")} {item.sku}
                                 </span>
                               )}
                             </div>
@@ -749,7 +779,7 @@ export default function Channels() {
                         disabled={processingId === order.id}
                         className="px-3 py-1.5 text-sm bg-accent-600 text-white rounded hover:bg-accent-500 disabled:opacity-50"
                       >
-                        {processingId === order.id ? 'Processing...' : 'Create Project'}
+                        {processingId === order.id ? t("Processing...") : t("Create Project")}
                       </button>
                     )}
                     {order.projectId && (
@@ -757,7 +787,8 @@ export default function Channels() {
                         href={`/projects/${order.projectId}`}
                         className="px-3 py-1.5 text-sm bg-surface-700 text-surface-200 rounded hover:bg-surface-600 flex items-center gap-1"
                       >
-                        View Project
+
+                        {t("View Project")}
                         <ExternalLink className="h-3 w-3" />
                       </a>
                     )}
@@ -772,7 +803,7 @@ export default function Channels() {
         products.length === 0 ? (
           <div className="text-center py-12">
             <Package className="h-12 w-12 mx-auto text-surface-600 mb-3" />
-            <p className="text-surface-400">No products found</p>
+            <p className="text-surface-400">{t("No products match. Adjust the filters or sync products.")}</p>
           </div>
         ) : (
           <div className="space-y-4">
@@ -796,7 +827,8 @@ export default function Channels() {
                       )}
                       {!product.isVisible && (
                         <span className="text-xs px-2 py-0.5 bg-yellow-500/20 text-yellow-400 rounded">
-                          Hidden
+
+                          {t("Hidden")}
                         </span>
                       )}
                     </div>
@@ -815,7 +847,8 @@ export default function Channels() {
                       )}
                       {product.skus.length > 0 && (
                         <span className="font-mono text-xs">
-                          SKU: {product.skus.slice(0, 3).join(', ')}{product.skus.length > 3 && '...'}
+
+                          {t("SKU:")} {product.skus.slice(0, 3).join(', ')}{product.skus.length > 3 && '...'}
                         </span>
                       )}
                     </div>
@@ -828,7 +861,7 @@ export default function Channels() {
                       onChange={(e) => setSelectedProject(prev => ({ ...prev, [product.id]: e.target.value }))}
                       className="input h-auto py-1 w-auto"
                     >
-                      <option value="">Select project...</option>
+                      <option value="">{t("Select project...")}</option>
                       {projects.map((project) => (
                         <option key={project.id} value={project.id}>
                           {project.name} {project.sku && `(${project.sku})`}
@@ -845,12 +878,13 @@ export default function Channels() {
                       ) : (
                         <Link className="h-3 w-3" />
                       )}
-                      Link
+
+                      {t("Link")}
                     </button>
                     <button
                       onClick={() => handleUnlink(product)}
                       disabled={unlinkingId === product.id || !selectedProject[product.id]}
-                      title="Remove the link between this product and the selected project"
+                      title={t("Remove the link between this product and the selected project")}
                       className="flex items-center gap-1 px-3 py-1.5 text-sm border border-surface-600 text-surface-300 rounded hover:bg-surface-800 disabled:opacity-50"
                     >
                       {unlinkingId === product.id ? (
@@ -858,7 +892,8 @@ export default function Channels() {
                       ) : (
                         <Unlink className="h-3 w-3" />
                       )}
-                      Unlink
+
+                      {t("Unlink")}
                     </button>
                   </div>
                 </div>

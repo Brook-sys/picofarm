@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import { useEffect, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { STLLoader } from 'three/examples/jsm/loaders/STLLoader.js'
@@ -12,6 +13,8 @@ interface STLViewer3DProps {
 type ModelInfo = { x: number; y: number; z: number; triangles: number }
 
 export function STLViewer3D({ url }: STLViewer3DProps) {
+  const { t, i18n } = useTranslation('components')
+  const dateLocale = i18n.resolvedLanguage === 'pt-BR' ? 'pt-BR' : 'en-US'
   const containerRef = useRef<HTMLDivElement>(null)
   const viewRef = useRef<((view: STLView) => void) | null>(null)
   const [state, setState] = useState<{ url: string; loading: boolean; error: string | null; info: ModelInfo | null }>({ url, loading: true, error: null, info: null })
@@ -36,7 +39,7 @@ export function STLViewer3D({ url }: STLViewer3DProps) {
 
     const fail = (err: unknown) => {
       if (disposed) return
-      setState({ url, loading: false, error: err instanceof Error ? err.message : 'Could not display the STL. Try another file or a WebGL-capable browser.', info: null })
+      setState({ url, loading: false, error: err instanceof Error ? err.message : t("Could not display the STL. Try another file or a WebGL-capable browser."), info: null })
     }
     const requestRender = () => {
       if (disposed || frame || !renderer) return
@@ -47,7 +50,7 @@ export function STLViewer3D({ url }: STLViewer3DProps) {
           controls?.update()
           renderer?.render(scene, camera)
         } catch {
-          fail(new Error('3D rendering failed. Try a smaller STL or reload the viewer.'))
+          fail(new Error(t("3D rendering failed. Try a smaller STL or reload the viewer.")))
         }
       })
     }
@@ -80,13 +83,13 @@ export function STLViewer3D({ url }: STLViewer3DProps) {
     }
     const contextLost = (event: Event) => {
       event.preventDefault()
-      fail(new Error('The browser lost its 3D context. Close and reopen the viewer.'))
+      fail(new Error(t("The browser lost its 3D context. Close and reopen the viewer.")))
     }
 
     try {
       renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false })
       renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2))
-      renderer.domElement.setAttribute('aria-label', 'Interactive STL preview. Drag to rotate, scroll to zoom.')
+      renderer.domElement.setAttribute('aria-label', 'STL')
       renderer.domElement.addEventListener('webglcontextlost', contextLost)
       container.appendChild(renderer.domElement)
       controls = new OrbitControls(camera, renderer.domElement)
@@ -128,7 +131,7 @@ export function STLViewer3D({ url }: STLViewer3DProps) {
         }
       })()
     } catch {
-      fail(new Error('Could not initialize 3D preview. Check that WebGL is available in your browser.'))
+      fail(new Error(t("Could not initialize 3D preview. Check that WebGL is available in your browser.")))
     }
 
     return () => {
@@ -149,13 +152,13 @@ export function STLViewer3D({ url }: STLViewer3DProps) {
         renderer.domElement.remove()
       }
     }
-  }, [url])
+  }, [url, t])
 
   return (
     <div className="w-full rounded-lg overflow-hidden border border-surface-700 bg-surface-800">
-      <div className="flex flex-wrap items-center gap-2 border-b border-surface-700 p-2" role="group" aria-label="STL camera views">
+      <div className="flex flex-wrap items-center gap-2 border-b border-surface-700 p-2" role="group" aria-label={t("STL camera views")}>
         {([['top', 'Top'], ['front', 'Front'], ['side', 'Side'], ['reset', 'Reset']] as const).map(([view, label]) => (
-          <button key={view} type="button" disabled={current.loading || !!current.error} onClick={() => viewRef.current?.(view)} className="rounded border border-surface-600 px-3 py-1 text-sm text-surface-200 hover:bg-surface-700 disabled:opacity-50">{label}</button>
+          <button key={view} type="button" disabled={current.loading || !!current.error} onClick={() => viewRef.current?.(view)} className="rounded border border-surface-600 px-3 py-1 text-sm text-surface-200 hover:bg-surface-700 disabled:opacity-50">{t(label)}</button>
         ))}
       </div>
       <div className="relative" style={{ height: 400 }}>
@@ -163,16 +166,16 @@ export function STLViewer3D({ url }: STLViewer3DProps) {
           <div role="status" className="absolute inset-0 flex items-center justify-center bg-surface-800/80 z-10">
             <div className="flex flex-col items-center text-surface-400">
               <Loader2 className="h-8 w-8 animate-spin text-accent-500 mb-2" />
-              <span className="text-sm font-medium">Loading 3D Model...</span>
+              <span className="text-sm font-medium">{t("Loading 3D Model...")}</span>
             </div>
           </div>
         )}
         {current.error && <div role="alert" className="absolute inset-0 flex items-center justify-center bg-surface-800 z-10 text-red-400 p-4 text-center">{current.error}</div>}
-        <div ref={containerRef} className="w-full h-full cursor-move" />
+        <div role="img" aria-label={t("Interactive STL preview. Drag to rotate, scroll to zoom.")} ref={containerRef} className="w-full h-full cursor-move" />
       </div>
       <div className="border-t border-surface-700 p-3 text-sm text-surface-300" aria-live="polite">
-        {current.info && <p>X: {current.info.x.toLocaleString(undefined, { maximumFractionDigits: 2 })} mm · Y: {current.info.y.toLocaleString(undefined, { maximumFractionDigits: 2 })} mm · Z: {current.info.z.toLocaleString(undefined, { maximumFractionDigits: 2 })} mm · Triangles: {current.info.triangles.toLocaleString()}</p>}
-        <p className="text-xs text-surface-400">STL has no unit metadata: millimeters (mm) are assumed. Dimensions use the original STL X/Y/Z axes, before preview rotation. Top looks down Z, front along −Y, side along +X.</p>
+        {current.info && <p>{t("X:")}{' '}{current.info.x.toLocaleString(dateLocale, { maximumFractionDigits: 2 })} {t("mm · Y:")}{' '}{current.info.y.toLocaleString(dateLocale, { maximumFractionDigits: 2 })} {t("mm · Z:")}{' '}{current.info.z.toLocaleString(dateLocale, { maximumFractionDigits: 2 })} {t("mm · Triangles:")}{' '}{current.info.triangles.toLocaleString(dateLocale)}</p>}
+        <p className="text-xs text-surface-400">{t("STL has no unit metadata: millimeters (mm) are assumed. Dimensions use the original STL X/Y/Z axes, before preview rotation. Top looks down Z, front along −Y, side along +X.")}</p>
       </div>
     </div>
   )

@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import i18n from '../i18n'
 
 // Preview budgets, not upload limits. STL parsing still runs on the main thread.
 export const MAX_STL_BYTES = 32 * 1024 * 1024
@@ -9,19 +10,19 @@ export function inspectSTLGeometry(geometry: THREE.BufferGeometry) {
   const positions = geometry.getAttribute('position')
   const triangles = (geometry.index?.count ?? positions?.count ?? 0) / 3
   if (!positions || !Number.isInteger(triangles) || triangles <= 0) {
-    throw new Error('The STL contains no valid triangles.')
+    throw new Error(i18n.t('The STL contains no valid triangles.', { ns: 'components' }))
   }
-  if (triangles > MAX_STL_TRIANGLES) throw new Error('The STL exceeds the 500,000 triangle preview limit.')
+  if (triangles > MAX_STL_TRIANGLES) throw new Error(i18n.t('The STL exceeds the 500,000 triangle preview limit.', { ns: 'components' }))
   for (let i = 0; i < positions.count; i++) {
     if (!Number.isFinite(positions.getX(i)) || !Number.isFinite(positions.getY(i)) || !Number.isFinite(positions.getZ(i))) {
-      throw new Error('The STL contains invalid coordinates.')
+      throw new Error(i18n.t('The STL contains invalid coordinates.', { ns: 'components' }))
     }
   }
   geometry.computeBoundingBox()
   const box = geometry.boundingBox!
   const dimensions = box.getSize(new THREE.Vector3())
   const radius = dimensions.length() / 2
-  if (!Number.isFinite(radius) || radius <= 0) throw new Error('The STL has invalid or zero dimensions.')
+  if (!Number.isFinite(radius) || radius <= 0) throw new Error(i18n.t('The STL has invalid or zero dimensions.', { ns: 'components' }))
   return { dimensions, center: box.getCenter(new THREE.Vector3()), radius, triangles }
 }
 
@@ -42,11 +43,11 @@ export function stlCameraDistance(radius: number, aspect: number, fov: number) {
 }
 
 export async function readSTLResponse(response: Response, signal: AbortSignal) {
-  if (!response.ok) throw new Error(`Could not download the STL (HTTP ${response.status}).`)
+  if (!response.ok) throw new Error(i18n.t('Could not download the STL (HTTP {{status}}).', { status: response.status, ns: 'components' }))
   if (Number(response.headers.get('content-length')) > MAX_STL_BYTES) {
-    throw new Error('The STL exceeds the 32 MiB preview limit.')
+    throw new Error(i18n.t('The STL exceeds the 32 MiB preview limit.', { ns: 'components' }))
   }
-  if (!response.body) throw new Error('The STL download returned no data.')
+  if (!response.body) throw new Error(i18n.t('The STL download returned no data.', { ns: 'components' }))
   const reader = response.body.getReader()
   const chunks: Uint8Array[] = []
   let size = 0
@@ -56,7 +57,7 @@ export async function readSTLResponse(response: Response, signal: AbortSignal) {
       const { done, value } = await reader.read()
       if (done) break
       size += value.byteLength
-      if (size > MAX_STL_BYTES) throw new Error('The STL exceeds the 32 MiB preview limit.')
+      if (size > MAX_STL_BYTES) throw new Error(i18n.t('The STL exceeds the 32 MiB preview limit.', { ns: 'components' }))
       chunks.push(value)
     }
   } finally {
@@ -74,7 +75,7 @@ export async function readSTLResponse(response: Response, signal: AbortSignal) {
   if (size >= 84) {
     const count = new DataView(data.buffer).getUint32(80, true)
     if (84 + count * 50 === size && count > MAX_STL_TRIANGLES) {
-      throw new Error('The STL exceeds the 500,000 triangle preview limit.')
+      throw new Error(i18n.t('The STL exceeds the 500,000 triangle preview limit.', { ns: 'components' }))
     }
   }
   return data.buffer

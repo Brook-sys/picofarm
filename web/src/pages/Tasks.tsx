@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ListTodo, Plus, Clock, Play, CheckCircle, XCircle, ChevronRight, RefreshCw, CalendarDays } from 'lucide-react'
@@ -13,6 +14,9 @@ const statusConfig: Record<TaskStatus, { label: string; color: string; icon: Rea
 }
 
 export function Tasks() {
+  const { t, i18n } = useTranslation('production')
+  const dateLocale = i18n.resolvedLanguage === 'pt-BR' ? 'pt-BR' : 'en-US'
+
   const [tasks, setTasks] = useState<Task[]>([])
   const [projects, setProjects] = useState<Project[]>([])
   const [loading, setLoading] = useState(true)
@@ -51,7 +55,7 @@ export function Tasks() {
 
   const formatDate = (dateStr?: string) => {
     if (!dateStr) return '-'
-    return new Date(dateStr).toLocaleDateString()
+    return new Date(dateStr).toLocaleDateString(dateLocale)
   }
 
   const getProgressColor = (progress: number) => {
@@ -65,16 +69,15 @@ export function Tasks() {
     <div className="p-4 sm:p-6 lg:p-8">
       <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 className="text-3xl font-display font-bold text-surface-100">Tasks</h1>
-          <p className="text-surface-400 mt-1">Work instances for fulfilling orders</p>
+          <h1 className="text-3xl font-display font-bold text-surface-100">{t("Tasks")}</h1>
+          <p className="text-surface-400 mt-1">{t("Work instances for fulfilling orders")}</p>
         </div>
         <button
           onClick={() => setShowCreateModal(true)}
           className="btn btn-primary"
         >
           <Plus className="w-4 h-4 mr-2" />
-          New Task
-        </button>
+          {t("New Task")}</button>
       </div>
 
       {/* Filters */}
@@ -84,10 +87,10 @@ export function Tasks() {
           onChange={e => setStatusFilter(e.target.value as TaskStatus | '')}
           className="input w-auto"
         >
-          <option value="">All Statuses</option>
+          <option value="">{t("All Statuses")}</option>
           {Object.entries(statusConfig).map(([status, config]) => (
             <option key={status} value={status}>
-              {config.label}
+              {t(config.label)}
             </option>
           ))}
         </select>
@@ -97,7 +100,7 @@ export function Tasks() {
           onChange={e => setProjectFilter(e.target.value)}
           className="input w-auto"
         >
-          <option value="">All Projects</option>
+          <option value="">{t("All Projects")}</option>
           {projects.map(project => (
             <option key={project.id} value={project.id}>
               {project.name}
@@ -115,12 +118,12 @@ export function Tasks() {
 
       {/* Task List */}
       {loading ? (
-        <div className="text-surface-500">Loading tasks...</div>
+        <div className="text-surface-500">{t("Loading tasks...")}</div>
       ) : tasks.length === 0 ? (
         <div className="text-center py-16">
           <ListTodo className="w-16 h-16 mx-auto text-surface-600 mb-4" />
-          <h3 className="text-xl font-semibold text-surface-300 mb-2">No tasks found</h3>
-          <p className="text-surface-500 mb-4">Tasks are created when processing order items</p>
+          <h3 className="text-xl font-semibold text-surface-300 mb-2">{t("No tasks found")}</h3>
+          <p className="text-surface-500 mb-4">{t("Tasks are created when processing order items")}</p>
         </div>
       ) : (
         <div className="card divide-y divide-surface-800">
@@ -140,13 +143,13 @@ export function Tasks() {
                   <div>
                     <h3 className="font-medium text-surface-100">{task.name}</h3>
                     <div className="text-sm text-surface-500">
-                      Qty: {task.quantity} | Created: {formatDate(task.created_at)}
-                      {task.order_id && <span> | Order linked</span>}
+                      {t("Qty:")}{' '}{task.quantity} {t("| Created:")}{' '}{formatDate(task.created_at)}
+                      {task.order_id && <span> {t("| Order linked")}</span>}
                     </div>
                     {task.pickup_date && (
                       <div className="flex items-center gap-1 text-xs text-accent-400 mt-0.5">
                         <CalendarDays className="w-3 h-3" />
-                        Ship: {new Date(task.pickup_date).toLocaleDateString()}
+                        {t("Ship:")}{' '}{new Date(task.pickup_date).toLocaleDateString(dateLocale)}
                       </div>
                     )}
                   </div>
@@ -165,7 +168,7 @@ export function Tasks() {
                     </div>
                   </div>
                   <span className={cn('px-2.5 py-1 rounded-full text-xs font-medium', config.color)}>
-                    {config.label}
+                    {t(config.label)}
                   </span>
                   <ChevronRight className="w-5 h-5 text-surface-600" />
                 </div>
@@ -197,6 +200,8 @@ interface CreateTaskModalProps {
 }
 
 function CreateTaskModal({ projects, onClose, onCreated }: CreateTaskModalProps) {
+  const { t } = useTranslation('production')
+
   const [projectId, setProjectId] = useState('')
   const [name, setName] = useState('')
   const [quantity, setQuantity] = useState(1)
@@ -208,11 +213,11 @@ function CreateTaskModal({ projects, onClose, onCreated }: CreateTaskModalProps)
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!projectId) {
-      setError('Please select a project')
+      setError(t("Please select a project"))
       return
     }
     if (!name.trim()) {
-      setError('Please enter a task name')
+      setError(t("Please enter a task name"))
       return
     }
 
@@ -228,7 +233,7 @@ function CreateTaskModal({ projects, onClose, onCreated }: CreateTaskModalProps)
       })
       onCreated()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create task')
+      setError(err instanceof Error ? err.message : t("Failed to create task"))
     } finally {
       setSaving(false)
     }
@@ -237,7 +242,7 @@ function CreateTaskModal({ projects, onClose, onCreated }: CreateTaskModalProps)
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
       <div className="card w-full max-w-md p-6">
-        <h2 className="text-xl font-semibold text-surface-100 mb-4">Create Task</h2>
+        <h2 className="text-xl font-semibold text-surface-100 mb-4">{t("Create Task")}</h2>
         <form onSubmit={handleSubmit}>
           {error && (
             <div className="mb-4 p-3 bg-red-500/20 text-red-400 rounded-lg text-sm">
@@ -248,15 +253,14 @@ function CreateTaskModal({ projects, onClose, onCreated }: CreateTaskModalProps)
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-surface-300 mb-1">
-                Project (Product)
-              </label>
+                {t("Project (Product)")}</label>
               <select
                 value={projectId}
                 onChange={e => setProjectId(e.target.value)}
                 className="input"
                 required
               >
-                <option value="">Select a project...</option>
+                <option value="">{t("Select a project...")}</option>
                 {projects.map(project => (
                   <option key={project.id} value={project.id}>
                     {project.name} {project.sku ? `(${project.sku})` : ''}
@@ -267,22 +271,20 @@ function CreateTaskModal({ projects, onClose, onCreated }: CreateTaskModalProps)
 
             <div>
               <label className="block text-sm font-medium text-surface-300 mb-1">
-                Task Name
-              </label>
+                {t("Task Name")}</label>
               <input
                 type="text"
                 value={name}
                 onChange={e => setName(e.target.value)}
                 className="input"
-                placeholder="e.g., Widget production run"
+                placeholder={t("e.g., Widget production run")}
                 required
               />
             </div>
 
             <div>
               <label className="block text-sm font-medium text-surface-300 mb-1">
-                Quantity
-              </label>
+                {t("Quantity")}</label>
               <input
                 type="number"
                 value={quantity}
@@ -294,8 +296,7 @@ function CreateTaskModal({ projects, onClose, onCreated }: CreateTaskModalProps)
 
             <div>
               <label className="block text-sm font-medium text-surface-300 mb-1">
-                Pickup / Ship Date (optional)
-              </label>
+                {t("Pickup / Ship Date (optional)")}</label>
               <input
                 type="date"
                 value={pickupDate}
@@ -306,14 +307,13 @@ function CreateTaskModal({ projects, onClose, onCreated }: CreateTaskModalProps)
 
             <div>
               <label className="block text-sm font-medium text-surface-300 mb-1">
-                Notes (optional)
-              </label>
+                {t("Notes (optional)")}</label>
               <textarea
                 value={notes}
                 onChange={e => setNotes(e.target.value)}
                 rows={3}
                 className="input resize-none"
-                placeholder="Any additional notes..."
+                placeholder={t("Any additional notes...")}
               />
             </div>
           </div>
@@ -324,14 +324,13 @@ function CreateTaskModal({ projects, onClose, onCreated }: CreateTaskModalProps)
               onClick={onClose}
               className="btn btn-ghost"
             >
-              Cancel
-            </button>
+              {t("Cancel")}</button>
             <button
               type="submit"
               disabled={saving}
               className="btn btn-primary"
             >
-              {saving ? 'Creating...' : 'Create Task'}
+              {saving ? t("Creating...") : t("Create Task")}
             </button>
           </div>
         </form>

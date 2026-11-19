@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import { useCallback, useEffect, useState } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import {
@@ -81,6 +82,9 @@ function emptyPendingItem(key: number): PendingLineItem {
 // ── Main Component ─────────────────────────────────────────
 
 export default function QuoteDetail() {
+  const { t, i18n } = useTranslation('commerce')
+  const locale = i18n.resolvedLanguage?.startsWith('en') ? 'en-US' : 'pt-BR'
+
   const { formatCents, symbol } = useCurrency()
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
@@ -247,7 +251,7 @@ export default function QuoteDetail() {
   }
 
   const handleDelete = async () => {
-    if (!id || !confirm('Delete this quote?')) return
+    if (!id || !confirm(t("Delete this quote? This permanently removes the quote and its options."))) return
     try {
       await quotesApi.delete(id)
       navigate('/quotes')
@@ -287,7 +291,7 @@ export default function QuoteDetail() {
   }
 
   if (!quote) {
-    return <div className="p-6 text-center text-surface-400">Quote not found</div>
+    return <div className="p-6 text-center text-surface-400">{t("Quote not found")}</div>
   }
 
   const config = statusConfig[quote.status]
@@ -305,7 +309,8 @@ export default function QuoteDetail() {
       <div className="mb-6">
         <Link to="/quotes" className="inline-flex items-center gap-1.5 text-sm text-surface-400 hover:text-surface-200 mb-4">
           <ArrowLeft className="h-4 w-4" />
-          Back to Quotes
+
+          {t("Back to Quotes")}
         </Link>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
@@ -315,7 +320,7 @@ export default function QuoteDetail() {
             </h1>
             <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${config.color}`}>
               <StatusIcon className="h-3.5 w-3.5" />
-              {config.label}
+              {t(config.label)}
             </span>
             {primaryFinancials && (
               <span className="text-lg font-mono font-semibold text-surface-200">
@@ -326,7 +331,8 @@ export default function QuoteDetail() {
         </div>
         {quote.customer && (
           <p className="text-sm text-surface-400 mt-1">
-            Customer: <Link to={`/customers/${quote.customer.id}`} className="text-accent-400 hover:text-accent-300">{quote.customer.name}</Link>
+
+            {t("Customer:")} <Link to={`/customers/${quote.customer.id}`} className="text-accent-400 hover:text-accent-300">{quote.customer.name}</Link>
             {quote.customer.company && <span className="text-surface-500"> ({quote.customer.company})</span>}
           </p>
         )}
@@ -355,7 +361,7 @@ export default function QuoteDetail() {
           {(quote.billing_address || quote.shipping_address || isDraft) && (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <AddressCard
-                label="Bill To"
+                label={t("Bill To")}
                 address={quote.billing_address}
                 editing={editingBillingAddr}
                 editable={isDraft}
@@ -368,7 +374,7 @@ export default function QuoteDetail() {
                 }}
               />
               <AddressCard
-                label="Ship To"
+                label={t("Ship To")}
                 address={quote.shipping_address}
                 editing={editingShippingAddr}
                 editable={isDraft}
@@ -380,7 +386,7 @@ export default function QuoteDetail() {
                   if (quote.customer?.shipping_address) handleSaveAddress('shipping', quote.customer.shipping_address)
                 }}
                 copyFromAddress={quote.billing_address}
-                copyFromLabel="Use billing address"
+                copyFromLabel={t("Use billing address")}
               />
             </div>
           )}
@@ -388,18 +394,19 @@ export default function QuoteDetail() {
           {/* Options */}
           <div>
             <div className="flex items-center justify-between mb-3">
-              <h2 className="text-lg font-display font-semibold text-surface-100">Options</h2>
+              <h2 className="text-lg font-display font-semibold text-surface-100">{t("Options")}</h2>
               {isDraft && (
                 <button onClick={openAddOptionModal} className="inline-flex items-center gap-1.5 text-sm text-accent-400 hover:text-accent-300">
                   <Plus className="h-4 w-4" />
-                  Add Option
+
+                  {t("Add Option")}
                 </button>
               )}
             </div>
 
             {(!quote.options || quote.options.length === 0) ? (
               <div className="bg-surface-900 border border-surface-800 rounded-lg p-8 text-center">
-                <p className="text-sm text-surface-500">No options yet. Add an option to start building this quote.</p>
+                <p className="text-sm text-surface-500">{t("No options yet. Add an option to start building this quote.")}</p>
               </div>
             ) : (
               <div className="space-y-4">
@@ -429,14 +436,14 @@ export default function QuoteDetail() {
           {/* Events Timeline */}
           {quote.events && quote.events.length > 0 && (
             <div>
-              <h2 className="text-lg font-display font-semibold text-surface-100 mb-3">Activity</h2>
+              <h2 className="text-lg font-display font-semibold text-surface-100 mb-3">{t("Activity")}</h2>
               <div className="space-y-3">
                 {quote.events.map((event) => (
                   <div key={event.id} className="flex gap-3">
                     <div className="w-2 h-2 rounded-full bg-surface-600 mt-1.5 shrink-0" />
                     <div>
                       <p className="text-sm text-surface-300">{event.message || event.event_type}</p>
-                      <p className="text-xs text-surface-500">{new Date(event.created_at).toLocaleString()}</p>
+                      <p className="text-xs text-surface-500">{new Date(event.created_at).toLocaleString(locale)}</p>
                     </div>
                   </div>
                 ))}
@@ -449,28 +456,32 @@ export default function QuoteDetail() {
         <div className="space-y-4">
           {/* Actions */}
           <div className="bg-surface-900 border border-surface-800 rounded-lg p-4 space-y-3">
-            <h3 className="text-sm font-medium text-surface-300">Actions</h3>
+            <h3 className="text-sm font-medium text-surface-300">{t("Actions")}</h3>
             {isDraft && (
               <button onClick={handleSend} disabled={actionLoading} className="w-full inline-flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium disabled:opacity-50">
                 <Send className="h-4 w-4" />
-                Mark as Sent
+
+                {t("Mark as Sent")}
               </button>
             )}
             {isSent && (
               <button onClick={handleReject} disabled={actionLoading} className="w-full inline-flex items-center justify-center gap-2 px-4 py-2 border border-red-500/50 text-red-400 rounded-lg hover:bg-red-500/10 text-sm font-medium disabled:opacity-50">
                 <XCircle className="h-4 w-4" />
-                Mark Rejected
+
+                {t("Mark Rejected")}
               </button>
             )}
             {quote.order_id && (
               <Link to={`/orders/${quote.order_id}`} className="block w-full text-center px-4 py-2 border border-surface-700 text-surface-300 rounded-lg hover:bg-surface-800 text-sm">
-                View Order
+
+                {t("View Order")}
               </Link>
             )}
             {isDraft && (
               <button onClick={handleDelete} className="w-full inline-flex items-center justify-center gap-2 px-4 py-2 text-red-400 hover:bg-red-500/10 rounded-lg text-sm">
                 <Trash2 className="h-4 w-4" />
-                Delete Quote
+
+                {t("Delete Quote")}
               </button>
             )}
           </div>
@@ -479,12 +490,13 @@ export default function QuoteDetail() {
           <div className="bg-surface-900 border border-surface-800 rounded-lg p-4 space-y-3">
             <h3 className="text-sm font-medium text-surface-300 flex items-center gap-1.5">
               <DollarSign className="h-3.5 w-3.5" />
-              Financial Adjustments
+
+              {t("Financial Adjustments")}
             </h3>
 
             {/* Discount */}
             <div>
-              <label className="block text-xs text-surface-500 mb-1">Discount</label>
+              <label className="block text-xs text-surface-500 mb-1">{t("Discount")}</label>
               <div className="flex gap-2">
                 <select
                   value={quote.discount_type}
@@ -495,9 +507,9 @@ export default function QuoteDetail() {
                   disabled={!isDraft}
                   className="px-2 py-1.5 bg-surface-800 border border-surface-700 rounded text-xs text-surface-200 focus:outline-none focus:ring-1 focus:ring-accent-500 disabled:opacity-50"
                 >
-                  <option value="none">None</option>
-                  <option value="flat">Flat ({symbol})</option>
-                  <option value="percent">Percent (%)</option>
+                  <option value="none">{t("None")}</option>
+                  <option value="flat">{t("Flat (")}{symbol})</option>
+                  <option value="percent">{t("Percent (%)")}</option>
                 </select>
                 {quote.discount_type !== 'none' && (
                   <input
@@ -519,7 +531,7 @@ export default function QuoteDetail() {
 
             {/* Rush Fee */}
             <div>
-              <label className="block text-xs text-surface-500 mb-1">Rush Fee</label>
+              <label className="block text-xs text-surface-500 mb-1">{t("Rush Fee")}</label>
               <div className="relative">
                 <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-surface-500">{symbol}</span>
                 <input
@@ -536,7 +548,7 @@ export default function QuoteDetail() {
 
             {/* Tax Rate */}
             <div>
-              <label className="block text-xs text-surface-500 mb-1">Tax Rate</label>
+              <label className="block text-xs text-surface-500 mb-1">{t("Tax Rate")}</label>
               <div className="relative">
                 <input
                   type="number"
@@ -554,14 +566,14 @@ export default function QuoteDetail() {
 
           {/* Details */}
           <div className="bg-surface-900 border border-surface-800 rounded-lg p-4 space-y-2">
-            <h3 className="text-sm font-medium text-surface-300 mb-2">Details</h3>
-            <div className="text-xs text-surface-500">Created: {new Date(quote.created_at).toLocaleString()}</div>
-            {quote.sent_at && <div className="text-xs text-surface-500">Sent: {new Date(quote.sent_at).toLocaleString()}</div>}
-            {quote.accepted_at && <div className="text-xs text-surface-500">Accepted: {new Date(quote.accepted_at).toLocaleString()}</div>}
+            <h3 className="text-sm font-medium text-surface-300 mb-2">{t("Details")}</h3>
+            <div className="text-xs text-surface-500">{t("Created:")} {new Date(quote.created_at).toLocaleString(locale)}</div>
+            {quote.sent_at && <div className="text-xs text-surface-500">{t("Sent:")} {new Date(quote.sent_at).toLocaleString(locale)}</div>}
+            {quote.accepted_at && <div className="text-xs text-surface-500">{t("Accepted:")} {new Date(quote.accepted_at).toLocaleString(locale)}</div>}
 
             {/* Valid Until */}
             <div>
-              <label className="block text-xs text-surface-500 mb-1 mt-2">Valid Until</label>
+              <label className="block text-xs text-surface-500 mb-1 mt-2">{t("Valid Until")}</label>
               <input
                 type="date"
                 defaultValue={quote.valid_until ? quote.valid_until.split('T')[0] : ''}
@@ -576,7 +588,7 @@ export default function QuoteDetail() {
 
             {/* Requested Due Date */}
             <div>
-              <label className="block text-xs text-surface-500 mb-1">Requested Due Date</label>
+              <label className="block text-xs text-surface-500 mb-1">{t("Requested Due Date")}</label>
               <input
                 type="date"
                 defaultValue={quote.requested_due_date ? quote.requested_due_date.split('T')[0] : ''}
@@ -595,7 +607,8 @@ export default function QuoteDetail() {
                 onClick={() => setShowTerms(!showTerms)}
                 className="text-xs text-surface-400 hover:text-surface-200 w-full text-left"
               >
-                Terms & Conditions {showTerms ? '\u25BE' : '\u25B8'}
+
+                {t("Terms & Conditions")} {showTerms ? '\u25BE' : '\u25B8'}
               </button>
               {showTerms && (
                 <textarea
@@ -604,7 +617,7 @@ export default function QuoteDetail() {
                   onBlur={(e) => handleUpdateQuote({ terms: e.target.value || undefined })}
                   disabled={!isDraft}
                   rows={4}
-                  placeholder="Enter terms and conditions..."
+                  placeholder={t("Enter terms and conditions...")}
                   className="w-full mt-1 px-2 py-1.5 bg-surface-800 border border-surface-700 rounded text-xs text-surface-200 focus:outline-none focus:ring-1 focus:ring-accent-500 disabled:opacity-50"
                 />
               )}
@@ -615,7 +628,8 @@ export default function QuoteDetail() {
               <div className="pt-2 border-t border-surface-800">
                 <label className="block text-xs text-surface-500 mb-1">
                   <Link2 className="h-3 w-3 inline mr-1" />
-                  Share Link
+
+                  {t("Share Link")}
                 </label>
                 <div className="flex gap-1">
                   <input
@@ -626,12 +640,12 @@ export default function QuoteDetail() {
                   <button
                     onClick={handleCopyShareLink}
                     className="px-2 py-1 bg-surface-800 border border-surface-700 rounded text-xs text-surface-400 hover:text-surface-200 shrink-0"
-                    title="Copy link"
+                    title={t("Copy link")}
                   >
                     {copied ? <CheckCircle className="h-3.5 w-3.5 text-green-400" /> : <Copy className="h-3.5 w-3.5" />}
                   </button>
                 </div>
-                {copied && <p className="text-xs text-green-400 mt-0.5">Copied!</p>}
+                {copied && <p className="text-xs text-green-400 mt-0.5">{t("Copied!")}</p>}
               </div>
             )}
 
@@ -648,15 +662,15 @@ export default function QuoteDetail() {
       {showAddOption && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-surface-900 border border-surface-700 rounded-xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-            <h2 className="text-lg font-display font-semibold text-surface-100 mb-4">Add Option</h2>
+            <h2 className="text-lg font-display font-semibold text-surface-100 mb-4">{t("Add Option")}</h2>
             <form onSubmit={handleAddOption} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-surface-300 mb-1">Name *</label>
-                  <input name="name" required className="w-full px-3 py-2 bg-surface-800 border border-surface-700 rounded-lg text-surface-100 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500" placeholder="e.g. Standard Package" />
+                  <label className="block text-sm font-medium text-surface-300 mb-1">{t("Name *")}</label>
+                  <input name="name" required className="w-full px-3 py-2 bg-surface-800 border border-surface-700 rounded-lg text-surface-100 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500" placeholder={t("e.g. Standard Package")} />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-surface-300 mb-1">Description</label>
+                  <label className="block text-sm font-medium text-surface-300 mb-1">{t("Description")}</label>
                   <input name="description" className="w-full px-3 py-2 bg-surface-800 border border-surface-700 rounded-lg text-surface-100 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500" />
                 </div>
               </div>
@@ -664,10 +678,11 @@ export default function QuoteDetail() {
               {/* Line Items */}
               <div>
                 <div className="flex items-center justify-between mb-2">
-                  <label className="block text-sm font-medium text-surface-300">Line Items</label>
+                  <label className="block text-sm font-medium text-surface-300">{t("Line Items")}</label>
                   <button type="button" onClick={() => setPendingItems(prev => [...prev, emptyPendingItem(Date.now())])} className="inline-flex items-center gap-1 text-xs text-accent-400 hover:text-accent-300">
                     <Plus className="h-3.5 w-3.5" />
-                    Add Item
+
+                    {t("Add Item")}
                   </button>
                 </div>
                 <div className="space-y-3">
@@ -683,13 +698,13 @@ export default function QuoteDetail() {
                             unit_price: it.unit_price || (project?.price_cents ? (project.price_cents / 100).toFixed(2) : ''),
                           } : it))
                         }} className="flex-1 px-2 py-1.5 bg-surface-800 border border-surface-700 rounded text-sm text-surface-200 focus:outline-none focus:ring-1 focus:ring-accent-500">
-                          <option value="">No project (free text)</option>
+                          <option value="">{t("No project (free text)")}</option>
                           {projects.map((p) => (
                             <option key={p.id} value={p.id}>{p.name}{p.sku ? ` (${p.sku})` : ''}</option>
                           ))}
                         </select>
                         {pendingItems.length > 1 && (
-                          <button type="button" onClick={() => setPendingItems(prev => prev.filter((_, i) => i !== idx))} className="text-surface-500 hover:text-red-400">
+                          <button aria-label={t("Delete")} type="button" onClick={() => setPendingItems(prev => prev.filter((_, i) => i !== idx))} className="text-surface-500 hover:text-red-400">
                             <Trash2 className="h-3.5 w-3.5" />
                           </button>
                         )}
@@ -700,19 +715,19 @@ export default function QuoteDetail() {
                           const defaultUnit = typeConfig[newType]?.defaultUnit || 'each'
                           setPendingItems(prev => prev.map((it, i) => i === idx ? { ...it, type: newType, unit: defaultUnit } : it))
                         }} className="col-span-1 px-2 py-1.5 bg-surface-800 border border-surface-700 rounded text-sm text-surface-200 focus:outline-none focus:ring-1 focus:ring-accent-500">
-                          {lineItemTypes.map((t) => (
-                            <option key={t.value} value={t.value}>{t.label}</option>
+                          {lineItemTypes.map((itemType) => (
+                            <option key={itemType.value} value={itemType.value}>{t(itemType.label)}</option>
                           ))}
                         </select>
-                        <input value={item.description} onChange={(e) => setPendingItems(prev => prev.map((it, i) => i === idx ? { ...it, description: e.target.value } : it))} placeholder="Description *" className="col-span-2 px-2 py-1.5 bg-surface-800 border border-surface-700 rounded text-sm text-surface-200 focus:outline-none focus:ring-1 focus:ring-accent-500" />
-                        <input value={item.quantity} onChange={(e) => setPendingItems(prev => prev.map((it, i) => i === idx ? { ...it, quantity: e.target.value } : it))} type="number" step="any" placeholder="Qty" className="col-span-1 px-2 py-1.5 bg-surface-800 border border-surface-700 rounded text-sm text-surface-200 text-right focus:outline-none focus:ring-1 focus:ring-accent-500" />
+                        <input value={item.description} onChange={(e) => setPendingItems(prev => prev.map((it, i) => i === idx ? { ...it, description: e.target.value } : it))} placeholder={t("Description *")} className="col-span-2 px-2 py-1.5 bg-surface-800 border border-surface-700 rounded text-sm text-surface-200 focus:outline-none focus:ring-1 focus:ring-accent-500" />
+                        <input value={item.quantity} onChange={(e) => setPendingItems(prev => prev.map((it, i) => i === idx ? { ...it, quantity: e.target.value } : it))} type="number" step="any" placeholder={t("Qty")} className="col-span-1 px-2 py-1.5 bg-surface-800 border border-surface-700 rounded text-sm text-surface-200 text-right focus:outline-none focus:ring-1 focus:ring-accent-500" />
                         <select value={item.unit} onChange={(e) => setPendingItems(prev => prev.map((it, i) => i === idx ? { ...it, unit: e.target.value } : it))} className="col-span-1 px-2 py-1.5 bg-surface-800 border border-surface-700 rounded text-sm text-surface-200 focus:outline-none focus:ring-1 focus:ring-accent-500">
-                          <option value="each">each</option>
-                          <option value="hours">hours</option>
-                          <option value="units">units</option>
-                          <option value="grams">grams</option>
+                          <option value="each">{t("each")}</option>
+                          <option value="hours">{t("hours")}</option>
+                          <option value="units">{t("units")}</option>
+                          <option value="grams">{t("grams")}</option>
                         </select>
-                        <input value={item.unit_price} onChange={(e) => setPendingItems(prev => prev.map((it, i) => i === idx ? { ...it, unit_price: e.target.value } : it))} type="number" step="0.01" placeholder={`Rate ${symbol}`} className="col-span-1 px-2 py-1.5 bg-surface-800 border border-surface-700 rounded text-sm text-surface-200 text-right focus:outline-none focus:ring-1 focus:ring-accent-500" />
+                        <input value={item.unit_price} onChange={(e) => setPendingItems(prev => prev.map((it, i) => i === idx ? { ...it, unit_price: e.target.value } : it))} type="number" step="0.01" placeholder={t("Rate {{symbol}}", { symbol })} className="col-span-1 px-2 py-1.5 bg-surface-800 border border-surface-700 rounded text-sm text-surface-200 text-right focus:outline-none focus:ring-1 focus:ring-accent-500" />
                       </div>
                     </div>
                   ))}
@@ -720,8 +735,8 @@ export default function QuoteDetail() {
               </div>
 
               <div className="flex justify-end gap-3 pt-2 border-t border-surface-800">
-                <button type="button" onClick={() => { setShowAddOption(false); setPendingItems([]) }} className="px-4 py-2 text-sm text-surface-400 hover:text-surface-200">Cancel</button>
-                <button type="submit" className="px-4 py-2 bg-accent-500 text-white rounded-lg hover:bg-accent-600 text-sm font-medium">Add Option</button>
+                <button type="button" onClick={() => { setShowAddOption(false); setPendingItems([]) }} className="px-4 py-2 text-sm text-surface-400 hover:text-surface-200">{t("Cancel")}</button>
+                <button type="submit" className="px-4 py-2 bg-accent-500 text-white rounded-lg hover:bg-accent-600 text-sm font-medium">{t("Add Option")}</button>
               </div>
             </form>
           </div>
@@ -748,6 +763,8 @@ interface AddressCardProps {
 }
 
 function AddressCard({ label, address, editing, editable, onEdit, onCancel, onSave, customerAddress, onCopyFromCustomer, copyFromAddress, copyFromLabel }: AddressCardProps) {
+  const { t } = useTranslation('commerce')
+
   const [form, setForm] = useState<Address>(address || {})
   const [prevAddress, setPrevAddress] = useState(address)
   const [prevEditing, setPrevEditing] = useState(editing)
@@ -768,23 +785,23 @@ function AddressCard({ label, address, editing, editable, onEdit, onCancel, onSa
               <button onClick={() => onSave(copyFromAddress)} className="text-xs text-accent-400 hover:text-accent-300">{copyFromLabel}</button>
             )}
             {customerAddress && (
-              <button onClick={onCopyFromCustomer} className="text-xs text-accent-400 hover:text-accent-300">Copy from customer</button>
+              <button onClick={onCopyFromCustomer} className="text-xs text-accent-400 hover:text-accent-300">{t("Copy from customer")}</button>
             )}
           </div>
         </div>
         <div className="space-y-2">
-          <input value={form.line1 || ''} onChange={e => setForm(f => ({ ...f, line1: e.target.value }))} placeholder="Address line 1" className="w-full px-2 py-1.5 bg-surface-800 border border-surface-700 rounded text-xs text-surface-200 focus:outline-none focus:ring-1 focus:ring-accent-500" />
-          <input value={form.line2 || ''} onChange={e => setForm(f => ({ ...f, line2: e.target.value }))} placeholder="Address line 2" className="w-full px-2 py-1.5 bg-surface-800 border border-surface-700 rounded text-xs text-surface-200 focus:outline-none focus:ring-1 focus:ring-accent-500" />
+          <input value={form.line1 || ''} onChange={e => setForm(f => ({ ...f, line1: e.target.value }))} placeholder={t("Address line 1")} className="w-full px-2 py-1.5 bg-surface-800 border border-surface-700 rounded text-xs text-surface-200 focus:outline-none focus:ring-1 focus:ring-accent-500" />
+          <input value={form.line2 || ''} onChange={e => setForm(f => ({ ...f, line2: e.target.value }))} placeholder={t("Address line 2")} className="w-full px-2 py-1.5 bg-surface-800 border border-surface-700 rounded text-xs text-surface-200 focus:outline-none focus:ring-1 focus:ring-accent-500" />
           <div className="grid grid-cols-3 gap-2">
-            <input value={form.city || ''} onChange={e => setForm(f => ({ ...f, city: e.target.value }))} placeholder="City" className="px-2 py-1.5 bg-surface-800 border border-surface-700 rounded text-xs text-surface-200 focus:outline-none focus:ring-1 focus:ring-accent-500" />
-            <input value={form.state || ''} onChange={e => setForm(f => ({ ...f, state: e.target.value }))} placeholder="State" className="px-2 py-1.5 bg-surface-800 border border-surface-700 rounded text-xs text-surface-200 focus:outline-none focus:ring-1 focus:ring-accent-500" />
-            <input value={form.zip || ''} onChange={e => setForm(f => ({ ...f, zip: e.target.value }))} placeholder="Zip" className="px-2 py-1.5 bg-surface-800 border border-surface-700 rounded text-xs text-surface-200 focus:outline-none focus:ring-1 focus:ring-accent-500" />
+            <input value={form.city || ''} onChange={e => setForm(f => ({ ...f, city: e.target.value }))} placeholder={t("City")} className="px-2 py-1.5 bg-surface-800 border border-surface-700 rounded text-xs text-surface-200 focus:outline-none focus:ring-1 focus:ring-accent-500" />
+            <input value={form.state || ''} onChange={e => setForm(f => ({ ...f, state: e.target.value }))} placeholder={t("State")} className="px-2 py-1.5 bg-surface-800 border border-surface-700 rounded text-xs text-surface-200 focus:outline-none focus:ring-1 focus:ring-accent-500" />
+            <input value={form.zip || ''} onChange={e => setForm(f => ({ ...f, zip: e.target.value }))} placeholder={t("Zip")} className="px-2 py-1.5 bg-surface-800 border border-surface-700 rounded text-xs text-surface-200 focus:outline-none focus:ring-1 focus:ring-accent-500" />
           </div>
-          <input value={form.country || ''} onChange={e => setForm(f => ({ ...f, country: e.target.value }))} placeholder="Country" className="w-full px-2 py-1.5 bg-surface-800 border border-surface-700 rounded text-xs text-surface-200 focus:outline-none focus:ring-1 focus:ring-accent-500" />
+          <input value={form.country || ''} onChange={e => setForm(f => ({ ...f, country: e.target.value }))} placeholder={t("Country")} className="w-full px-2 py-1.5 bg-surface-800 border border-surface-700 rounded text-xs text-surface-200 focus:outline-none focus:ring-1 focus:ring-accent-500" />
         </div>
         <div className="flex justify-end gap-2 mt-2">
-          <button onClick={onCancel} className="px-3 py-1 text-xs text-surface-400 hover:text-surface-200">Cancel</button>
-          <button onClick={() => onSave(form)} className="px-3 py-1 bg-accent-500 text-white rounded text-xs hover:bg-accent-600">Save</button>
+          <button onClick={onCancel} className="px-3 py-1 text-xs text-surface-400 hover:text-surface-200">{t("Cancel")}</button>
+          <button onClick={() => onSave(form)} className="px-3 py-1 bg-accent-500 text-white rounded text-xs hover:bg-accent-600">{t("Save")}</button>
         </div>
       </div>
     )
@@ -803,7 +820,7 @@ function AddressCard({ label, address, editing, editable, onEdit, onCancel, onSa
             <button onClick={() => onSave(copyFromAddress)} className="text-xs text-accent-400 hover:text-accent-300">{copyFromLabel}</button>
           )}
           {editable && (
-            <button onClick={onEdit} className="text-xs text-accent-400 hover:text-accent-300">Edit</button>
+            <button onClick={onEdit} className="text-xs text-accent-400 hover:text-accent-300">{t("Edit")}</button>
           )}
         </div>
       </div>
@@ -812,7 +829,7 @@ function AddressCard({ label, address, editing, editable, onEdit, onCancel, onSa
           {lines.map((line, i) => <div key={i}>{line}</div>)}
         </div>
       ) : (
-        <p className="text-xs text-surface-500 italic">No address set</p>
+        <p className="text-xs text-surface-500 italic">{t("No address set")}</p>
       )}
     </div>
   )
@@ -838,6 +855,8 @@ interface OptionCardProps {
 }
 
 function OptionCard({ option, quote, isDraft, isSent, isAccepted, addingItem, projects, actionLoading, onAddItem, onCancelAddItem, onSubmitItem, onDeleteItem, onDelete, onAccept }: OptionCardProps) {
+  const { t } = useTranslation('commerce')
+
   const { formatCents, symbol } = useCurrency()
   const projectMap = new Map(projects.map(p => [p.id, p]))
   const financials = calculateFinancials(option.total_cents, quote)
@@ -863,7 +882,7 @@ function OptionCard({ option, quote, isDraft, isSent, isAccepted, addingItem, pr
         <div>
           <h3 className="text-sm font-medium text-surface-100">
             {option.name}
-            {isAccepted && <span className="ml-2 text-xs text-green-400">(Accepted)</span>}
+            {isAccepted && <span className="ml-2 text-xs text-green-400">{t("(Accepted)")}</span>}
           </h3>
           {option.description && <p className="text-xs text-surface-500 mt-0.5">{option.description}</p>}
         </div>
@@ -872,7 +891,7 @@ function OptionCard({ option, quote, isDraft, isSent, isAccepted, addingItem, pr
             {hasAdjustments ? formatCents(financials.grandTotal) : formatCents(option.total_cents)}
           </span>
           {isDraft && (
-            <button onClick={onDelete} className="text-surface-500 hover:text-red-400" title="Delete option">
+            <button onClick={onDelete} className="text-surface-500 hover:text-red-400" title={t("Delete option")}>
               <Trash2 className="h-4 w-4" />
             </button>
           )}
@@ -891,7 +910,7 @@ function OptionCard({ option, quote, isDraft, isSent, isAccepted, addingItem, pr
                 <div className="flex items-center justify-between px-4 py-2 bg-surface-800/20">
                   <div className="flex items-center gap-1.5 text-xs font-medium text-surface-400 uppercase tracking-wide">
                     <TypeIcon className="h-3.5 w-3.5" />
-                    {cfg.label}
+                    {t(cfg.label)}
                     <span className="text-surface-600 font-normal">({items.length})</span>
                   </div>
                   <span className="text-xs font-mono text-surface-400">{formatCents(groupTotal)}</span>
@@ -913,7 +932,7 @@ function OptionCard({ option, quote, isDraft, isSent, isAccepted, addingItem, pr
                         <td className="px-4 py-1.5 text-sm text-surface-200 text-right font-mono whitespace-nowrap">{formatCents(item.total_cents)}</td>
                         {isDraft && (
                           <td className="px-2 py-1.5 w-8">
-                            <button onClick={() => onDeleteItem(item.id)} className="text-surface-600 hover:text-red-400">
+                            <button aria-label={t("Delete")} onClick={() => onDeleteItem(item.id)} className="text-surface-600 hover:text-red-400">
                               <Trash2 className="h-3.5 w-3.5" />
                             </button>
                           </td>
@@ -932,30 +951,30 @@ function OptionCard({ option, quote, isDraft, isSent, isAccepted, addingItem, pr
       {option.items && option.items.length > 0 && (
         <div className="border-t border-surface-700 px-4 py-3 space-y-1">
           <div className="flex justify-between text-xs text-surface-400">
-            <span>Subtotal</span>
+            <span>{t("Subtotal")}</span>
             <span className="font-mono">{formatCents(option.total_cents)}</span>
           </div>
           {quote.discount_type !== 'none' && financials.discountAmount > 0 && (
             <div className="flex justify-between text-xs text-surface-400">
-              <span>Discount {quote.discount_type === 'percent' ? `(${(quote.discount_value / 100).toFixed(2)}%)` : '(flat)'}</span>
+              <span>{t("Discount")} {quote.discount_type === 'percent' ? `(${(quote.discount_value / 100).toFixed(2)}%)` : t("(flat)")}</span>
               <span className="font-mono text-red-400">-{formatCents(financials.discountAmount)}</span>
             </div>
           )}
           {quote.rush_fee_cents > 0 && (
             <div className="flex justify-between text-xs text-surface-400">
-              <span>Rush Fee</span>
+              <span>{t("Rush Fee")}</span>
               <span className="font-mono">{formatCents(quote.rush_fee_cents)}</span>
             </div>
           )}
           {quote.tax_rate > 0 && (
             <div className="flex justify-between text-xs text-surface-400">
-              <span>Tax ({(quote.tax_rate / 100).toFixed(2)}%)</span>
+              <span>{t("Tax (")}{(quote.tax_rate / 100).toFixed(2)}%)</span>
               <span className="font-mono">{formatCents(financials.taxAmount)}</span>
             </div>
           )}
           {hasAdjustments && (
             <div className="flex justify-between text-sm font-medium text-surface-100 pt-1 border-t border-surface-800">
-              <span>Total</span>
+              <span>{t("Total")}</span>
               <span className="font-mono">{formatCents(financials.grandTotal)}</span>
             </div>
           )}
@@ -966,7 +985,7 @@ function OptionCard({ option, quote, isDraft, isSent, isAccepted, addingItem, pr
       {addingItem && (
         <form onSubmit={onSubmitItem} className="px-4 py-3 border-t border-surface-800 bg-surface-800/30">
           <div className="mb-2">
-            <label className="block text-xs font-medium text-surface-400 mb-1">Project (optional)</label>
+            <label className="block text-xs font-medium text-surface-400 mb-1">{t("Project (optional)")}</label>
             <select name="project_id" className="w-full px-2 py-1.5 bg-surface-800 border border-surface-700 rounded text-sm text-surface-200 focus:outline-none focus:ring-1 focus:ring-accent-500" onChange={(e) => {
               const form = e.target.form
               if (!form) return
@@ -980,7 +999,7 @@ function OptionCard({ option, quote, isDraft, isSent, isAccepted, addingItem, pr
                 }
               }
             }}>
-              <option value="">No project (free text)</option>
+              <option value="">{t("No project (free text)")}</option>
               {projects.map((p) => (
                 <option key={p.id} value={p.id}>{p.name}{p.sku ? ` (${p.sku})` : ''}</option>
               ))}
@@ -994,23 +1013,23 @@ function OptionCard({ option, quote, isDraft, isSent, isAccepted, addingItem, pr
               const unitSelect = form.elements.namedItem('unit') as HTMLSelectElement
               if (unitSelect) unitSelect.value = typeConfig[newType]?.defaultUnit || 'each'
             }}>
-              {lineItemTypes.map((t) => (
-                <option key={t.value} value={t.value}>{t.label}</option>
+              {lineItemTypes.map((itemType) => (
+                <option key={itemType.value} value={itemType.value}>{t(itemType.label)}</option>
               ))}
             </select>
-            <input name="description" required placeholder="Description" className="col-span-2 px-2 py-1.5 bg-surface-800 border border-surface-700 rounded text-sm text-surface-200 focus:outline-none focus:ring-1 focus:ring-accent-500" />
+            <input name="description" required placeholder={t("Description")} className="col-span-2 px-2 py-1.5 bg-surface-800 border border-surface-700 rounded text-sm text-surface-200 focus:outline-none focus:ring-1 focus:ring-accent-500" />
             <input name="quantity" type="number" step="any" defaultValue="1" required className="col-span-1 px-2 py-1.5 bg-surface-800 border border-surface-700 rounded text-sm text-surface-200 text-right focus:outline-none focus:ring-1 focus:ring-accent-500" />
             <select name="unit" className="col-span-1 px-2 py-1.5 bg-surface-800 border border-surface-700 rounded text-sm text-surface-200 focus:outline-none focus:ring-1 focus:ring-accent-500">
-              <option value="each">each</option>
-              <option value="hours">hours</option>
-              <option value="units">units</option>
-              <option value="grams">grams</option>
+              <option value="each">{t("each")}</option>
+              <option value="hours">{t("hours")}</option>
+              <option value="units">{t("units")}</option>
+              <option value="grams">{t("grams")}</option>
             </select>
-            <input name="unit_price" type="number" step="0.01" required placeholder={`Rate ${symbol}`} className="col-span-1 px-2 py-1.5 bg-surface-800 border border-surface-700 rounded text-sm text-surface-200 text-right focus:outline-none focus:ring-1 focus:ring-accent-500" />
+            <input name="unit_price" type="number" step="0.01" required placeholder={t("Rate {{symbol}}", { symbol })} className="col-span-1 px-2 py-1.5 bg-surface-800 border border-surface-700 rounded text-sm text-surface-200 text-right focus:outline-none focus:ring-1 focus:ring-accent-500" />
           </div>
           <div className="flex justify-end gap-2 mt-2">
-            <button type="button" onClick={onCancelAddItem} className="px-3 py-1 text-xs text-surface-400 hover:text-surface-200">Cancel</button>
-            <button type="submit" className="px-3 py-1 bg-accent-500 text-white rounded text-xs hover:bg-accent-600">Add</button>
+            <button type="button" onClick={onCancelAddItem} className="px-3 py-1 text-xs text-surface-400 hover:text-surface-200">{t("Cancel")}</button>
+            <button type="submit" className="px-3 py-1 bg-accent-500 text-white rounded text-xs hover:bg-accent-600">{t("Add")}</button>
           </div>
         </form>
       )}
@@ -1020,14 +1039,16 @@ function OptionCard({ option, quote, isDraft, isSent, isAccepted, addingItem, pr
         {isDraft && !addingItem && (
           <button onClick={onAddItem} className="inline-flex items-center gap-1 text-xs text-accent-400 hover:text-accent-300">
             <Plus className="h-3.5 w-3.5" />
-            Add Item
+
+            {t("Add Item")}
           </button>
         )}
         {!isDraft && <div />}
         {isSent && (
           <button onClick={onAccept} disabled={actionLoading} className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-green-600 text-white rounded-lg text-xs font-medium hover:bg-green-700 disabled:opacity-50">
             <CheckCircle className="h-3.5 w-3.5" />
-            Accept This Option
+
+            {t("Accept This Option")}
           </button>
         )}
       </div>

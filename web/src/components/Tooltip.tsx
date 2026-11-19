@@ -33,7 +33,7 @@ export function Tooltip({ text, children }: TooltipProps) {
       {show && (
         <div
           className={`absolute z-50 left-1/2 -translate-x-1/2 px-3 py-2 text-xs text-surface-200 bg-surface-800 border border-surface-700 rounded-lg shadow-lg w-56 leading-relaxed pointer-events-none ${
-            position === 'bottom' ? 'top-full mt-1.5' : 'bottom-full mb-1.5'
+            position === 'bottom' ? "top-full mt-1.5" : "bottom-full mb-1.5"
           }`}
         >
           {text}

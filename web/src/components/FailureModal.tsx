@@ -1,6 +1,8 @@
+import { useTranslation } from 'react-i18next'
 import { useState } from 'react'
 import type { PrintJob, Printer, FailureCategory } from '../types'
 import { printJobsApi } from '../api/client'
+import { PRINTER_STATUS_LABELS } from '../lib/utils'
 
 interface FailureModalProps {
   job: PrintJob
@@ -21,6 +23,7 @@ const FAILURE_CATEGORIES: { value: FailureCategory; label: string; description: 
 ]
 
 export function FailureModal({ job, printers, onClose, onRetry, onScrap }: FailureModalProps) {
+  const { t } = useTranslation('components')
   const [action, setAction] = useState<'retry' | 'reassign' | 'scrap' | null>(null)
   const [selectedPrinterId, setSelectedPrinterId] = useState<string>(job.printer_id || '')
   const [failureCategory, setFailureCategory] = useState<FailureCategory>(job.failure_category || 'unknown')
@@ -44,7 +47,7 @@ export function FailureModal({ job, printers, onClose, onRetry, onScrap }: Failu
       })
       onRetry(retryJob)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to retry job')
+      setError(err instanceof Error ? err.message : t("Failed to retry job"))
     } finally {
       setLoading(false)
     }
@@ -60,7 +63,7 @@ export function FailureModal({ job, printers, onClose, onRetry, onScrap }: Failu
       })
       onScrap(scrapJob)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to mark as scrap')
+      setError(err instanceof Error ? err.message : t("Failed to mark as scrap"))
     } finally {
       setLoading(false)
     }
@@ -77,13 +80,13 @@ export function FailureModal({ job, printers, onClose, onRetry, onScrap }: Failu
             </svg>
           </div>
           <div>
-            <h2 className="text-xl font-semibold text-surface-100">Print Failed</h2>
-            <p className="text-sm text-surface-400">What would you like to do?</p>
+            <h2 className="text-xl font-semibold text-surface-100">{t("Print Failed")}</h2>
+            <p className="text-sm text-surface-400">{t("What would you like to do?")}</p>
           </div>
         </div>
 
         {error && (
-          <div className="mb-4 p-3 bg-red-500/20 border border-red-500/50 rounded text-red-300 text-sm">
+          <div role="alert" className="mb-4 p-3 bg-red-500/20 border border-red-500/50 rounded text-red-300 text-sm">
             {error}
           </div>
         )}
@@ -100,8 +103,8 @@ export function FailureModal({ job, printers, onClose, onRetry, onScrap }: Failu
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                 </svg>
                 <div>
-                  <div className="font-medium text-surface-100">Retry Job</div>
-                  <div className="text-sm text-surface-400">Try again on the same printer</div>
+                  <div className="font-medium text-surface-100">{t("Retry Job")}</div>
+                  <div className="text-sm text-surface-400">{t("Try again on the same printer")}</div>
                 </div>
               </div>
             </button>
@@ -116,8 +119,8 @@ export function FailureModal({ job, printers, onClose, onRetry, onScrap }: Failu
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
                   </svg>
                   <div>
-                    <div className="font-medium text-surface-100">Assign to Another Printer</div>
-                    <div className="text-sm text-surface-400">{otherPrinters.length} other printer{otherPrinters.length > 1 ? 's' : ''} available</div>
+                    <div className="font-medium text-surface-100">{t("Assign to Another Printer")}</div>
+                    <div className="text-sm text-surface-400">{t('{{count}} other printer available', { count: otherPrinters.length })}</div>
                   </div>
                 </div>
               </button>
@@ -132,8 +135,8 @@ export function FailureModal({ job, printers, onClose, onRetry, onScrap }: Failu
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                 </svg>
                 <div>
-                  <div className="font-medium text-surface-100">Mark as Scrap</div>
-                  <div className="text-sm text-surface-400">Discard this print, no retry</div>
+                  <div className="font-medium text-surface-100">{t("Mark as Scrap")}</div>
+                  <div className="text-sm text-surface-400">{t("Discard this print, no retry")}</div>
                 </div>
               </div>
             </button>
@@ -142,8 +145,7 @@ export function FailureModal({ job, printers, onClose, onRetry, onScrap }: Failu
               onClick={onClose}
               className="w-full p-3 text-center text-surface-400 hover:text-surface-200 transition-colors"
             >
-              Decide Later
-            </button>
+              {t("Decide Later")}</button>
           </div>
         )}
 
@@ -153,8 +155,7 @@ export function FailureModal({ job, printers, onClose, onRetry, onScrap }: Failu
             {/* Failure Category Selection */}
             <div>
               <label className="block text-sm font-medium text-surface-300 mb-2">
-                What caused the failure?
-              </label>
+                {t("What caused the failure?")}</label>
               <div className="grid grid-cols-2 gap-2">
                 {FAILURE_CATEGORIES.map(cat => (
                   <button
@@ -166,7 +167,7 @@ export function FailureModal({ job, printers, onClose, onRetry, onScrap }: Failu
                         : 'border-surface-700 hover:border-surface-600 text-surface-300'
                     }`}
                   >
-                    <div className="text-sm font-medium">{cat.label}</div>
+                    <div className="text-sm font-medium">{t(cat.label)}</div>
                   </button>
                 ))}
               </div>
@@ -176,17 +177,16 @@ export function FailureModal({ job, printers, onClose, onRetry, onScrap }: Failu
             {action === 'reassign' && (
               <div>
                 <label className="block text-sm font-medium text-surface-300 mb-2">
-                  Select Printer
-                </label>
+                  {t("Select Printer")}</label>
                 <select
                   value={selectedPrinterId}
                   onChange={(e) => setSelectedPrinterId(e.target.value)}
                   className="input"
                 >
-                  <option value="">Select a printer...</option>
+                  <option value="">{t("Select a printer...")}</option>
                   {availablePrinters.map(p => (
                     <option key={p.id} value={p.id}>
-                      {p.name} {p.id === job.printer_id ? '(current)' : p.status === 'idle' ? '(idle)' : `(${p.status})`}
+                      {p.name} {p.id === job.printer_id ? t('(current)') : p.status === 'idle' ? t('(idle)') : `(${t(PRINTER_STATUS_LABELS[p.status] || p.status)})`}
                     </option>
                   ))}
                 </select>
@@ -196,12 +196,11 @@ export function FailureModal({ job, printers, onClose, onRetry, onScrap }: Failu
             {/* Notes */}
             <div>
               <label className="block text-sm font-medium text-surface-300 mb-2">
-                Notes (optional)
-              </label>
+                {t("Notes (optional)")}</label>
               <textarea
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
-                placeholder="What happened? Any observations..."
+                placeholder={t("What happened? Any observations...")}
                 className="w-full bg-surface-800 border border-surface-700 rounded px-3 py-2 text-surface-100 placeholder-surface-500 h-20 resize-none"
               />
             </div>
@@ -213,15 +212,14 @@ export function FailureModal({ job, printers, onClose, onRetry, onScrap }: Failu
                 className="flex-1 px-4 py-2 text-surface-300 hover:text-surface-100 transition-colors"
                 disabled={loading}
               >
-                Back
-              </button>
+                {t("Back")}</button>
               {action === 'scrap' ? (
                 <button
                   onClick={handleScrap}
                   disabled={loading}
                   className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded font-medium transition-colors disabled:opacity-50"
                 >
-                  {loading ? 'Processing...' : 'Mark as Scrap'}
+                  {loading ? t("Processing...") : t("Mark as Scrap")}
                 </button>
               ) : (
                 <button
@@ -229,7 +227,7 @@ export function FailureModal({ job, printers, onClose, onRetry, onScrap }: Failu
                   disabled={loading || (action === 'reassign' && !selectedPrinterId)}
                   className="flex-1 px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded font-medium transition-colors disabled:opacity-50"
                 >
-                  {loading ? 'Processing...' : action === 'reassign' ? 'Retry on Selected Printer' : 'Retry Job'}
+                  {loading ? t("Processing...") : action === 'reassign' ? t("Retry on Selected Printer") : t("Retry Job")}
                 </button>
               )}
             </div>

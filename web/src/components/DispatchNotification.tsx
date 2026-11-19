@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import { useState, useEffect } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { PlayCircle, SkipForward, XCircle, Clock, Printer, FileText } from 'lucide-react'
@@ -10,6 +11,7 @@ interface DispatchNotificationProps {
 }
 
 export default function DispatchNotification({ request, onDismiss }: DispatchNotificationProps) {
+  const { t } = useTranslation('components')
   const queryClient = useQueryClient()
   const [timeLeft, setTimeLeft] = useState('')
 
@@ -69,11 +71,11 @@ export default function DispatchNotification({ request, onDismiss }: DispatchNot
         <div className="flex items-center justify-between p-4 border-b border-surface-700">
           <div className="flex items-center gap-2">
             <div className="h-2 w-2 rounded-full bg-accent-500 animate-pulse" />
-            <span className="font-semibold text-surface-100">Ready to Print</span>
+            <span className="font-semibold text-surface-100">{t("Ready to Print")}</span>
           </div>
           <div className="flex items-center gap-1 text-sm text-surface-400">
             <Clock className="h-4 w-4" />
-            <span>{timeLeft}</span>
+            <span>{timeLeft === 'Expired' ? t('Expired') : timeLeft}</span>
           </div>
         </div>
 
@@ -83,9 +85,9 @@ export default function DispatchNotification({ request, onDismiss }: DispatchNot
           <div className="flex items-center gap-3 p-3 rounded-lg bg-surface-800/50">
             <Printer className="h-5 w-5 text-surface-400" />
             <div>
-              <div className="text-sm text-surface-300">Printer</div>
+              <div className="text-sm text-surface-300">{t("Printer")}</div>
               <div className="font-medium text-surface-100">
-                {request.printer?.name || 'Unknown Printer'}
+                {request.printer?.name || t("Unknown Printer")}
               </div>
             </div>
           </div>
@@ -94,13 +96,13 @@ export default function DispatchNotification({ request, onDismiss }: DispatchNot
           <div className="flex items-center gap-3 p-3 rounded-lg bg-surface-800/50">
             <FileText className="h-5 w-5 text-surface-400" />
             <div>
-              <div className="text-sm text-surface-300">Job</div>
+              <div className="text-sm text-surface-300">{t("Job")}</div>
               <div className="font-medium text-surface-100">
                 {request.job?.notes || `Job #${request.job_id.slice(0, 8)}`}
               </div>
               {request.job?.priority !== undefined && request.job.priority > 0 && (
                 <div className="text-xs text-accent-400 mt-1">
-                  Priority: {request.job.priority}
+                  {t("Priority:")}{' '}{request.job.priority}
                 </div>
               )}
             </div>
@@ -108,8 +110,7 @@ export default function DispatchNotification({ request, onDismiss }: DispatchNot
 
           {/* Confirmation prompt */}
           <div className="text-sm text-surface-400 text-center">
-            Is the bed clear and ready for the next print?
-          </div>
+            {t("Is the bed clear and ready for the next print?")}</div>
         </div>
 
         {/* Actions */}
@@ -120,8 +121,7 @@ export default function DispatchNotification({ request, onDismiss }: DispatchNot
             className="btn btn-primary w-full flex items-center justify-center gap-2"
           >
             <PlayCircle className="h-4 w-4" />
-            Bed Clear - Start Print
-          </button>
+            {t("Bed Clear - Start Print")}</button>
 
           <div className="flex gap-2">
             <button
@@ -130,16 +130,14 @@ export default function DispatchNotification({ request, onDismiss }: DispatchNot
               className="btn btn-secondary flex-1 flex items-center justify-center gap-2"
             >
               <SkipForward className="h-4 w-4" />
-              Skip Job
-            </button>
+              {t("Skip Job")}</button>
             <button
               onClick={() => rejectMutation.mutate()}
               disabled={isLoading}
               className="btn btn-ghost flex-1 flex items-center justify-center gap-2"
             >
               <XCircle className="h-4 w-4" />
-              Not Now
-            </button>
+              {t("Not Now")}</button>
           </div>
         </div>
       </div>

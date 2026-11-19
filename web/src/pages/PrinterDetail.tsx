@@ -1,3 +1,5 @@
+import { useTranslation } from 'react-i18next'
+import type { TFunction } from 'i18next'
 import { externalLinkClick, resourceURL } from '../lib/platform'
 import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
@@ -5,7 +7,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft, Wifi, Thermometer, Fan, Gauge, Info, AlertTriangle, Lightbulb, Box, History, CheckCircle, XCircle, Printer as PrinterIcon, Clock, DollarSign, Check, X, Activity, TrendingUp, Target, Heart, ExternalLink, RefreshCw, Trash2, Camera as CameraIcon } from 'lucide-react'
 import { usePrinter, usePrinterState, usePrinterJobs, usePrinterStats, useUpdatePrinter, usePrinterAnalytics } from '../hooks/usePrinters'
 import { camerasApi, printJobsApi, printersApi, queueApi } from '../api/client'
-import { cn, getStatusBadge, formatDuration, formatRelativeTime } from '../lib/utils'
+import { cn, getStatusBadge, formatDuration, PRINT_JOB_STATUS_LABELS } from '../lib/utils'
 import { useCurrency } from '../hooks/useCurrency'
 import { ExpandableJobEvents } from '../components/JobEventTimeline'
 import AutoDispatchSettings from '../components/AutoDispatchSettings'
@@ -39,6 +41,7 @@ function wifiStrength(signal: string): string {
 }
 
 function FanBar({ label, percent }: { label: string; percent: number }) {
+
   return (
     <div>
       <div className="flex items-center justify-between text-sm mb-1">
@@ -56,6 +59,7 @@ function FanBar({ label, percent }: { label: string; percent: number }) {
 }
 
 function TempRow({ label, current, target }: { label: string; current?: number; target?: number }) {
+
   if (current === undefined && target === undefined) return null
   const cur = current ?? 0
   const tgt = target ?? 0
@@ -67,7 +71,7 @@ function TempRow({ label, current, target }: { label: string; current?: number; 
       <div className="flex items-center justify-between text-sm mb-1">
         <span className="text-surface-400">{label}</span>
         <span className="text-surface-200">
-          {cur.toFixed(0)}{target !== undefined && target > 0 ? ` / ${target.toFixed(0)}` : ''}&deg;C
+          {cur.toFixed(0)}{target !== undefined && target > 0 ? ` / ${target.toFixed(0)}` : ''}{'°C'}
         </span>
       </div>
       <div className="h-2 bg-surface-800 rounded-full overflow-hidden">
@@ -85,7 +89,23 @@ function TempRow({ label, current, target }: { label: string; current?: number; 
   )
 }
 
+function controlCommandLabel(name: string, t: TFunction<'fleet'>): string {
+  if (name.startsWith('speed-level-')) return t('set speed profile to {{value}}', { value: name.slice('speed-level-'.length) })
+  if (name.startsWith('speed-')) return t('set print feed rate to {{value}}%', { value: name.slice('speed-'.length) })
+  if (name.includes('ams-load-')) return t('load the selected AMS spool')
+  const labels: Record<string, string> = {
+    'ams-unload': 'unload AMS',
+    'ams-refresh': 'refresh AMS RFID',
+    'ams-backup-on': 'enable AMS filament backup',
+    'ams-backup-off': 'disable AMS filament backup',
+  }
+  if (name.startsWith('macro-')) return t('run the stored G-code macro')
+  return labels[name] ? t(labels[name]) : name
+}
+
 export default function PrinterDetail() {
+  const { t } = useTranslation('fleet')
+
   const { id } = useParams<{ id: string }>()
   const { data: printer, isLoading: printerLoading, refetch: refetchPrinter } = usePrinter(id!)
   const { data: state, refetch: refetchState } = usePrinterState(id!)
@@ -122,7 +142,7 @@ export default function PrinterDetail() {
       await refetchPrinter()
       setEditingInfo(false)
     } catch (err) {
-      setControlError(err instanceof Error ? err.message : 'Failed to save printer info')
+      setControlError(err instanceof Error ? err.message : t("Failed to save printer info"))
     }
   }
 
@@ -133,13 +153,14 @@ export default function PrinterDetail() {
   }
 
   const runControl = async (name: string, action: () => Promise<unknown>) => {
+    if (name !== 'emergency' && name !== 'maintenance' && name !== 'reconnect' && !window.confirm(t("Run {{command}} on this printer? This may move axes, heat components or interrupt the current print job. Check the machine before continuing.", { command: controlCommandLabel(name, t) }))) return
     setControlError('')
     setControlBusy(name)
     try {
       await action()
       await Promise.all([refetchState(), refetchPrinter()])
     } catch (err) {
-      setControlError(err instanceof Error ? err.message : 'Control failed')
+      setControlError(err instanceof Error ? err.message : t("Control failed"))
     } finally {
       setControlBusy('')
     }
@@ -148,7 +169,7 @@ export default function PrinterDetail() {
   if (printerLoading) {
     return (
       <div className="p-4 sm:p-6 lg:p-8">
-        <div className="text-surface-500">Loading...</div>
+        <div className="text-surface-500">{t("Loading...")}</div>
       </div>
     )
   }
@@ -158,9 +179,9 @@ export default function PrinterDetail() {
       <div className="p-4 sm:p-6 lg:p-8">
         <Link to="/printers" className="text-accent-400 hover:text-accent-300 flex items-center gap-1 mb-4">
           <ArrowLeft className="h-4 w-4" />
-          Printers
+          {t("Printers")}
         </Link>
-        <div className="text-surface-400">Printer not found.</div>
+        <div className="text-surface-400">{t("Printer not found.")}</div>
       </div>
     )
   }
@@ -184,7 +205,7 @@ export default function PrinterDetail() {
       <div className="mb-6">
         <Link to="/printers" className="text-accent-400 hover:text-accent-300 flex items-center gap-1 mb-3 text-sm">
           <ArrowLeft className="h-4 w-4" />
-          Printers
+          {t("Printers")}
         </Link>
         <div className="flex items-start justify-between">
           <div>
@@ -193,11 +214,11 @@ export default function PrinterDetail() {
                 {printer.name}
               </h1>
               <span className={cn('badge', getStatusBadge(status))}>
-                {status}
+                {t(status, { defaultValue: status })}
               </span>
               {state?.phase && (
                 <span className="badge bg-purple-500/20 text-purple-400">
-                  {state.phase}
+                  {t(state.phase, { defaultValue: state.phase })}
                 </span>
               )}
               <span className="badge bg-surface-800 text-surface-400">
@@ -205,7 +226,7 @@ export default function PrinterDetail() {
               </span>
               {printer.maintenance_mode && (
                 <span className="badge bg-amber-500/20 text-amber-400">
-                  Maintenance
+                  {t("Maintenance")}
                 </span>
               )}
             </div>
@@ -222,14 +243,14 @@ export default function PrinterDetail() {
         <div className="card p-5">
           <h2 className="text-sm font-semibold text-surface-400 uppercase tracking-wider mb-4 flex items-center gap-2">
             <Gauge className="h-4 w-4" />
-            Print Job
+            {t("Print Job")}
           </h2>
           {isPrinting || (state && state.progress > 0 && status !== 'idle') ? (
             <div className="space-y-3">
               {/* Progress bar */}
               <div>
                 <div className="flex items-center justify-between text-sm mb-1">
-                  <span className="text-surface-400">Progress</span>
+                  <span className="text-surface-400">{t("Progress")}</span>
                   <span className="text-surface-100 font-medium">{state!.progress.toFixed(1)}%</span>
                 </div>
                 <div className="h-3 bg-surface-800 rounded-full overflow-hidden">
@@ -243,7 +264,7 @@ export default function PrinterDetail() {
               {/* Layers */}
               {state!.total_layer_num ? (
                 <div className="flex items-center justify-between text-sm">
-                  <span className="text-surface-400">Layer</span>
+                  <span className="text-surface-400">{t("Layer")}</span>
                   <span className="text-surface-200">{state!.layer_num || 0} / {state!.total_layer_num}</span>
                 </div>
               ) : null}
@@ -251,7 +272,7 @@ export default function PrinterDetail() {
               {/* File */}
               {state!.current_file && (
                 <div className="flex items-center justify-between text-sm">
-                  <span className="text-surface-400">File</span>
+                  <span className="text-surface-400">{t("File")}</span>
                   <span className="text-surface-200 truncate ml-4 text-right">{state!.current_file}</span>
                 </div>
               )}
@@ -259,7 +280,7 @@ export default function PrinterDetail() {
               {/* Time left */}
               {state!.time_left ? (
                 <div className="flex items-center justify-between text-sm">
-                  <span className="text-surface-400">Time left</span>
+                  <span className="text-surface-400">{t("Time left")}</span>
                   <span className="text-surface-200">{formatDuration(state!.time_left)}</span>
                 </div>
               ) : null}
@@ -267,16 +288,16 @@ export default function PrinterDetail() {
               {/* Speed */}
               {(state!.speed_level || state!.speed_percent) ? (
                 <div className="flex items-center justify-between text-sm">
-                  <span className="text-surface-400">Speed</span>
+                  <span className="text-surface-400">{t("Speed")}</span>
                   <span className="text-surface-200">
-                    {state!.speed_level ? SPEED_LABELS[state!.speed_level] || `Level ${state!.speed_level}` : ''}
+                    {state!.speed_level ? SPEED_LABELS[state!.speed_level] ? t(SPEED_LABELS[state!.speed_level]) : t("Level {{level}}", { level: state!.speed_level }) : ''}
                     {state!.speed_percent ? ` (${state!.speed_percent}%)` : ''}
                   </span>
                 </div>
               ) : null}
             </div>
           ) : (
-            <p className="text-surface-500 text-sm">No active print</p>
+            <p className="text-surface-500 text-sm">{t("No active print")}</p>
           )}
         </div>
 
@@ -284,18 +305,18 @@ export default function PrinterDetail() {
         <div className="card p-5">
           <h2 className="text-sm font-semibold text-surface-400 uppercase tracking-wider mb-4 flex items-center gap-2">
             <Thermometer className="h-4 w-4" />
-            Temperatures
+            {t("Temperatures")}
           </h2>
           {hasTemps ? (
             <div className="space-y-3">
-              <TempRow label="Nozzle" current={state!.nozzle_temp} target={state!.nozzle_target_temp} />
-              <TempRow label="Bed" current={state!.bed_temp} target={state!.bed_target_temp} />
+              <TempRow label={t("Nozzle")} current={state!.nozzle_temp} target={state!.nozzle_target_temp} />
+              <TempRow label={t("Bed")} current={state!.bed_temp} target={state!.bed_target_temp} />
               {state!.chamber_temp !== undefined && state!.chamber_temp > 0 && (
-                <TempRow label="Chamber" current={state!.chamber_temp} />
+                <TempRow label={t("Chamber")} current={state!.chamber_temp} />
               )}
             </div>
           ) : (
-            <p className="text-surface-500 text-sm">No temperature data</p>
+            <p className="text-surface-500 text-sm">{t("No temperature data")}</p>
           )}
         </div>
 
@@ -304,13 +325,13 @@ export default function PrinterDetail() {
           <div className="card p-5">
             <h2 className="text-sm font-semibold text-surface-400 uppercase tracking-wider mb-4 flex items-center gap-2">
               <Fan className="h-4 w-4" />
-              Fan Speeds
+              {t("Fan Speeds")}
             </h2>
             <div className="space-y-3">
-              {state!.cooling_fan_speed !== undefined && <FanBar label="Part Cooling" percent={state!.cooling_fan_speed} />}
-              {state!.aux_fan_speed !== undefined && <FanBar label="Aux Fan" percent={state!.aux_fan_speed} />}
-              {state!.chamber_fan_speed !== undefined && <FanBar label="Chamber Fan" percent={state!.chamber_fan_speed} />}
-              {state!.heatbreak_fan_speed !== undefined && <FanBar label="Heatbreak" percent={state!.heatbreak_fan_speed} />}
+              {state!.cooling_fan_speed !== undefined && <FanBar label={t("Part Cooling")} percent={state!.cooling_fan_speed} />}
+              {state!.aux_fan_speed !== undefined && <FanBar label={t("Aux Fan")} percent={state!.aux_fan_speed} />}
+              {state!.chamber_fan_speed !== undefined && <FanBar label={t("Chamber Fan")} percent={state!.chamber_fan_speed} />}
+              {state!.heatbreak_fan_speed !== undefined && <FanBar label={t("Heatbreak")} percent={state!.heatbreak_fan_speed} />}
             </div>
           </div>
         )}
@@ -319,12 +340,12 @@ export default function PrinterDetail() {
         <div className="card overflow-hidden p-5">
           <h2 className="mb-4 flex items-center gap-2 text-sm font-semibold uppercase tracking-wider text-surface-400">
             <CameraIcon className="h-4 w-4" />
-            Cameras
+            {t("Cameras")}
           </h2>
           {camerasLoading ? (
-            <p className="text-sm text-surface-500">Loading cameras...</p>
+            <p className="text-sm text-surface-500">{t("Loading cameras...")}</p>
           ) : cameras.length === 0 ? (
-            <p className="text-sm text-surface-500">No cameras configured for this printer.</p>
+            <p className="text-sm text-surface-500">{t("No cameras configured for this printer.")}</p>
           ) : (
             <div className="space-y-3">
               {cameras.map(camera => (
@@ -333,7 +354,7 @@ export default function PrinterDetail() {
                     <img src={resourceURL(camera.url)} alt={camera.name} className="aspect-video w-full bg-black object-contain" />
                   ) : (
                     <div className="flex aspect-video items-center justify-center bg-black/40 p-4 text-center text-sm text-surface-500">
-                      Preview unavailable for {camera.type.toUpperCase()} streams.
+                      {t('Preview unavailable for {{type}} streams.', { type: camera.type.toUpperCase() })}
                     </div>
                   )}
                   <div className="flex flex-wrap items-center justify-between gap-2 border-t border-surface-800 px-3 py-2 text-xs">
@@ -341,7 +362,7 @@ export default function PrinterDetail() {
                       <div className="font-medium text-surface-200">{camera.name}</div>
                       <div className="max-w-full truncate text-surface-500">{camera.url}</div>
                     </div>
-                    <span className={cn('badge', camera.enabled ? 'bg-emerald-500/20 text-emerald-300' : 'bg-surface-800 text-surface-400')}>{camera.enabled ? 'Enabled' : 'Disabled'}</span>
+                    <span className={cn('badge', camera.enabled ? 'bg-emerald-500/20 text-emerald-300' : 'bg-surface-800 text-surface-400')}>{camera.enabled ? t("Enabled") : t("Disabled")}</span>
                   </div>
                 </div>
               ))}
@@ -354,36 +375,36 @@ export default function PrinterDetail() {
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-sm font-semibold text-surface-400 uppercase tracking-wider flex items-center gap-2">
               <Info className="h-4 w-4" />
-              Device Info
+              {t("Device Info")}
             </h2>
             {editingInfo ? (
               <div className="flex gap-2">
-                <button onClick={() => setEditingInfo(false)} className="btn btn-ghost text-xs"><X className="h-3 w-3 mr-1" />Cancel</button>
-                <button onClick={saveInfo} disabled={updatePrinter.isPending} className="btn btn-primary text-xs"><Check className="h-3 w-3 mr-1" />Save</button>
+                <button onClick={() => setEditingInfo(false)} className="btn btn-ghost text-xs"><X className="h-3 w-3 mr-1" />{t("Cancel")}</button>
+                <button onClick={saveInfo} disabled={updatePrinter.isPending} className="btn btn-primary text-xs"><Check className="h-3 w-3 mr-1" />{t("Save")}</button>
               </div>
             ) : (
-              <button onClick={startEditInfo} className="btn btn-secondary text-xs">Edit</button>
+              <button onClick={startEditInfo} className="btn btn-secondary text-xs">{t("Edit")}</button>
             )}
           </div>
 
           {editingInfo ? (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <label className="block"><span className="text-xs text-surface-500 mb-1 block">Model</span><input value={infoForm.model} onChange={e => setInfoForm(prev => ({ ...prev, model: e.target.value }))} className="input" placeholder="Neptune 4 Plus" /></label>
-              <label className="block"><span className="text-xs text-surface-500 mb-1 block">Manufacturer</span><input value={infoForm.manufacturer} onChange={e => setInfoForm(prev => ({ ...prev, manufacturer: e.target.value }))} className="input" placeholder="Elegoo" /></label>
-              <label className="block md:col-span-2"><span className="text-xs text-surface-500 mb-1 block">Location</span><input value={infoForm.location} onChange={e => setInfoForm(prev => ({ ...prev, location: e.target.value }))} className="input" placeholder="Workshop" /></label>
-              <label className="block md:col-span-2"><span className="text-xs text-surface-500 mb-1 block">Fluidd URL</span><input value={infoForm.fluidd_url} onChange={e => setInfoForm(prev => ({ ...prev, fluidd_url: e.target.value }))} className="input" placeholder="http://192.168.1.100" /></label>
+              <label className="block"><span className="text-xs text-surface-500 mb-1 block">{t("Model")}</span><input value={infoForm.model} onChange={e => setInfoForm(prev => ({ ...prev, model: e.target.value }))} className="input" placeholder="Neptune 4 Plus" /></label>
+              <label className="block"><span className="text-xs text-surface-500 mb-1 block">{t("Manufacturer")}</span><input value={infoForm.manufacturer} onChange={e => setInfoForm(prev => ({ ...prev, manufacturer: e.target.value }))} className="input" placeholder="Elegoo" /></label>
+              <label className="block md:col-span-2"><span className="text-xs text-surface-500 mb-1 block">{t("Location")}</span><input value={infoForm.location} onChange={e => setInfoForm(prev => ({ ...prev, location: e.target.value }))} className="input" placeholder={t("Workshop")} /></label>
+              <label className="block md:col-span-2"><span className="text-xs text-surface-500 mb-1 block">{t("Fluidd URL")}</span><input value={infoForm.fluidd_url} onChange={e => setInfoForm(prev => ({ ...prev, fluidd_url: e.target.value }))} className="input" placeholder="http://localhost" /></label>
               {(printer.connection_type === 'moonraker' || printer.connection_type === 'octoprint') && (
                 <label className="block md:col-span-2">
-                  <span className="text-xs text-surface-500 mb-1 block">Pasta padrão para arquivos de impressão</span>
+                  <span className="text-xs text-surface-500 mb-1 block">{t("Default print folder")}</span>
                   <input value={infoForm.default_print_folder} onChange={e => setInfoForm(prev => ({ ...prev, default_print_folder: e.target.value }))} className="input" placeholder="/sda1" />
-                  <span className="mt-1 block text-xs text-surface-500">Deixe vazio para usar a pasta raiz padrão da impressora. Exemplo: /sda1.</span>
+                  <span className="mt-1 block text-xs text-surface-500">{t("Leave empty to use the printer default root folder. Example: /sda1.")}</span>
                 </label>
               )}
               <label className="md:col-span-2 flex items-start gap-3 rounded-lg border border-surface-800 bg-surface-900/50 p-3">
                 <input type="checkbox" checked={infoForm.restrict_gcode_model} onChange={e => setInfoForm(prev => ({ ...prev, restrict_gcode_model: e.target.checked }))} className="mt-1" />
                 <span>
-                  <span className="block text-sm font-medium text-surface-200">Permitir apenas G-code específico deste modelo</span>
-                  <span className="text-xs text-surface-500">Bloqueia impressão quando printer_model do G-code não corresponde ao modelo desta impressora.</span>
+                  <span className="block text-sm font-medium text-surface-200">{t("Only allow G-code for this printer model")}</span>
+                  <span className="text-xs text-surface-500">{t("Block printing when the G-code printer_model does not match this printer model.")}</span>
                 </span>
               </label>
             </div>
@@ -391,23 +412,23 @@ export default function PrinterDetail() {
             <div className="space-y-2 text-sm">
               {state?.wifi_signal && (
                 <div className="flex items-center justify-between">
-                  <span className="text-surface-400 flex items-center gap-1.5"><Wifi className="h-3.5 w-3.5" /> WiFi</span>
-                  <span className="text-surface-200">{wifiStrength(state.wifi_signal)}</span>
+                  <span className="text-surface-400 flex items-center gap-1.5"><Wifi className="h-3.5 w-3.5" /> {t('WiFi')}</span>
+                  <span className="text-surface-200">{wifiStrength(state.wifi_signal).replace(/\(([^)]+)\)/, (_, strength: string) => '(' + t(strength) + ')')}</span>
                 </div>
               )}
               {state?.nozzle_diameter && (
                 <div className="flex items-center justify-between">
-                  <span className="text-surface-400">Nozzle</span>
-                  <span className="text-surface-200">{state.nozzle_diameter}mm{state.nozzle_type ? ` ${state.nozzle_type}` : ''}</span>
+                  <span className="text-surface-400">{t("Nozzle")}</span>
+                  <span className="text-surface-200">{state.nozzle_diameter}{' mm'}{state.nozzle_type ? ` ${state.nozzle_type}` : ''}</span>
                 </div>
               )}
-              {printer.serial_number && <div className="flex items-center justify-between"><span className="text-surface-400">Serial</span><span className="text-surface-200 font-mono text-xs">{printer.serial_number}</span></div>}
-              <div className="flex items-center justify-between"><span className="text-surface-400">Location</span><span className="text-surface-200">{printer.location || '—'}</span></div>
-              <div className="flex items-center justify-between"><span className="text-surface-400">Manufacturer</span><span className="text-surface-200">{printer.manufacturer || '—'}</span></div>
-              <div className="flex items-center justify-between"><span className="text-surface-400">Model</span><span className="text-surface-200">{printer.model || '—'}</span></div>
-              <div className="flex items-center justify-between"><span className="text-surface-400">G-code model restriction</span><span className={cn('badge', (printer.restrict_gcode_model ?? true) ? 'bg-emerald-500/20 text-emerald-300' : 'bg-surface-800 text-surface-400')}>{(printer.restrict_gcode_model ?? true) ? 'ON' : 'OFF'}</span></div>
+              {printer.serial_number && <div className="flex items-center justify-between"><span className="text-surface-400">{t("Serial")}</span><span className="text-surface-200 font-mono text-xs">{printer.serial_number}</span></div>}
+              <div className="flex items-center justify-between"><span className="text-surface-400">{t("Location")}</span><span className="text-surface-200">{printer.location || '—'}</span></div>
+              <div className="flex items-center justify-between"><span className="text-surface-400">{t("Manufacturer")}</span><span className="text-surface-200">{printer.manufacturer || '—'}</span></div>
+              <div className="flex items-center justify-between"><span className="text-surface-400">{t("Model")}</span><span className="text-surface-200">{printer.model || '—'}</span></div>
+              <div className="flex items-center justify-between"><span className="text-surface-400">{t("G-code model restriction")}</span><span className={cn('badge', (printer.restrict_gcode_model ?? true) ? 'bg-emerald-500/20 text-emerald-300' : 'bg-surface-800 text-surface-400')}>{(printer.restrict_gcode_model ?? true) ? t("ON") : t("OFF")}</span></div>
               {(printer.connection_type === 'moonraker' || printer.connection_type === 'octoprint') && (
-                <div className="flex items-center justify-between gap-4"><span className="text-surface-400">Pasta padrão de impressão</span><span className="font-mono text-xs text-surface-200">{printer.default_print_folder ? `/${printer.default_print_folder}` : '/ (raiz)'}</span></div>
+                <div className="flex items-center justify-between gap-4"><span className="text-surface-400">{t("Default print folder")}</span><span className="font-mono text-xs text-surface-200">{printer.default_print_folder ? `/${printer.default_print_folder}` : t("/ (root)")}</span></div>
               )}
               {printer.fluidd_url && (
                 <a href={printer.fluidd_url} onClick={externalLinkClick} target="_blank" rel="noreferrer" className="inline-flex w-fit cursor-pointer items-center rounded-lg border border-blue-500/50 bg-blue-500/20 px-3 py-1.5 text-xs font-semibold text-blue-300 hover:bg-blue-500/30">
@@ -428,25 +449,25 @@ export default function PrinterDetail() {
         <div className="card p-5">
           <h2 className="text-sm font-semibold text-surface-400 uppercase tracking-wider mb-4 flex items-center gap-2">
             <Target className="h-4 w-4" />
-            Controle
+            {t("Control")}
           </h2>
           {printer.maintenance_mode ? (
-            <div className="text-amber-400 text-sm mb-3">Printer is in maintenance mode</div>
+            <div className="text-amber-400 text-sm mb-3">{t("Printer is in maintenance mode")}</div>
           ) : null}
           <div className="flex flex-wrap gap-2 mb-6">
             {(status === 'offline' || status === 'error') && !printer.maintenance_mode && printer.connection_type !== 'manual' && (
               <button disabled={!!controlBusy} onClick={() => runControl('reconnect', () => printersApi.reconnect(printer.id))} className="inline-flex cursor-pointer items-center rounded-lg border border-blue-500/50 bg-blue-500/20 px-4 py-2 text-sm font-semibold text-blue-300 shadow-lg transition-colors hover:bg-blue-500/30 disabled:cursor-not-allowed disabled:opacity-60">
                 <RefreshCw className={cn('h-4 w-4 mr-2', controlBusy === 'reconnect' && 'animate-spin')} />
-                Reconectar
+                {t("Reconnect")}
               </button>
             )}
             <button disabled={!!controlBusy} onClick={() => runControl('maintenance', () => printersApi.setMaintenanceMode(printer.id, !printer.maintenance_mode))} className={cn('inline-flex cursor-pointer items-center rounded-lg border px-4 py-2 text-sm font-semibold shadow-lg transition-colors disabled:cursor-not-allowed', printer.maintenance_mode ? 'border-emerald-500/40 bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25' : 'border-amber-500/60 bg-amber-500/20 text-amber-200 hover:bg-amber-500/30')}>
               <AlertTriangle className="h-4 w-4 mr-2" />
-              {printer.maintenance_mode ? 'Sair da manutenção' : 'Manutenção'}
+              {printer.maintenance_mode ? t("Exit maintenance") : t("Maintenance")}
             </button>
             <button disabled={!!controlBusy} onClick={() => setConfirmEmergency(true)} className="inline-flex cursor-pointer items-center rounded-lg border border-red-500/70 bg-red-500/20 px-4 py-2 text-sm font-semibold text-red-300 shadow-lg transition-colors hover:bg-red-500/30 disabled:cursor-not-allowed">
               <XCircle className="h-4 w-4 mr-2" />
-              Emergência
+              {t("Emergency")}
             </button>
           </div>
 
@@ -462,11 +483,11 @@ export default function PrinterDetail() {
 
           <h3 className="text-sm font-semibold text-surface-400 uppercase tracking-wider mb-3 flex items-center gap-2">
             <Activity className="h-4 w-4" />
-            Comandos
+            {t("Commands")}
           </h3>
           <MacroCommands printerId={printer.id} runControl={runControl} controlBusy={controlBusy} canRunGCode={!!printerCaps?.can_run_gcode} />
           {controlError && <div className="text-xs text-red-400 mt-2">{controlError}</div>}
-          {controlBusy && <div className="text-xs text-surface-400 mt-1">Running {controlBusy}...</div>}
+          {controlBusy && <div className="text-xs text-surface-400 mt-1">{t("Running")} {controlBusy}...</div>}
         </div>
 
         {/* AMS STATUS */}
@@ -474,13 +495,13 @@ export default function PrinterDetail() {
           <div className="card p-5">
             <h2 className="text-sm font-semibold text-surface-400 uppercase tracking-wider mb-4 flex items-center gap-2">
               <Box className="h-4 w-4" />
-              AMS Status
+              {t("AMS Status")}
             </h2>
             <div className="space-y-4">
               {state!.ams!.units.map((unit) => (
                 <div key={unit.id}>
                   <div className="text-xs text-surface-500 mb-2">
-                    Unit {unit.id}
+                    {t("Unit")} {unit.id}
                     {unit.humidity > 0 && ` (${unit.humidity}% RH`}
                     {unit.temp > 0 && `, ${unit.temp.toFixed(0)}\u00B0C`}
                     {(unit.humidity > 0 || unit.temp > 0) && ')'}
@@ -497,7 +518,7 @@ export default function PrinterDetail() {
                         )}
                         <span className="text-surface-300 flex-1 truncate">
                           {tray.empty ? (
-                            <span className="text-surface-600">Empty</span>
+                            <span className="text-surface-600">{t("Empty")}</span>
                           ) : (
                             <>
                               {tray.material_type}
@@ -512,7 +533,7 @@ export default function PrinterDetail() {
                               className="text-[10px] px-1.5 py-0.5 rounded bg-surface-800 text-surface-400 hover:text-surface-100"
                               disabled={!!controlBusy}
                             >
-                              Load
+                              {t("Load")}
                             </button>
                             <div className="w-16 h-1.5 bg-surface-800 rounded-full overflow-hidden">
                               <div
@@ -534,14 +555,14 @@ export default function PrinterDetail() {
                 </div>
               ))}
               <div className="flex flex-wrap gap-2 pt-2">
-                <button disabled={!!controlBusy} onClick={() => runControl('ams-unload', () => printersApi.amsUnload(printer.id))} className="btn btn-secondary text-xs">Unload</button>
-                <button disabled={!!controlBusy} onClick={() => runControl('ams-refresh', () => printersApi.amsRefresh(printer.id))} className="btn btn-secondary text-xs">RFID Refresh</button>
-                <button disabled={!!controlBusy} onClick={() => runControl('ams-backup-on', () => printersApi.setAMSFilamentBackup(printer.id, true))} className="btn btn-secondary text-xs">Backup On</button>
-                <button disabled={!!controlBusy} onClick={() => runControl('ams-backup-off', () => printersApi.setAMSFilamentBackup(printer.id, false))} className="btn btn-secondary text-xs">Backup Off</button>
+                <button disabled={!!controlBusy} onClick={() => runControl('ams-unload', () => printersApi.amsUnload(printer.id))} className="btn btn-secondary text-xs">{t("Unload")}</button>
+                <button disabled={!!controlBusy} onClick={() => runControl('ams-refresh', () => printersApi.amsRefresh(printer.id))} className="btn btn-secondary text-xs">{t("RFID Refresh")}</button>
+                <button disabled={!!controlBusy} onClick={() => runControl('ams-backup-on', () => printersApi.setAMSFilamentBackup(printer.id, true))} className="btn btn-secondary text-xs">{t("Backup On")}</button>
+                <button disabled={!!controlBusy} onClick={() => runControl('ams-backup-off', () => printersApi.setAMSFilamentBackup(printer.id, false))} className="btn btn-secondary text-xs">{t("Backup Off")}</button>
               </div>
               {state!.ams!.external_spool && !state!.ams!.external_spool.empty && (
                 <div>
-                  <div className="text-xs text-surface-500 mb-2">External Spool</div>
+                  <div className="text-xs text-surface-500 mb-2">{t("External Spool")}</div>
                   <div className="flex items-center gap-2 text-sm">
                     {state!.ams!.external_spool.color_hex && (
                       <span
@@ -566,12 +587,12 @@ export default function PrinterDetail() {
           <div className="card p-5">
             <h2 className="text-sm font-semibold text-surface-400 uppercase tracking-wider mb-4 flex items-center gap-2">
               <AlertTriangle className="h-4 w-4" />
-              Alerts
+              {t("Alerts")}
             </h2>
             <div className="space-y-3 text-sm">
               {hasHMS ? (
                 <div>
-                  <div className="text-surface-400 mb-1">HMS Errors</div>
+                  <div className="text-surface-400 mb-1">{t("HMS Errors")}</div>
                   {state!.hms_errors!.map((err, i) => (
                     <div key={i} className={cn(
                       'px-2 py-1 rounded text-xs mb-1',
@@ -579,19 +600,19 @@ export default function PrinterDetail() {
                       err.severity >= 2 ? 'bg-amber-500/10 text-amber-400' :
                       'bg-surface-800 text-surface-300'
                     )}>
-                      Module {err.module} / Code {err.code} (severity {err.severity})
+                      {t("Module")} {err.module} {t("/ Code")} {err.code} {t("(severity")} {err.severity})
                     </div>
                   ))}
                 </div>
               ) : (
                 <div className="flex items-center gap-2 text-surface-400">
-                  <span className="text-emerald-400">&#10003;</span> No active HMS errors
+                  <span className="text-emerald-400">&#10003;</span> {t("No active HMS errors")}
                 </div>
               )}
               {hasLights && (
                 <div>
                   <div className="text-surface-400 mb-1 flex items-center gap-1.5">
-                    <Lightbulb className="h-3.5 w-3.5" /> Lights
+                    <Lightbulb className="h-3.5 w-3.5" /> {t("Lights")}
                   </div>
                   {state!.lights!.map((light, i) => (
                     <div key={i} className="text-surface-300 text-xs">
@@ -609,10 +630,10 @@ export default function PrinterDetail() {
           <div className="card p-5">
             <h2 className="text-sm font-semibold text-surface-400 uppercase tracking-wider mb-4 flex items-center gap-2">
               <AlertTriangle className="h-4 w-4" />
-              Alerts
+              {t("Alerts")}
             </h2>
             <div className="flex items-center gap-2 text-surface-400 text-sm">
-              <span className="text-emerald-400">&#10003;</span> No active HMS errors
+              <span className="text-emerald-400">&#10003;</span> {t("No active HMS errors")}
             </div>
           </div>
         )}
@@ -623,7 +644,7 @@ export default function PrinterDetail() {
         <div className="mt-6">
           <h2 className="text-lg font-semibold text-surface-100 flex items-center gap-2 mb-4">
             <TrendingUp className="h-5 w-5 text-surface-400" />
-            Analytics
+            {t("Analytics")}
           </h2>
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
             <PrinterUtilizationCard utilization={analytics.utilization} />
@@ -643,6 +664,8 @@ export default function PrinterDetail() {
 }
 
 function PrinterCostSetting({ printerId, costPerHourCents, printerModel }: { printerId: string; costPerHourCents: number; printerModel: string }) {
+  const { t } = useTranslation('fleet')
+
   const { formatAmount, formatCents, symbol } = useCurrency()
   const [editing, setEditing] = useState(false)
   const [value, setValue] = useState((costPerHourCents / 100).toFixed(2))
@@ -675,18 +698,18 @@ function PrinterCostSetting({ printerId, costPerHourCents, printerModel }: { pri
     <div className="card p-5">
       <h2 className="text-sm font-semibold text-surface-400 uppercase tracking-wider mb-4 flex items-center gap-2">
         <DollarSign className="h-4 w-4" />
-        Cost Settings
+        {t("Cost Settings")}
       </h2>
       <div className="space-y-4">
         <div>
           <div className="flex items-center justify-between mb-1">
-            <span className="text-sm text-surface-400">Cost per Hour</span>
+            <span className="text-sm text-surface-400">{t("Cost per Hour")}</span>
             {!editing && (
               <button
                 onClick={() => setEditing(true)}
                 className="text-xs text-accent-400 hover:text-accent-300"
               >
-                Edit
+                {t("Edit")}
               </button>
             )}
           </div>
@@ -706,7 +729,7 @@ function PrinterCostSetting({ printerId, costPerHourCents, printerModel }: { pri
                   if (e.key === 'Escape') handleCancel()
                 }}
               />
-              <span className="text-surface-500 text-sm">/ hr</span>
+              <span className="text-surface-500 text-sm">{t("/ hr")}</span>
               <button
                 onClick={handleSave}
                 disabled={updatePrinter.isPending}
@@ -724,7 +747,7 @@ function PrinterCostSetting({ printerId, costPerHourCents, printerModel }: { pri
           ) : (
             <div className="text-2xl font-semibold text-surface-100">
               {formatCents(costPerHourCents)}
-              <span className="text-sm font-normal text-surface-500 ml-1">/ hr</span>
+              <span className="text-sm font-normal text-surface-500 ml-1">{t("/ hr")}</span>
             </div>
           )}
         </div>
@@ -732,33 +755,33 @@ function PrinterCostSetting({ printerId, costPerHourCents, printerModel }: { pri
         {/* Suggested defaults */}
         {costPerHourCents === 0 && (
           <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/20">
-            <div className="text-sm text-amber-300 font-medium mb-2">No cost set</div>
+            <div className="text-sm text-amber-300 font-medium mb-2">{t("No cost set")}</div>
             <p className="text-xs text-surface-400 mb-3">
-              Set an hourly rate so project analytics can calculate printer time costs accurately.
+              {t("Set an hourly rate so project analytics can calculate printer time costs accurately.")}
             </p>
             <div className="flex flex-wrap gap-2">
               <button
                 onClick={() => handleApplyDefault(50)}
                 className={cn('btn btn-ghost text-xs py-1 px-3', suggestedLabel === 'A1' && 'ring-1 ring-accent-500')}
               >
-                A1 tier — {formatAmount(0.50)}/hr
+                {t('{{model}} tier — {{cost}}/hr', { model: 'A1', cost: formatAmount(0.50) })}
               </button>
               <button
                 onClick={() => handleApplyDefault(75)}
                 className={cn('btn btn-ghost text-xs py-1 px-3', suggestedLabel === 'P1S' && 'ring-1 ring-accent-500')}
               >
-                P1S tier — {formatAmount(0.75)}/hr
+                {t('{{model}} tier — {{cost}}/hr', { model: 'P1S', cost: formatAmount(0.75) })}
               </button>
               <button
                 onClick={() => handleApplyDefault(100)}
                 className={cn('btn btn-ghost text-xs py-1 px-3', suggestedLabel === 'X1' && 'ring-1 ring-accent-500')}
               >
-                X1 tier — {formatAmount(1)}/hr
+                {t('{{model}} tier — {{cost}}/hr', { model: 'X1', cost: formatAmount(1) })}
               </button>
             </div>
             {printerModel && (
               <p className="text-xs text-surface-500 mt-2">
-                Based on your model ({printerModel}), the {suggestedLabel} tier is highlighted.
+                {t('Based on your model ({{model}}), the {{tier}} tier is highlighted.', { model: printerModel, tier: suggestedLabel })}
               </p>
             )}
           </div>
@@ -770,51 +793,51 @@ function PrinterCostSetting({ printerId, costPerHourCents, printerModel }: { pri
             onClick={() => setShowBreakdown(!showBreakdown)}
             className="text-xs text-surface-500 hover:text-surface-300 transition-colors"
           >
-            {showBreakdown ? 'Hide' : 'How is this cost calculated?'}
+            {showBreakdown ? t("Hide") : t("How is this cost calculated?")}
           </button>
           {showBreakdown && (
             <div className="mt-3 p-3 rounded-lg bg-surface-800/50 border border-surface-700 text-xs text-surface-400 space-y-3">
               <p>
-                Hourly cost covers everything except filament (which is tracked separately per job). It includes:
+                {t("Hourly cost covers everything except filament (which is tracked separately per job). It includes:")}
               </p>
               <table className="w-full">
                 <thead>
                   <tr className="text-left text-surface-500">
-                    <th className="pb-1 font-medium">Component</th>
+                    <th className="pb-1 font-medium">{t("Component")}</th>
                     <th className="pb-1 font-medium text-right">A1 (~{formatAmount(400)})</th>
                     <th className="pb-1 font-medium text-right">P1S (~{formatAmount(700)})</th>
                   </tr>
                 </thead>
                 <tbody className="text-surface-300">
                   <tr>
-                    <td className="py-0.5">Electricity</td>
+                    <td className="py-0.5">{t("Electricity")}</td>
                     <td className="py-0.5 text-right">{formatAmount(0.02)}</td>
                     <td className="py-0.5 text-right">{formatAmount(0.04)}</td>
                   </tr>
                   <tr>
-                    <td className="py-0.5">Depreciation</td>
+                    <td className="py-0.5">{t("Depreciation")}</td>
                     <td className="py-0.5 text-right">{formatAmount(0.03)}</td>
                     <td className="py-0.5 text-right">{formatAmount(0.05)}</td>
                   </tr>
                   <tr>
-                    <td className="py-0.5">Maintenance</td>
+                    <td className="py-0.5">{t("Maintenance")}</td>
                     <td className="py-0.5 text-right">{formatAmount(0.15)}</td>
                     <td className="py-0.5 text-right">{formatAmount(0.20)}</td>
                   </tr>
                   <tr>
-                    <td className="py-0.5">Utilization buffer</td>
+                    <td className="py-0.5">{t("Utilization buffer")}</td>
                     <td className="py-0.5 text-right">{formatAmount(0.25)}</td>
                     <td className="py-0.5 text-right">{formatAmount(0.35)}</td>
                   </tr>
                   <tr className="border-t border-surface-700 font-medium text-surface-200">
-                    <td className="pt-1">Total</td>
-                    <td className="pt-1 text-right">{formatAmount(0.50)}/hr</td>
-                    <td className="pt-1 text-right">{formatAmount(0.75)}/hr</td>
+                    <td className="pt-1">{t("Total")}</td>
+                    <td className="pt-1 text-right">{formatAmount(0.50)}{t('/hr')}</td>
+                    <td className="pt-1 text-right">{formatAmount(0.75)}{t('/hr')}</td>
                   </tr>
                 </tbody>
               </table>
               <p className="text-surface-500">
-                Depreciation assumes ~13,000 hr lifespan (3 yr @ 12 hr/day). Maintenance covers nozzles, hotends, fans, belts, and failed prints. Utilization buffer accounts for downtime, calibration, and demand spikes.
+                {t("Depreciation assumes ~13,000 hr lifespan (3 yr @ 12 hr/day). Maintenance covers nozzles, hotends, fans, belts, and failed prints. Utilization buffer accounts for downtime, calibration, and demand spikes.")}
               </p>
             </div>
           )}
@@ -825,6 +848,8 @@ function PrinterCostSetting({ printerId, costPerHourCents, printerModel }: { pri
 }
 
 function PrinterUtilizationCard({ utilization }: { utilization: PrinterUtilization[] }) {
+  const { t } = useTranslation('fleet')
+
   const { formatCents } = useCurrency()
   const [selectedPeriod, setSelectedPeriod] = useState<string>('7d')
   const data = utilization.find(u => u.period === selectedPeriod) || utilization[0]
@@ -834,9 +859,9 @@ function PrinterUtilizationCard({ utilization }: { utilization: PrinterUtilizati
       <div className="card p-5">
         <h3 className="text-sm font-semibold text-surface-400 uppercase tracking-wider mb-4 flex items-center gap-2">
           <Activity className="h-4 w-4" />
-          Utilization
+          {t("Utilization")}
         </h3>
-        <p className="text-surface-500 text-sm">No utilization data available</p>
+        <p className="text-surface-500 text-sm">{t("No utilization data available")}</p>
       </div>
     )
   }
@@ -850,7 +875,7 @@ function PrinterUtilizationCard({ utilization }: { utilization: PrinterUtilizati
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-sm font-semibold text-surface-400 uppercase tracking-wider flex items-center gap-2">
           <Activity className="h-4 w-4" />
-          Utilization
+          {t("Utilization")}
         </h3>
         <div className="flex gap-1">
           {['7d', '30d', '90d'].map(period => (
@@ -892,15 +917,15 @@ function PrinterUtilizationCard({ utilization }: { utilization: PrinterUtilizati
         <div className="flex justify-between mt-2 text-xs">
           <div className="flex items-center gap-1">
             <span className="w-2 h-2 rounded-full bg-emerald-500" />
-            <span className="text-surface-400">Printing</span>
+            <span className="text-surface-400">{t("Printing")}</span>
           </div>
           <div className="flex items-center gap-1">
             <span className="w-2 h-2 rounded-full bg-red-500" />
-            <span className="text-surface-400">Failed</span>
+            <span className="text-surface-400">{t("Failed")}</span>
           </div>
           <div className="flex items-center gap-1">
             <span className="w-2 h-2 rounded-full bg-surface-700" />
-            <span className="text-surface-400">Idle</span>
+            <span className="text-surface-400">{t("Idle")}</span>
           </div>
         </div>
       </div>
@@ -908,7 +933,7 @@ function PrinterUtilizationCard({ utilization }: { utilization: PrinterUtilizati
       {/* Stats */}
       <div className="space-y-2 text-sm">
         <div className="flex justify-between">
-          <span className="text-surface-400">Utilization</span>
+          <span className="text-surface-400">{t("Utilization")}</span>
           <span className={cn(
             'font-medium',
             data.utilization_percent >= 50 ? 'text-emerald-400' :
@@ -919,30 +944,30 @@ function PrinterUtilizationCard({ utilization }: { utilization: PrinterUtilizati
           </span>
         </div>
         <div className="flex justify-between">
-          <span className="text-surface-400">Printing Hours</span>
+          <span className="text-surface-400">{t("Printing Hours")}</span>
           <span className="text-surface-200">{data.printing_hours.toFixed(1)}h</span>
         </div>
         <div className="flex justify-between">
-          <span className="text-surface-400">Failed Hours</span>
+          <span className="text-surface-400">{t("Failed Hours")}</span>
           <span className="text-red-400">{data.failed_hours.toFixed(1)}h</span>
         </div>
         <div className="flex justify-between">
-          <span className="text-surface-400">Idle Hours</span>
+          <span className="text-surface-400">{t("Idle Hours")}</span>
           <span className="text-surface-500">{data.idle_hours.toFixed(1)}h</span>
         </div>
         <div className="border-t border-surface-700 pt-2 mt-2">
           <div className="flex justify-between">
-            <span className="text-surface-400">Configured Rate</span>
-            <span className="text-surface-200">{formatCents(data.configured_cost_per_hour_cents)}/hr</span>
+            <span className="text-surface-400">{t("Configured Rate")}</span>
+            <span className="text-surface-200">{formatCents(data.configured_cost_per_hour_cents)}{t('/hr')}</span>
           </div>
           <div className="flex justify-between">
-            <span className="text-surface-400">Actual Revenue/hr</span>
+            <span className="text-surface-400">{t("Actual Revenue/hr")}</span>
             <span className={cn(
               data.actual_revenue_per_hour_cents > data.configured_cost_per_hour_cents
                 ? 'text-emerald-400'
                 : 'text-surface-300'
             )}>
-              {formatCents(data.actual_revenue_per_hour_cents)}/hr
+              {formatCents(data.actual_revenue_per_hour_cents)}{t('/hr')}
             </span>
           </div>
         </div>
@@ -952,6 +977,8 @@ function PrinterUtilizationCard({ utilization }: { utilization: PrinterUtilizati
 }
 
 function PrinterPreparationCard({ preparation }: { preparation: PrinterPreparationAnalytics }) {
+  const { t, i18n } = useTranslation('fleet')
+
   const formatSeconds = (seconds: number) => formatDuration(Math.max(0, Math.round(seconds)))
   const coverageLow = preparation.data_coverage_percent < 60
 
@@ -960,32 +987,32 @@ function PrinterPreparationCard({ preparation }: { preparation: PrinterPreparati
       <div className="flex flex-wrap items-start justify-between gap-3 mb-5">
         <div>
           <h3 className="text-sm font-semibold text-surface-400 uppercase tracking-wider flex items-center gap-2">
-            <Clock className="h-4 w-4" /> Preparação antes da impressão
+            <Clock className="h-4 w-4" /> {t("Preparation before printing")}
           </h3>
-          <p className="text-xs text-surface-500 mt-1">Tempo entre a primeira etapa do PRINT_START e a fase Printing.</p>
+          <p className="text-xs text-surface-500 mt-1">{t("Time from the first PRINT_START step to the Printing phase.")}</p>
         </div>
         <span className={cn('badge', coverageLow ? 'bg-amber-500/15 text-amber-300' : 'bg-emerald-500/15 text-emerald-300')}>
-          Cobertura {preparation.data_coverage_percent.toFixed(0)}% ({preparation.measured_jobs}/{preparation.total_jobs})
+          {t("Coverage")} {preparation.data_coverage_percent.toFixed(0)}% ({preparation.measured_jobs}/{preparation.total_jobs})
         </span>
       </div>
 
       {preparation.measured_jobs === 0 ? (
         <div className="rounded-lg border border-surface-700 bg-surface-900/50 p-4 text-sm text-surface-400">
-          Ainda não há impressões concluídas contendo a sequência completa de fases até <strong className="text-surface-200">Printing</strong>. As próximas impressões com M117 serão incluídas automaticamente.
+          {t('No completed print jobs yet contain the full phase sequence up to Printing. New print jobs with M117 will be included automatically.')}
         </div>
       ) : (
         <div className="space-y-5">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <PreparationMetric label="Média por impressão" value={formatSeconds(preparation.avg_preparation_seconds)} emphasis />
-            <PreparationMetric label="Tempo total preparando" value={formatSeconds(preparation.total_preparation_seconds)} />
-            <PreparationMetric label="Percentual do tempo ativo" value={`${preparation.preparation_percent.toFixed(1)}%`} emphasis />
-            <PreparationMetric label="Tempo efetivamente imprimindo" value={formatSeconds(preparation.total_printing_seconds)} />
+            <PreparationMetric label={t("Average per print job")} value={formatSeconds(preparation.avg_preparation_seconds)} emphasis />
+            <PreparationMetric label={t("Total preparation time")} value={formatSeconds(preparation.total_preparation_seconds)} />
+            <PreparationMetric label={t("Percentage of active time")} value={`${preparation.preparation_percent.toFixed(1)}%`} emphasis />
+            <PreparationMetric label={t("Actual printing time")} value={formatSeconds(preparation.total_printing_seconds)} />
           </div>
 
           <div>
             <div className="flex justify-between text-xs mb-1.5">
-              <span className="text-amber-300">Preparação {preparation.preparation_percent.toFixed(1)}%</span>
-              <span className="text-emerald-300">Impressão {(100 - preparation.preparation_percent).toFixed(1)}%</span>
+              <span className="text-amber-300">{t("Preparation")} {preparation.preparation_percent.toFixed(1)}%</span>
+              <span className="text-emerald-300">{t("Print")} {(100 - preparation.preparation_percent).toFixed(1)}%</span>
             </div>
             <div className="h-3 flex rounded-full overflow-hidden bg-surface-800">
               <div className="bg-amber-500" style={{ width: `${Math.min(preparation.preparation_percent, 100)}%` }} />
@@ -995,20 +1022,20 @@ function PrinterPreparationCard({ preparation }: { preparation: PrinterPreparati
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
             <div>
-              <h4 className="text-sm font-medium text-surface-200 mb-3">Tempo por etapa</h4>
+              <h4 className="text-sm font-medium text-surface-200 mb-3">{t("Time per step")}</h4>
               <div className="space-y-3">
                 {preparation.phases.map(phase => (
-                  <div key={phase.phase}>
+                  <div key={t(phase.phase, { defaultValue: phase.phase })}>
                     <div className="flex justify-between gap-3 text-sm mb-1">
-                      <span className="text-surface-300 truncate" title={phase.phase}>{phase.phase}</span>
-                      <span className="text-surface-400 whitespace-nowrap">média {formatSeconds(phase.average_seconds)}</span>
+                      <span className="text-surface-300 truncate" title={t(phase.phase, { defaultValue: phase.phase })}>{t(phase.phase, { defaultValue: phase.phase })}</span>
+                      <span className="text-surface-400 whitespace-nowrap">{t("average")} {formatSeconds(phase.average_seconds)}</span>
                     </div>
                     <div className="h-2 rounded-full overflow-hidden bg-surface-800">
                       <div className="h-full bg-accent-500" style={{ width: `${Math.max(phase.percent, 2)}%` }} />
                     </div>
                     <div className="flex justify-between mt-1 text-[11px] text-surface-500">
-                      <span>{phase.occurrences} ocorrências</span>
-                      <span>{phase.percent.toFixed(1)}% da preparação</span>
+                      <span>{phase.occurrences} {t("occurrences")}</span>
+                      <span>{phase.percent.toFixed(1)}{t("% of preparation")}</span>
                     </div>
                   </div>
                 ))}
@@ -1016,18 +1043,18 @@ function PrinterPreparationCard({ preparation }: { preparation: PrinterPreparati
             </div>
 
             <div>
-              <h4 className="text-sm font-medium text-surface-200 mb-3">Impressões recentes mensuradas</h4>
+              <h4 className="text-sm font-medium text-surface-200 mb-3">{t("Recent measured print jobs")}</h4>
               <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
                 {preparation.recent_jobs.map(job => (
                   <div key={job.job_id} className="rounded-lg border border-surface-800 bg-surface-900/50 px-3 py-2.5">
                     <div className="flex items-center justify-between gap-3">
                       <div className="min-w-0">
                         <div className="text-sm text-surface-200 truncate">{job.job_name || job.job_id.slice(0, 8)}</div>
-                        <div className="text-xs text-surface-500">{new Date(job.started_at).toLocaleString()}</div>
+                        <div className="text-xs text-surface-500">{new Date(job.started_at).toLocaleString(i18n.resolvedLanguage)}</div>
                       </div>
                       <div className="text-right whitespace-nowrap">
                         <div className="text-sm font-medium text-amber-300">{formatSeconds(job.preparation_seconds)}</div>
-                        <div className="text-xs text-surface-500">{job.preparation_percent.toFixed(1)}% do tempo</div>
+                        <div className="text-xs text-surface-500">{job.preparation_percent.toFixed(1)}{t("% of time")}</div>
                       </div>
                     </div>
                   </div>
@@ -1038,7 +1065,7 @@ function PrinterPreparationCard({ preparation }: { preparation: PrinterPreparati
 
           {coverageLow && (
             <div className="rounded-lg border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
-              A cobertura ainda é parcial porque trabalhos anteriores não possuem marcadores de fase completos. As médias ficam mais representativas conforme novas impressões são concluídas.
+              {t("Coverage is still partial because earlier print jobs lack complete phase markers. Averages become more representative as new print jobs finish.")}
             </div>
           )}
         </div>
@@ -1048,6 +1075,7 @@ function PrinterPreparationCard({ preparation }: { preparation: PrinterPreparati
 }
 
 function PreparationMetric({ label, value, emphasis = false }: { label: string; value: string; emphasis?: boolean }) {
+
   return (
     <div className="rounded-lg border border-surface-800 bg-surface-900/50 p-3">
       <div className="text-xs text-surface-500 mb-1">{label}</div>
@@ -1057,6 +1085,8 @@ function PreparationMetric({ label, value, emphasis = false }: { label: string; 
 }
 
 function PrinterROICard({ roi, printerId, purchasePriceCents }: { roi: PrinterROI; printerId: string; purchasePriceCents: number }) {
+  const { t } = useTranslation('fleet')
+
   const { formatCents, symbol } = useCurrency()
   const [editing, setEditing] = useState(false)
   const [value, setValue] = useState((purchasePriceCents / 100).toFixed(2))
@@ -1082,14 +1112,14 @@ function PrinterROICard({ roi, printerId, purchasePriceCents }: { roi: PrinterRO
     <div className="card p-5">
       <h3 className="text-sm font-semibold text-surface-400 uppercase tracking-wider mb-4 flex items-center gap-2">
         <Target className="h-4 w-4" />
-        ROI & Break-Even
+        {t("ROI & Break-Even")}
       </h3>
 
       {purchasePriceCents === 0 ? (
         <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/20">
-          <div className="text-sm text-amber-300 font-medium mb-2">Set Purchase Price</div>
+          <div className="text-sm text-amber-300 font-medium mb-2">{t("Set Purchase Price")}</div>
           <p className="text-xs text-surface-400 mb-3">
-            Enter the purchase price to track ROI and break-even.
+            {t("Enter the purchase price to track ROI and break-even.")}
           </p>
           <div className="flex items-center gap-2">
             <span className="text-surface-400">{symbol}</span>
@@ -1111,7 +1141,7 @@ function PrinterROICard({ roi, printerId, purchasePriceCents }: { roi: PrinterRO
               disabled={updatePrinter.isPending}
               className="btn btn-primary text-xs py-1 px-3"
             >
-              Save
+              {t("Save")}
             </button>
           </div>
         </div>
@@ -1120,12 +1150,12 @@ function PrinterROICard({ roi, printerId, purchasePriceCents }: { roi: PrinterRO
           {/* Break-even progress bar */}
           <div className="mb-4">
             <div className="flex items-center justify-between text-sm mb-1">
-              <span className="text-surface-400">Break-even Progress</span>
+              <span className="text-surface-400">{t("Break-even Progress")}</span>
               <span className={cn(
                 'font-medium',
                 roi.break_even_reached ? 'text-emerald-400' : 'text-surface-200'
               )}>
-                {roi.break_even_reached ? 'Reached!' : `${breakEvenProgress.toFixed(0)}%`}
+                {roi.break_even_reached ? t("Reached!") : `${breakEvenProgress.toFixed(0)}%`}
               </span>
             </div>
             <div className="h-3 bg-surface-800 rounded-full overflow-hidden">
@@ -1139,7 +1169,7 @@ function PrinterROICard({ roi, printerId, purchasePriceCents }: { roi: PrinterRO
             </div>
             {!roi.break_even_reached && roi.hours_to_break_even > 0 && (
               <p className="text-xs text-surface-500 mt-1">
-                ~{roi.hours_to_break_even.toFixed(0)}h remaining to break even
+                ~{roi.hours_to_break_even.toFixed(0)}{t("h remaining to break even")}
               </p>
             )}
           </div>
@@ -1147,7 +1177,7 @@ function PrinterROICard({ roi, printerId, purchasePriceCents }: { roi: PrinterRO
           {/* Stats grid */}
           <div className="space-y-2 text-sm">
             <div className="flex justify-between">
-              <span className="text-surface-400">Purchase Price</span>
+              <span className="text-surface-400">{t("Purchase Price")}</span>
               <div className="flex items-center gap-2">
                 {editing ? (
                   <>
@@ -1179,14 +1209,14 @@ function PrinterROICard({ roi, printerId, purchasePriceCents }: { roi: PrinterRO
                       onClick={() => setEditing(true)}
                       className="text-xs text-accent-400 hover:text-accent-300"
                     >
-                      Edit
+                      {t("Edit")}
                     </button>
                   </>
                 )}
               </div>
             </div>
             <div className="flex justify-between">
-              <span className="text-surface-400">Lifetime Profit</span>
+              <span className="text-surface-400">{t("Lifetime Profit")}</span>
               <span className={cn(
                 'font-medium',
                 roi.lifetime_profit_cents >= 0 ? 'text-emerald-400' : 'text-red-400'
@@ -1195,11 +1225,11 @@ function PrinterROICard({ roi, printerId, purchasePriceCents }: { roi: PrinterRO
               </span>
             </div>
             <div className="flex justify-between">
-              <span className="text-surface-400">Revenue/Hour</span>
+              <span className="text-surface-400">{t("Revenue/Hour")}</span>
               <span className="text-surface-200">{formatCents(roi.revenue_per_hour_cents)}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-surface-400">Net/Hour</span>
+              <span className="text-surface-400">{t("Net/Hour")}</span>
               <span className={cn(
                 roi.net_per_hour_cents >= 0 ? 'text-emerald-400' : 'text-red-400'
               )}>
@@ -1208,12 +1238,12 @@ function PrinterROICard({ roi, printerId, purchasePriceCents }: { roi: PrinterRO
             </div>
             <div className="border-t border-surface-700 pt-2 mt-2">
               <div className="flex justify-between">
-                <span className="text-surface-400">Total Print Hours</span>
+                <span className="text-surface-400">{t("Total Print Hours")}</span>
                 <span className="text-surface-200">{roi.total_printing_hours.toFixed(1)}h</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-surface-400">Printer Age</span>
-                <span className="text-surface-500">{(roi.printer_age_hours / 24).toFixed(0)} days</span>
+                <span className="text-surface-400">{t("Printer Age")}</span>
+                <span className="text-surface-500">{(roi.printer_age_hours / 24).toFixed(0)} {t("days")}</span>
               </div>
             </div>
           </div>
@@ -1224,6 +1254,8 @@ function PrinterROICard({ roi, printerId, purchasePriceCents }: { roi: PrinterRO
 }
 
 function PrinterHealthCard({ health }: { health: PrinterHealth }) {
+  const { t } = useTranslation('fleet')
+
   const { formatCents } = useCurrency()
   const failureCategories = Object.entries(health.failure_breakdown || {})
     .sort((a, b) => b[1] - a[1])
@@ -1244,13 +1276,13 @@ function PrinterHealthCard({ health }: { health: PrinterHealth }) {
     <div className="card p-5">
       <h3 className="text-sm font-semibold text-surface-400 uppercase tracking-wider mb-4 flex items-center gap-2">
         <Heart className="h-4 w-4" />
-        Health
+        {t("Health")}
       </h3>
 
       {/* Stats grid */}
       <div className="grid grid-cols-2 gap-3 mb-4">
         <div className="p-2 rounded bg-surface-800/50">
-          <div className="text-xs text-surface-500">Failure Rate</div>
+          <div className="text-xs text-surface-500">{t("Failure Rate")}</div>
           <div className={cn(
             'text-lg font-semibold',
             health.failure_rate < 10 ? 'text-emerald-400' :
@@ -1261,19 +1293,19 @@ function PrinterHealthCard({ health }: { health: PrinterHealth }) {
           </div>
         </div>
         <div className="p-2 rounded bg-surface-800/50">
-          <div className="text-xs text-surface-500">Avg Duration</div>
+          <div className="text-xs text-surface-500">{t("Avg Duration")}</div>
           <div className="text-lg font-semibold text-surface-200">
             {formatDuration(health.avg_job_duration_sec)}
           </div>
         </div>
         <div className="p-2 rounded bg-surface-800/50">
-          <div className="text-xs text-surface-500">Avg Cost/Job</div>
+          <div className="text-xs text-surface-500">{t("Avg Cost/Job")}</div>
           <div className="text-lg font-semibold text-surface-200">
             {formatCents(health.avg_cost_cents)}
           </div>
         </div>
         <div className="p-2 rounded bg-surface-800/50">
-          <div className="text-xs text-surface-500">Revenue</div>
+          <div className="text-xs text-surface-500">{t("Revenue")}</div>
           <div className="text-lg font-semibold text-emerald-400">
             {formatCents(health.total_revenue_cents)}
           </div>
@@ -1283,12 +1315,12 @@ function PrinterHealthCard({ health }: { health: PrinterHealth }) {
       {/* Failure breakdown */}
       {failureCategories.length > 0 ? (
         <div>
-          <div className="text-xs text-surface-500 mb-2">Failure Breakdown</div>
+          <div className="text-xs text-surface-500 mb-2">{t("Failure Breakdown")}</div>
           <div className="space-y-1.5">
             {failureCategories.map(([category, count]) => (
               <div key={category} className="flex items-center gap-2">
                 <span className="text-xs text-surface-400 w-20 truncate">
-                  {categoryLabels[category] || category}
+                  {t(categoryLabels[category] || category, { defaultValue: category })}
                 </span>
                 <div className="flex-1 h-2 bg-surface-800 rounded-full overflow-hidden">
                   <div
@@ -1303,15 +1335,15 @@ function PrinterHealthCard({ health }: { health: PrinterHealth }) {
         </div>
       ) : (
         <div className="flex items-center gap-2 text-surface-400 text-sm">
-          <span className="text-emerald-400">&#10003;</span> No failures recorded
+          <span className="text-emerald-400">&#10003;</span> {t("No failures recorded")}
         </div>
       )}
 
       {/* Job counts */}
       <div className="mt-3 pt-3 border-t border-surface-700 flex justify-between text-xs text-surface-500">
-        <span>{health.completed_jobs} completed</span>
-        <span>{health.failed_jobs} failed</span>
-        <span>{health.total_jobs} total</span>
+        <span>{health.completed_jobs} {t("completed")}</span>
+        <span>{health.failed_jobs} {t("failed")}</span>
+        <span>{health.total_jobs} {t("total")}</span>
       </div>
     </div>
   )
@@ -1320,6 +1352,8 @@ function PrinterHealthCard({ health }: { health: PrinterHealth }) {
 type PrinterHistoryItem = { type: 'job'; createdAt: string; item: PrintJob } | { type: 'queue'; createdAt: string; item: QueueItem }
 
 function PrinterHistory({ printerId }: { printerId: string }) {
+  const { t } = useTranslation('fleet')
+
   const { formatCents } = useCurrency()
   const queryClient = useQueryClient()
   const { data: stats } = usePrinterStats(printerId)
@@ -1381,7 +1415,7 @@ function PrinterHistory({ printerId }: { printerId: string }) {
       setConfirmDeleteJob(null)
       refreshHistory()
     } catch (err) {
-      setHistoryError(err instanceof Error ? err.message : 'Failed to delete queue history record')
+      setHistoryError(err instanceof Error ? err.message : t("Failed to delete queue history record"))
     }
   }
 
@@ -1396,7 +1430,7 @@ function PrinterHistory({ printerId }: { printerId: string }) {
       setConfirmDeleteJob(null)
       refreshHistory()
     } catch (err) {
-      setHistoryError(err instanceof Error ? err.message : 'Failed to delete print record')
+      setHistoryError(err instanceof Error ? err.message : t("Failed to delete print record"))
     }
   }
 
@@ -1411,7 +1445,7 @@ function PrinterHistory({ printerId }: { printerId: string }) {
       setConfirmClearHistory(false)
       refreshHistory()
     } catch (err) {
-      setHistoryError(err instanceof Error ? err.message : 'Failed to clear print history')
+      setHistoryError(err instanceof Error ? err.message : t("Failed to clear print history"))
     }
   }
 
@@ -1420,11 +1454,11 @@ function PrinterHistory({ printerId }: { printerId: string }) {
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-lg font-semibold text-surface-100 flex items-center gap-2">
           <History className="h-5 w-5 text-surface-400" />
-          Print History
+          {t("Print History")}
         </h2>
         {sortedJobs.length > 0 && (
           <button onClick={clearHistory} className="btn btn-secondary text-xs py-1 px-3">
-            {confirmClearHistory ? 'Confirm clear?' : 'Clear history'}
+            {confirmClearHistory ? t("Confirm clear?") : t("Clear history")}
           </button>
         )}
       </div>
@@ -1434,13 +1468,13 @@ function PrinterHistory({ printerId }: { printerId: string }) {
       {historyTotal > 0 && (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
           <div className="card p-4">
-            <div className="text-sm text-surface-500 mb-1">Total Prints</div>
+            <div className="text-sm text-surface-500 mb-1">{t("Total Prints")}</div>
             <div className="text-2xl font-semibold text-surface-100">
               {historyTotal}
             </div>
           </div>
           <div className="card p-4">
-            <div className="text-sm text-surface-500 mb-1">Success Rate</div>
+            <div className="text-sm text-surface-500 mb-1">{t("Success Rate")}</div>
             <div className="text-2xl font-semibold text-emerald-400">
               {(completedTotal + failedTotal) > 0
                 ? Math.round((completedTotal / (completedTotal + failedTotal)) * 100)
@@ -1448,13 +1482,13 @@ function PrinterHistory({ printerId }: { printerId: string }) {
             </div>
           </div>
           <div className="card p-4">
-            <div className="text-sm text-surface-500 mb-1">Material Used</div>
+            <div className="text-sm text-surface-500 mb-1">{t("Material Used")}</div>
             <div className="text-2xl font-semibold text-surface-100">
               {totalMaterialUsed.toFixed(0)}g
             </div>
           </div>
           <div className="card p-4">
-            <div className="text-sm text-surface-500 mb-1">Total Cost</div>
+            <div className="text-sm text-surface-500 mb-1">{t("Total Cost")}</div>
             <div className="text-2xl font-semibold text-emerald-400">
               {formatCents(totalCost)}
             </div>
@@ -1464,15 +1498,15 @@ function PrinterHistory({ printerId }: { printerId: string }) {
 
       {/* Job List */}
       {isLoading ? (
-        <div className="text-surface-500 text-sm">Loading print history...</div>
+        <div className="text-surface-500 text-sm">{t("Loading print history...")}</div>
       ) : sortedJobs.length === 0 ? (
         <div className="card p-8 text-center">
           <History className="h-12 w-12 mx-auto mb-3 text-surface-600" />
           <h3 className="text-lg font-medium text-surface-300 mb-2">
-            No print history
+            {t("No print history")}
           </h3>
           <p className="text-surface-500">
-            Print jobs for this printer will appear here
+            {t("Print jobs for this printer will appear here")}
           </p>
         </div>
       ) : (
@@ -1489,6 +1523,8 @@ function PrinterHistory({ printerId }: { printerId: string }) {
 }
 
 function QueueHistoryRow({ item, fmtJobDuration, onDelete, confirmDelete }: { item: QueueItem; fmtJobDuration: (startedAt?: string, completedAt?: string) => string; onDelete: (itemId: string) => void; confirmDelete: boolean }) {
+  const { t, i18n } = useTranslation('fleet')
+
   const queueItem = item.item
   const success = queueItem.status === 'done'
   return (
@@ -1501,7 +1537,7 @@ function QueueHistoryRow({ item, fmtJobDuration, onDelete, confirmDelete }: { it
           <div>
             <div className="font-medium text-surface-100">{queueItem.display_name || queueItem.file_name}</div>
             <div className="text-sm text-surface-500 flex flex-wrap items-center gap-2">
-              <span>{formatRelativeTime(queueItem.updated_at || queueItem.created_at)}</span>
+              <span>{new Date(queueItem.updated_at || queueItem.created_at).toLocaleString(i18n.resolvedLanguage)}</span>
               <span>·</span>
               <span>{queueItem.estimated_seconds ? formatDuration(queueItem.estimated_seconds) : fmtJobDuration(queueItem.created_at, queueItem.updated_at)}</span>
               {queueItem.filament_name && <><span>·</span><span>{queueItem.filament_name}</span></>}
@@ -1510,10 +1546,10 @@ function QueueHistoryRow({ item, fmtJobDuration, onDelete, confirmDelete }: { it
         </div>
         <div className="flex items-center gap-3">
           {queueItem.filament_grams != null && queueItem.filament_grams > 0 && <span className="text-sm text-surface-400">{queueItem.filament_grams.toFixed(1)}g</span>}
-          <span className={cn('badge', getStatusBadge(success ? 'completed' : 'failed'))}>{success ? 'success' : 'failed'}</span>
+          <span className={cn('badge', getStatusBadge(success ? 'completed' : 'failed'))}>{success ? t("success") : t("failed")}</span>
           <button onClick={() => onDelete(queueItem.id)} className={cn('rounded-lg border px-2 py-1 text-xs font-semibold transition-colors flex items-center gap-1', confirmDelete ? 'border-red-500/70 bg-red-500/20 text-red-300 hover:bg-red-500/30' : 'border-surface-700 bg-surface-800/50 text-surface-400 hover:text-red-300 hover:border-red-500/40')}>
             <Trash2 className="h-3 w-3" />
-            {confirmDelete ? 'Confirm' : 'Delete'}
+            {confirmDelete ? t("Confirm") : t("Delete")}
           </button>
         </div>
       </div>
@@ -1532,6 +1568,8 @@ function PrinterJobRow({
   onDelete: (jobId: string) => void
   confirmDelete: boolean
 }) {
+  const { t, i18n } = useTranslation('fleet')
+
   const { formatCents } = useCurrency()
   return (
     <div className="card p-4">
@@ -1562,10 +1600,10 @@ function PrinterJobRow({
 
           <div>
             <div className="font-medium text-surface-100">
-              {job.design_id ? `Job #${job.id.slice(0, 8)}` : 'Unknown'}
+              {job.design_id ? t("Print job #{{id}}", { id: job.id.slice(0, 8) }) : t("Unknown")}
             </div>
             <div className="text-sm text-surface-500 flex items-center gap-2">
-              <span>{formatRelativeTime(job.created_at)}</span>
+              <span>{new Date(job.created_at).toLocaleString(i18n.resolvedLanguage)}</span>
               {job.started_at && (
                 <>
                   <span>·</span>
@@ -1575,7 +1613,7 @@ function PrinterJobRow({
               {job.attempt_number > 1 && (
                 <>
                   <span>·</span>
-                  <span className="text-amber-400">Attempt #{job.attempt_number}</span>
+                  <span className="text-amber-400">{t("Attempt #")}{job.attempt_number}</span>
                 </>
               )}
             </div>
@@ -1602,13 +1640,13 @@ function PrinterJobRow({
             )}
           >
             {job.outcome?.success === false
-              ? 'failed'
+              ? t("Failed")
               : job.status === 'completed' && job.outcome?.success
-              ? 'success'
-              : job.status}
+              ? t("Success")
+              : t(PRINT_JOB_STATUS_LABELS[job.status] || job.status)}
           </span>
           <button onClick={() => onDelete(job.id)} className={cn('rounded-lg border px-2.5 py-1 text-xs font-semibold', confirmDelete ? 'border-red-500 bg-red-500/20 text-red-200' : 'border-red-500/40 bg-red-500/10 text-red-300 hover:bg-red-500/20')}>
-            {confirmDelete ? 'Confirm?' : 'Delete'}
+            {confirmDelete ? t("Confirm?") : t("Delete")}
           </button>
         </div>
       </div>
@@ -1622,6 +1660,8 @@ function PrinterJobRow({
 }
 
 function SpeedControls({ printerId, currentPercent, currentLevel, canSetFeedRate, canSetSpeedProfile, runControl, controlBusy }: { printerId: string; currentPercent?: number; currentLevel?: number; canSetFeedRate: boolean; canSetSpeedProfile: boolean; runControl: (name: string, action: () => Promise<unknown>) => Promise<void>; controlBusy: string }) {
+  const { t } = useTranslation('fleet')
+
   const [customPercent, setCustomPercent] = useState(String(currentPercent || 100))
 
   return (
@@ -1630,12 +1670,12 @@ function SpeedControls({ printerId, currentPercent, currentLevel, canSetFeedRate
         <div>
           <h3 className="text-sm font-semibold text-surface-200 flex items-center gap-2">
             <Gauge className="h-4 w-4 text-accent-400" />
-            Print speed
+            {t("Print speed")}
           </h3>
-          <p className="text-xs text-surface-500 mt-1">Adjust active print feed rate with M220. Use 100% to return to normal speed.</p>
+          <p className="text-xs text-surface-500 mt-1">{t("Adjust active print feed rate with M220. Use 100% to return to normal speed.")}</p>
         </div>
         <span className="badge bg-surface-800 text-surface-300">
-          {currentPercent ? `${currentPercent}%` : currentLevel ? SPEED_LABELS[currentLevel] || `Level ${currentLevel}` : '—'}
+          {currentPercent ? `${currentPercent}%` : currentLevel ? t(SPEED_LABELS[currentLevel] || 'Unknown') : '—'}
         </span>
       </div>
 
@@ -1650,25 +1690,27 @@ function SpeedControls({ printerId, currentPercent, currentLevel, canSetFeedRate
           </div>
           <div className="flex gap-2">
             <input type="number" min={25} max={200} value={customPercent} onChange={e => setCustomPercent(e.target.value)} className="input h-9" placeholder="25-200" />
-            <button disabled={!!controlBusy} onClick={() => runControl(`speed-${customPercent}`, () => printersApi.setFeedRate(printerId, Number(customPercent)))} className="btn btn-primary text-xs whitespace-nowrap disabled:cursor-not-allowed">Apply M220</button>
+            <button disabled={!!controlBusy} onClick={() => runControl(`speed-${customPercent}`, () => printersApi.setFeedRate(printerId, Number(customPercent)))} className="btn btn-primary text-xs whitespace-nowrap disabled:cursor-not-allowed">{t("Apply M220")}</button>
           </div>
         </div>
       ) : canSetSpeedProfile ? (
         <div className="grid grid-cols-4 gap-2">
           {[1, 2, 3, 4].map(level => (
             <button key={level} disabled={!!controlBusy} onClick={() => runControl(`speed-level-${level}`, () => printersApi.setPrintSpeed(printerId, level))} className={cn('rounded-lg border px-2 py-2 text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-60', currentLevel === level ? 'border-accent-500 bg-accent-500/20 text-accent-200' : 'border-surface-700 bg-surface-800/70 text-surface-300 hover:bg-surface-700')}>
-              {SPEED_LABELS[level]}
+              {t(SPEED_LABELS[level])}
             </button>
           ))}
         </div>
       ) : (
-        <div className="rounded-lg border border-surface-800 bg-surface-950/50 p-3 text-xs text-surface-500">Speed control unavailable for this printer protocol.</div>
+        <div className="rounded-lg border border-surface-800 bg-surface-950/50 p-3 text-xs text-surface-500">{t("Speed control unavailable for this printer protocol.")}</div>
       )}
     </div>
   )
 }
 
 function MacroCommands({ printerId, runControl, controlBusy, canRunGCode }: { printerId: string; runControl: (name: string, action: () => Promise<unknown>) => Promise<void>; controlBusy: string; canRunGCode: boolean }) {
+  const { t } = useTranslation('fleet')
+
   const [macros, setMacros] = useState<PrinterMacro[]>([])
   const [form, setForm] = useState({ title: '', command: '' })
   const [editingId, setEditingId] = useState<number | null>(null)
@@ -1682,8 +1724,8 @@ function MacroCommands({ printerId, runControl, controlBusy, canRunGCode }: { pr
   useEffect(() => {
     printersApi.listMacros()
       .then(setMacros)
-      .catch(err => setError(err instanceof Error ? err.message : 'Failed to load commands'))
-  }, [])
+      .catch(err => setError(err instanceof Error ? err.message : t("Failed to load commands")))
+  }, [t])
 
   const resetForm = () => {
     setForm({ title: '', command: '' })
@@ -1706,7 +1748,7 @@ function MacroCommands({ printerId, runControl, controlBusy, canRunGCode }: { pr
       resetForm()
       await loadMacros()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to save command')
+      setError(err instanceof Error ? err.message : t("Failed to save command"))
     }
   }
 
@@ -1723,16 +1765,16 @@ function MacroCommands({ printerId, runControl, controlBusy, canRunGCode }: { pr
       if (editingId === id) resetForm()
       await loadMacros()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete command')
+      setError(err instanceof Error ? err.message : t("Failed to delete command"))
     }
   }
 
   return (
     <div className="space-y-3">
       <div className="space-y-2">
-        {!canRunGCode && <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-300">G-code commands are unavailable for this printer protocol.</div>}
+        {!canRunGCode && <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-300">{t("G-code commands are unavailable for this printer protocol.")}</div>}
         {macros.length === 0 ? (
-          <div className="rounded-lg border border-surface-800 bg-surface-900/40 p-3 text-sm text-surface-500">Nenhum comando cadastrado.</div>
+          <div className="rounded-lg border border-surface-800 bg-surface-900/40 p-3 text-sm text-surface-500">{t("No commands saved.")}</div>
         ) : macros.map(macro => (
           <div key={macro.id} className="rounded-lg border border-surface-800 bg-surface-900/40 p-3">
             <div className="flex items-start justify-between gap-3">
@@ -1741,9 +1783,9 @@ function MacroCommands({ printerId, runControl, controlBusy, canRunGCode }: { pr
                 <div className="mt-1 font-mono text-xs text-surface-400 break-all">{macro.command}</div>
               </div>
               <div className="flex flex-shrink-0 gap-1.5">
-                <button disabled={!!controlBusy || !canRunGCode} onClick={() => runControl(`macro-${macro.id}`, () => printersApi.runMacro(printerId, macro.command))} className="btn btn-primary text-xs disabled:cursor-not-allowed">Executar</button>
-                <button disabled={!!controlBusy} onClick={() => editMacro(macro)} className="btn btn-secondary text-xs disabled:cursor-not-allowed">Editar</button>
-                <button disabled={!!controlBusy} onClick={() => deleteMacro(macro.id)} className="rounded-lg border border-red-500/40 bg-red-500/10 px-2.5 py-1 text-xs font-semibold text-red-300 hover:bg-red-500/20 disabled:cursor-not-allowed">Excluir</button>
+                <button disabled={!!controlBusy || !canRunGCode} onClick={() => runControl(`macro-${macro.id}`, () => printersApi.runMacro(printerId, macro.command))} className="btn btn-primary text-xs disabled:cursor-not-allowed">{t("Run")}</button>
+                <button disabled={!!controlBusy} onClick={() => editMacro(macro)} className="btn btn-secondary text-xs disabled:cursor-not-allowed">{t("Edit")}</button>
+                <button disabled={!!controlBusy} onClick={() => deleteMacro(macro.id)} className="rounded-lg border border-red-500/40 bg-red-500/10 px-2.5 py-1 text-xs font-semibold text-red-300 hover:bg-red-500/20 disabled:cursor-not-allowed">{t("Delete")}</button>
               </div>
             </div>
           </div>
@@ -1752,12 +1794,12 @@ function MacroCommands({ printerId, runControl, controlBusy, canRunGCode }: { pr
 
       <div className="rounded-lg border border-surface-800 bg-surface-900/30 p-3 space-y-2">
         <div className="grid grid-cols-1 gap-2">
-          <input value={form.title} onChange={e => setForm(prev => ({ ...prev, title: e.target.value }))} className="input" placeholder="Título do comando" />
-          <input value={form.command} onChange={e => setForm(prev => ({ ...prev, command: e.target.value }))} className="input font-mono" placeholder="Comando, ex: PAUSE" />
+          <input value={form.title} onChange={e => setForm(prev => ({ ...prev, title: e.target.value }))} className="input" placeholder={t("Command title")} />
+          <input value={form.command} onChange={e => setForm(prev => ({ ...prev, command: e.target.value }))} className="input font-mono" placeholder={t("Command, e.g. PAUSE")} />
         </div>
         <div className="flex flex-wrap gap-2">
-          <button onClick={saveMacro} disabled={!!controlBusy || !canRunGCode} className="btn btn-primary text-xs disabled:cursor-not-allowed">{editingId ? 'Salvar comando' : 'Adicionar comando'}</button>
-          {editingId && <button onClick={resetForm} disabled={!!controlBusy} className="btn btn-secondary text-xs disabled:cursor-not-allowed">Cancelar edição</button>}
+          <button onClick={saveMacro} disabled={!!controlBusy || !canRunGCode} className="btn btn-primary text-xs disabled:cursor-not-allowed">{editingId ? t("Save command") : t("Add command")}</button>
+          {editingId && <button onClick={resetForm} disabled={!!controlBusy} className="btn btn-secondary text-xs disabled:cursor-not-allowed">{t("Cancel editing")}</button>}
         </div>
       </div>
       {error && <div className="text-xs text-red-400">{error}</div>}
@@ -1771,16 +1813,16 @@ function MacroCommands({ printerId, runControl, controlBusy, canRunGCode }: { pr
                   <AlertTriangle className="h-7 w-7" />
                 </div>
                 <div>
-                  <h2 className="text-xl font-semibold text-red-200">Comando reservado</h2>
+                  <h2 className="text-xl font-semibold text-red-200">{t("Reserved command")}</h2>
                 </div>
               </div>
             </div>
             <div className="space-y-3 p-5 text-sm text-surface-300">
-              <p>O comando <span className="font-mono text-red-300">M112</span> já está embutido no botão vermelho de Emergência.</p>
-              <p>Não é necessário criar um comando customizado para ele.</p>
+              <p>{t("The command")} <span className="font-mono text-red-300">M112</span> {t("is already built into the red Emergency button.")}</p>
+              <p>{t("You do not need to create a custom command for it.")}</p>
             </div>
             <div className="flex justify-end gap-2 border-t border-surface-800 p-5">
-              <button onClick={() => setShowM112Warning(false)} className="btn btn-secondary cursor-pointer">Entendi</button>
+              <button onClick={() => setShowM112Warning(false)} className="btn btn-secondary cursor-pointer">{t("Understood")}</button>
             </div>
           </div>
         </div>
@@ -1790,6 +1832,8 @@ function MacroCommands({ printerId, runControl, controlBusy, canRunGCode }: { pr
 }
 
 function EmergencyStopModal({ printerName, onCancel, onConfirm, busy }: { printerName: string; onCancel: () => void; onConfirm: () => void; busy: boolean }) {
+  const { t } = useTranslation('fleet')
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
       <div className="w-full max-w-lg rounded-2xl border border-red-500/40 bg-surface-950 shadow-2xl">
@@ -1799,23 +1843,23 @@ function EmergencyStopModal({ printerName, onCancel, onConfirm, busy }: { printe
               <XCircle className="h-7 w-7" />
             </div>
             <div>
-              <h2 className="text-xl font-semibold text-red-200">Confirmar parada de emergência</h2>
+              <h2 className="text-xl font-semibold text-red-200">{t("Confirm emergency stop")}</h2>
               <p className="text-sm text-red-300/80">{printerName}</p>
             </div>
           </div>
         </div>
         <div className="space-y-3 p-5 text-sm text-surface-300">
-          <p>Tem certeza que deseja executar a parada de emergência?</p>
-          <p>Essa ação tenta interromper imediatamente a impressora. A impressão atual pode ser perdida, o estado da máquina pode exigir inspeção manual e o equipamento pode precisar ser reinicializado ou re-homed antes de voltar a operar.</p>
+          <p>{t("Are you sure you want to perform an emergency stop?")}</p>
+          <p>{t("This attempts to stop the printer immediately. The current print job may be lost. Inspect the machine manually; a restart or homing may be needed before operating again.")}</p>
           <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-amber-200">
-            Use apenas quando houver risco, falha crítica ou necessidade real de interromper a máquina imediatamente.
+            {t("Use only for danger, critical failure, or a real need to stop the machine immediately.")}
           </div>
         </div>
         <div className="flex justify-end gap-2 border-t border-surface-800 p-5">
-          <button onClick={onCancel} disabled={busy} className="btn btn-secondary cursor-pointer">Cancelar</button>
+          <button onClick={onCancel} disabled={busy} className="btn btn-secondary cursor-pointer">{t("Cancel")}</button>
           <button onClick={onConfirm} disabled={busy} className="inline-flex cursor-pointer items-center rounded-lg border border-red-500/70 bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-60">
             <XCircle className="h-4 w-4 mr-2" />
-            {busy ? 'Executando...' : 'Sim, parar agora'}
+            {busy ? t("Running...") : t("Yes, stop now")}
           </button>
         </div>
       </div>

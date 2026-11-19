@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Package, Plus, Clock, CheckCircle, Truck, XCircle, ChevronRight, RefreshCw } from 'lucide-react'
@@ -21,6 +22,9 @@ const sourceLabels: Record<OrderSource, string> = {
 }
 
 export function Orders() {
+  const { t, i18n } = useTranslation('commerce')
+  const locale = i18n.resolvedLanguage?.startsWith('en') ? 'en-US' : 'pt-BR'
+
   const [orders, setOrders] = useState<Order[]>([])
   const [loading, setLoading] = useState(true)
   const [statusFilter, setStatusFilter] = useState<OrderStatus | ''>('')
@@ -48,7 +52,7 @@ export function Orders() {
 
   const formatDate = (dateStr?: string) => {
     if (!dateStr) return '-'
-    return new Date(dateStr).toLocaleDateString()
+    return new Date(dateStr).toLocaleDateString(locale)
   }
 
   const getDueDateClass = (order: Order) => {
@@ -66,15 +70,16 @@ export function Orders() {
     <div className="p-6">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold">Orders</h1>
-          <p className="text-gray-600">Manage customer orders from all sources</p>
+          <h1 className="text-2xl font-bold">{t("Orders")}</h1>
+          <p className="text-gray-600">{t("Manage customer orders from all sources")}</p>
         </div>
         <button
           onClick={() => setShowCreateModal(true)}
           className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
         >
           <Plus className="w-4 h-4" />
-          New Order
+
+          {t("New Order")}
         </button>
       </div>
 
@@ -85,10 +90,10 @@ export function Orders() {
           onChange={e => setStatusFilter(e.target.value as OrderStatus | '')}
           className="input h-auto py-2 w-auto"
         >
-          <option value="">All Statuses</option>
+          <option value="">{t("All Statuses")}</option>
           {Object.entries(statusConfig).map(([status, config]) => (
             <option key={status} value={status}>
-              {config.label}
+              {t(config.label)}
             </option>
           ))}
         </select>
@@ -98,10 +103,10 @@ export function Orders() {
           onChange={e => setSourceFilter(e.target.value as OrderSource | '')}
           className="input h-auto py-2 w-auto"
         >
-          <option value="">All Sources</option>
+          <option value="">{t("All Sources")}</option>
           {Object.entries(sourceLabels).map(([source, label]) => (
             <option key={source} value={source}>
-              {label}
+              {t(label)}
             </option>
           ))}
         </select>
@@ -109,18 +114,19 @@ export function Orders() {
 
       {/* Orders list */}
       {loading ? (
-        <div className="text-center py-12 text-gray-500">Loading orders...</div>
+        <div className="text-center py-12 text-gray-500">{t("Loading orders...")}</div>
       ) : orders.length === 0 ? (
         <div className="text-center py-12">
           <Package className="w-12 h-12 mx-auto text-gray-400 mb-4" />
-          <h3 className="text-lg font-medium text-gray-900 mb-2">No orders yet</h3>
-          <p className="text-gray-500 mb-4">Create a manual order or sync from a marketplace</p>
+          <h3 className="text-lg font-medium text-gray-900 mb-2">{t("No orders yet")}</h3>
+          <p className="text-gray-500 mb-4">{t("Create a manual order or sync from a marketplace")}</p>
           <button
             onClick={() => setShowCreateModal(true)}
             className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
           >
             <Plus className="w-4 h-4" />
-            Create Order
+
+            {t("Create Order")}
           </button>
         </div>
       ) : (
@@ -129,22 +135,28 @@ export function Orders() {
             <thead className="bg-gray-50 border-b">
               <tr>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Customer
+
+                  {t("Customer")}
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Source
+
+                  {t("Source")}
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Status
+
+                  {t("Status")}
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Due Date
+
+                  {t("Due Date")}
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Items
+
+                  {t("Items")}
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Created
+
+                  {t("Created")}
                 </th>
                 <th className="px-4 py-3"></th>
               </tr>
@@ -160,7 +172,7 @@ export function Orders() {
                   </td>
                   <td className="px-4 py-4">
                     <span className="text-sm text-gray-600">
-                      {sourceLabels[order.source]}
+                      {t(sourceLabels[order.source])}
                     </span>
                     {order.source_order_id && (
                       <div className="text-xs text-gray-400">#{order.source_order_id}</div>
@@ -169,20 +181,20 @@ export function Orders() {
                   <td className="px-4 py-4">
                     <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${statusConfig[order.status].color}`}>
                       {statusConfig[order.status].icon}
-                      {statusConfig[order.status].label}
+                      {t(statusConfig[order.status].label)}
                     </span>
                   </td>
                   <td className={`px-4 py-4 text-sm ${getDueDateClass(order)}`}>
                     {formatDate(order.due_date)}
                   </td>
                   <td className="px-4 py-4 text-sm text-gray-600">
-                    {order.items?.length || 0} items
+                    {order.items?.length || 0}  {t("items")}
                   </td>
                   <td className="px-4 py-4 text-sm text-gray-500">
                     {formatDate(order.created_at)}
                   </td>
                   <td className="px-4 py-4">
-                    <Link
+                    <Link aria-label={t("Open details")}
                       to={`/orders/${order.id}`}
                       className="text-blue-600 hover:text-blue-700"
                     >
@@ -216,6 +228,8 @@ interface CreateOrderModalProps {
 }
 
 function CreateOrderModal({ onClose, onCreated }: CreateOrderModalProps) {
+  const { t } = useTranslation('commerce')
+
   const [customerName, setCustomerName] = useState('')
   const [customerEmail, setCustomerEmail] = useState('')
   const [dueDate, setDueDate] = useState('')
@@ -247,40 +261,43 @@ function CreateOrderModal({ onClose, onCreated }: CreateOrderModalProps) {
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
       <div className="bg-white rounded-lg shadow-xl w-full max-w-md p-6">
-        <h2 className="text-xl font-bold mb-4">Create New Order</h2>
+        <h2 className="text-xl font-bold mb-4">{t("Create New Order")}</h2>
 
         <form onSubmit={handleSubmit}>
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-surface-300 mb-1">
-                Customer Name *
+
+                {t("Customer Name *")}
               </label>
               <input
                 type="text"
                 value={customerName}
                 onChange={e => setCustomerName(e.target.value)}
                 className="input"
-                placeholder="John Doe"
+                placeholder={t("Customer name")}
                 required
               />
             </div>
 
             <div>
               <label className="block text-sm font-medium text-surface-300 mb-1">
-                Customer Email
+
+                {t("Customer Email")}
               </label>
               <input
                 type="email"
                 value={customerEmail}
                 onChange={e => setCustomerEmail(e.target.value)}
                 className="input"
-                placeholder="john@example.com"
+                placeholder={t("Customer email")}
               />
             </div>
 
             <div>
               <label className="block text-sm font-medium text-surface-300 mb-1">
-                Due Date
+
+                {t("Due Date")}
               </label>
               <input
                 type="datetime-local"
@@ -292,29 +309,31 @@ function CreateOrderModal({ onClose, onCreated }: CreateOrderModalProps) {
 
             <div>
               <label className="block text-sm font-medium text-surface-300 mb-1">
-                Priority
+
+                {t("Priority")}
               </label>
               <select
                 value={priority}
                 onChange={e => setPriority(Number(e.target.value))}
                 className="input"
               >
-                <option value={0}>Normal</option>
-                <option value={1}>High</option>
-                <option value={2}>Urgent</option>
+                <option value={0}>{t("Normal")}</option>
+                <option value={1}>{t("High")}</option>
+                <option value={2}>{t("Urgent")}</option>
               </select>
             </div>
 
             <div>
               <label className="block text-sm font-medium text-surface-300 mb-1">
-                Notes
+
+                {t("Notes")}
               </label>
               <textarea
                 value={notes}
                 onChange={e => setNotes(e.target.value)}
                 className="input"
                 rows={3}
-                placeholder="Optional notes..."
+                placeholder={t("Optional notes...")}
               />
             </div>
           </div>
@@ -325,14 +344,15 @@ function CreateOrderModal({ onClose, onCreated }: CreateOrderModalProps) {
               onClick={onClose}
               className="px-4 py-2 text-gray-600 hover:text-gray-800"
             >
-              Cancel
+
+              {t("Cancel")}
             </button>
             <button
               type="submit"
               disabled={!customerName.trim() || creating}
               className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {creating ? 'Creating...' : 'Create Order'}
+              {creating ? t("Creating...") : t("Create Order")}
             </button>
           </div>
         </form>

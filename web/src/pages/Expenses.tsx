@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import { useState, useCallback } from 'react'
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query'
 import {
@@ -21,7 +22,18 @@ import { cn, formatRelativeTime } from '../lib/utils'
 import { useCurrency } from '../hooks/useCurrency'
 import type { Expense, ExpenseCategory } from '../types'
 
+const displayLabels: Record<string, string> = {
+  marketplace: 'Marketplace', etsy: 'Etsy', website: 'Website', direct: 'Direct', other: 'Other',
+  manual: 'Manual', imported: 'Imported',
+  pending: 'Pending', in_progress: 'In Progress', completed: 'Completed', shipped: 'Shipped', cancelled: 'Cancelled',
+  draft: 'Draft', sent: 'Sent', accepted: 'Accepted', rejected: 'Rejected', expired: 'Expired',
+  confirmed: 'Confirmed', processing: 'Processing...', failed: 'Parse Failed', pending_review: 'Pending Review',
+  queued: 'Queued', printing: 'Printing', paused: 'Paused',
+}
+
 export default function Expenses() {
+  const { t } = useTranslation('commerce')
+
   const { currencyCode, formatCents } = useCurrency()
   const queryClient = useQueryClient()
   const [showUpload, setShowUpload] = useState(false)
@@ -75,10 +87,12 @@ export default function Expenses() {
       <div className="flex items-center justify-between mb-8">
         <div>
           <h1 className="text-3xl font-display font-bold text-surface-100">
-            Expenses
+
+            {t("Expenses")}
           </h1>
           <p className="text-surface-400 mt-1">
-            Track purchases and scan receipts
+
+            {t("Track purchases and scan receipts")}
           </p>
         </div>
         <button
@@ -86,26 +100,27 @@ export default function Expenses() {
           className="btn btn-primary"
         >
           <Upload className="h-4 w-4 mr-2" />
-          Upload Receipt
+
+          {t("Upload Receipt")}
         </button>
       </div>
 
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
         <div className="card p-4">
-          <div className="text-sm text-surface-500 mb-1">Total Expenses</div>
+          <div className="text-sm text-surface-500 mb-1">{t("Total Expenses")}</div>
           <div className="text-2xl font-semibold text-surface-100">
             {formatCents(totalExpenses)}
           </div>
         </div>
         <div className="card p-4">
-          <div className="text-sm text-surface-500 mb-1">Confirmed</div>
+          <div className="text-sm text-surface-500 mb-1">{t("Confirmed")}</div>
           <div className="text-2xl font-semibold text-emerald-400">
             {expenses.filter((e) => e.status === 'confirmed').length}
           </div>
         </div>
         <div className="card p-4">
-          <div className="text-sm text-surface-500 mb-1">Pending Review</div>
+          <div className="text-sm text-surface-500 mb-1">{t("Pending Review")}</div>
           <div className="text-2xl font-semibold text-amber-400">
             {pendingCount}
           </div>
@@ -114,28 +129,31 @@ export default function Expenses() {
 
       {excludedCurrencyCount > 0 && (
         <div className="mb-6 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-300">
-          {excludedCurrencyCount} confirmed expense{excludedCurrencyCount === 1 ? '' : 's'} in other currencies are shown below but excluded from {currencyCode} totals.
+          {t("{{count}} confirmed expenses in other currencies are listed below but excluded from {{currency}} totals.", { count: excludedCurrencyCount, currency: currencyCode })}
         </div>
       )}
 
       {/* Expenses List */}
       {isLoading ? (
-        <div className="text-surface-500">Loading expenses...</div>
+        <div className="text-surface-500">{t("Loading expenses...")}</div>
       ) : expenses.length === 0 ? (
         <div className="card p-8 text-center">
           <Receipt className="h-12 w-12 mx-auto mb-3 text-surface-600" />
           <h3 className="text-lg font-medium text-surface-300 mb-2">
-            No expenses yet
+
+            {t("No expenses yet")}
           </h3>
           <p className="text-surface-500 mb-4">
-            Upload a receipt to start tracking expenses
+
+            {t("Upload a receipt to start tracking expenses")}
           </p>
           <button
             onClick={() => setShowUpload(true)}
             className="btn btn-primary"
           >
             <Upload className="h-4 w-4 mr-2" />
-            Upload Receipt
+
+            {t("Upload Receipt")}
           </button>
         </div>
       ) : (
@@ -171,7 +189,7 @@ export default function Expenses() {
 
                 <div>
                   <div className="font-medium text-surface-100">
-                    {expense.vendor || (expense.status === 'rejected' ? 'Parse Failed' : 'Processing...')}
+                    {expense.vendor || (expense.status === 'rejected' ? t("Parse Failed") : t("Processing..."))}
                   </div>
                   <div className="text-sm text-surface-500 flex items-center gap-2">
                     <span>{formatRelativeTime(expense.occurred_at)}</span>
@@ -192,7 +210,7 @@ export default function Expenses() {
                               : 'text-red-400'
                           )}
                         >
-                          {expense.confidence}% confidence
+                          {expense.confidence}{t("% confidence")}
                         </span>
                       </>
                     )}
@@ -211,7 +229,7 @@ export default function Expenses() {
                     {formatCents(expense.total_cents, expense.currency)}
                   </div>
                   <div className="text-xs text-surface-500">
-                    {expense.status}
+                    {t(displayLabels[expense.status] || expense.status)}
                   </div>
                 </div>
 
@@ -222,7 +240,8 @@ export default function Expenses() {
                       className="btn btn-secondary text-xs py-1 px-2"
                     >
                       <Eye className="h-3 w-3 mr-1" />
-                      Review
+
+                      {t("Review")}
                     </button>
                   )}
                   {(expense.status === 'rejected' || (expense.status === 'pending' && !expense.vendor)) && (
@@ -236,10 +255,11 @@ export default function Expenses() {
                       ) : (
                         <RotateCcw className="h-3 w-3 mr-1" />
                       )}
-                      Retry
+
+                      {t("Retry")}
                     </button>
                   )}
-                  <button
+                  <button aria-label={t("Delete")}
                     onClick={() => deleteExpense.mutate(expense.id)}
                     className="btn btn-ghost text-xs py-1 px-2 text-red-400 hover:text-red-300"
                   >
@@ -288,6 +308,8 @@ function ReceiptUploadModal({
   onClose: () => void
   onSuccess: () => void
 }) {
+  const { t } = useTranslation('commerce')
+
   const [file, setFile] = useState<File | null>(null)
   const [uploading, setUploading] = useState(false)
   const [dragOver, setDragOver] = useState(false)
@@ -302,7 +324,8 @@ function ReceiptUploadModal({
       await expensesApi.uploadReceipt(file)
       onSuccess()
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Upload failed'
+      console.error(err)
+      const msg = t("Upload failed. Select a receipt and try again.")
       setUploadError(msg)
     } finally {
       setUploading(false)
@@ -326,9 +349,10 @@ function ReceiptUploadModal({
       <div className="card w-full max-w-md p-6">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-xl font-semibold text-surface-100">
-            Upload Receipt
+
+            {t("Upload Receipt")}
           </h2>
-          <button onClick={onClose} className="text-surface-400 hover:text-surface-200">
+          <button aria-label={t("Close")} onClick={onClose} className="text-surface-400 hover:text-surface-200">
             <X className="h-5 w-5" />
           </button>
         </div>
@@ -369,10 +393,12 @@ function ReceiptUploadModal({
               <div>
                 <Upload className="h-10 w-10 mx-auto mb-2 text-surface-500" />
                 <p className="text-surface-300">
-                  Drop receipt here or click to upload
+
+                  {t("Drop receipt here or click to upload")}
                 </p>
                 <p className="text-surface-500 text-sm">
-                  Supports images and PDFs
+
+                  {t("Supports images and PDFs")}
                 </p>
               </div>
             )}
@@ -380,8 +406,8 @@ function ReceiptUploadModal({
         </div>
 
         <p className="text-sm text-surface-500 mt-4">
-          AI will automatically extract vendor, items, and totals from your receipt.
-          Filament purchases can be added to your spool inventory.
+
+          {t("AI will automatically extract vendor, items, and totals from your receipt. Filament purchases can be added to your spool inventory.")}
         </p>
 
         {uploadError && (
@@ -392,14 +418,15 @@ function ReceiptUploadModal({
 
         <div className="flex justify-end gap-3 mt-6">
           <button onClick={onClose} className="btn btn-ghost">
-            Cancel
+
+            {t("Cancel")}
           </button>
           <button
             onClick={handleUpload}
             disabled={!file || uploading}
             className="btn btn-primary"
           >
-            {uploading ? 'Uploading...' : 'Upload & Parse'}
+            {uploading ? t("Uploading...") : t("Upload & Parse")}
           </button>
         </div>
       </div>
@@ -417,6 +444,9 @@ function ExpenseReviewModal({
   onClose: () => void
   onSuccess: () => void
 }) {
+  const { t, i18n } = useTranslation('commerce')
+  const locale = i18n.resolvedLanguage?.startsWith('en') ? 'en-US' : 'pt-BR'
+
   const { formatCents } = useCurrency()
   const { data: expense, isLoading } = useQuery({
     queryKey: ['expenses', expenseId],
@@ -479,7 +509,7 @@ function ExpenseReviewModal({
     return (
       <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
         <div className="card p-6">
-          <div className="text-surface-400">Loading...</div>
+          <div className="text-surface-400">{t("Loading...")}</div>
         </div>
       </div>
     )
@@ -493,9 +523,10 @@ function ExpenseReviewModal({
       <div className="card w-full max-w-2xl p-6 my-8">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-xl font-semibold text-surface-100">
-            Review Expense
+
+            {t("Review Expense")}
           </h2>
-          <button onClick={onClose} className="text-surface-400 hover:text-surface-200">
+          <button aria-label={t("Close")} onClick={onClose} className="text-surface-400 hover:text-surface-200">
             <X className="h-5 w-5" />
           </button>
         </div>
@@ -503,37 +534,37 @@ function ExpenseReviewModal({
         {/* Expense Summary */}
         <div className="grid grid-cols-2 gap-4 mb-6">
           <div>
-            <div className="text-sm text-surface-500">Vendor</div>
+            <div className="text-sm text-surface-500">{t("Vendor")}</div>
             <div className="font-medium text-surface-100">
-              {expense.vendor || 'Unknown'}
+              {expense.vendor || t("Unknown")}
             </div>
           </div>
           <div>
-            <div className="text-sm text-surface-500">Date</div>
+            <div className="text-sm text-surface-500">{t("Date")}</div>
             <div className="font-medium text-surface-100">
-              {new Date(expense.occurred_at).toLocaleDateString()}
+              {new Date(expense.occurred_at).toLocaleDateString(locale)}
             </div>
           </div>
           <div>
-            <div className="text-sm text-surface-500">Subtotal</div>
+            <div className="text-sm text-surface-500">{t("Subtotal")}</div>
             <div className="font-medium text-surface-100">
               {formatCents(expense.subtotal_cents, expense.currency)}
             </div>
           </div>
           <div>
-            <div className="text-sm text-surface-500">Tax</div>
+            <div className="text-sm text-surface-500">{t("Tax")}</div>
             <div className="font-medium text-surface-100">
               {formatCents(expense.tax_cents, expense.currency)}
             </div>
           </div>
           <div>
-            <div className="text-sm text-surface-500">Shipping</div>
+            <div className="text-sm text-surface-500">{t("Shipping")}</div>
             <div className="font-medium text-surface-100">
               {formatCents(expense.shipping_cents, expense.currency)}
             </div>
           </div>
           <div>
-            <div className="text-sm text-surface-500">Total</div>
+            <div className="text-sm text-surface-500">{t("Total")}</div>
             <div className="font-semibold text-emerald-400 text-lg">
               {formatCents(expense.total_cents, expense.currency)}
             </div>
@@ -542,7 +573,7 @@ function ExpenseReviewModal({
 
         {/* Line Items */}
         <div className="mb-6">
-          <h3 className="font-medium text-surface-100 mb-3">Line Items</h3>
+          <h3 className="font-medium text-surface-100 mb-3">{t("Line Items")}</h3>
           <div className="space-y-3">
             {expense.items?.map((item) => {
               const decision = itemDecisions[item.id] || { createSpool: false }
@@ -559,7 +590,8 @@ function ExpenseReviewModal({
                         {item.description}
                       </div>
                       <div className="text-sm text-surface-500">
-                        Qty: {item.quantity} @ {formatCents(item.unit_price_cents, expense.currency)} each
+
+                        {t("Qty:")} {item.quantity} @ {formatCents(item.unit_price_cents, expense.currency)}  {t("each")}
                       </div>
                     </div>
                     <div className="text-right">
@@ -567,7 +599,7 @@ function ExpenseReviewModal({
                         {formatCents(item.total_price_cents, expense.currency)}
                       </div>
                       <div className="text-xs text-surface-500">
-                        {item.confidence}% confidence
+                        {item.confidence}{t("% confidence")}
                       </div>
                     </div>
                   </div>
@@ -620,21 +652,23 @@ function ExpenseReviewModal({
                           className="w-4 h-4 rounded border-surface-600 bg-surface-800 text-accent-500 focus:ring-accent-500"
                         />
                         <span className="text-sm text-surface-300">
-                          Add to spool inventory
+
+                          {t("Add to spool inventory")}
                         </span>
                       </label>
 
                       {decision.createSpool && (
                         <div className="mt-3 ml-7">
                           <label className="block text-sm text-surface-400 mb-1">
-                            Match to material
+
+                            {t("Match to material")}
                           </label>
                           <select
                             value={decision.materialId || ''}
                             onChange={(e) => setMaterialId(item.id, e.target.value)}
                             className="input text-sm"
                           >
-                            <option value="">Select or create new...</option>
+                            <option value="">{t("Select or create new...")}</option>
                             {materials.map((mat) => (
                               <option key={mat.id} value={mat.id}>
                                 {mat.name} - {mat.type.toUpperCase()} ({mat.color})
@@ -653,7 +687,8 @@ function ExpenseReviewModal({
 
         <div className="flex justify-end gap-3">
           <button onClick={onClose} className="btn btn-ghost">
-            Cancel
+
+            {t("Cancel")}
           </button>
           <button
             onClick={handleConfirm}
@@ -661,7 +696,7 @@ function ExpenseReviewModal({
             className="btn btn-primary"
           >
             <CheckCircle className="h-4 w-4 mr-2" />
-            {submitting ? 'Confirming...' : 'Confirm & Save'}
+            {submitting ? t("Confirming...") : t("Confirm & Save")}
           </button>
         </div>
       </div>

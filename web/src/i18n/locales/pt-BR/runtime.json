@@ -1,0 +1,10 @@
+{
+  "Authentication required. Enter your API token to connect.": "Autenticação necessária. Informe seu token de API para conectar.",
+  "Your API token was rejected. Enter a new token, or leave this empty to remove the saved token.": "Seu token de API foi recusado. Informe um novo token ou deixe em branco para remover o token salvo.",
+  "The server could not complete the request. Check the connection and try again.": "O servidor não conseguiu concluir a solicitação. Verifique a conexão e tente novamente.",
+  "A print job finished.": "Uma impressão foi concluída.",
+  "A print job failed.": "Uma impressão falhou.",
+  "A critical alert needs attention.": "Um alerta crítico precisa de atenção.",
+  "Upload failed": "Falha no envio",
+  "Thumbnail upload failed": "Falha ao enviar a miniatura"
+}

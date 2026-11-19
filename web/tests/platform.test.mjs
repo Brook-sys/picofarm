@@ -52,8 +52,8 @@ test('external URL validation and browser/desktop delegation', async () => {
 test('notifications default narrowly, deduplicate, respect opt-outs and never forward details', () => {
   const calls = []
   let saved = '{}'
-  const platform = { desktopRuntime: () => ({ notify: value => calls.push(value) }) }
-  const api = load('desktopNotifications', { require: () => platform, localStorage: { getItem: () => saved, setItem: (_, value) => { saved = value } } })
+  const platform = { desktopRuntime: () => ({ notify: value => calls.push(value) }), writeStorage: (key, value) => { saved = value; return true } }
+  const api = load('desktopNotifications', { require: name => name === '../i18n' ? { t: key => key } : platform, localStorage: { getItem: () => saved, setItem: (_, value) => { saved = value } } })
   const event = { type: 'job_completed', data: { id: '1', customer: 'PRIVATE', name: 'PRIVATE' } }
   api.notifyDesktopEvent(event); api.notifyDesktopEvent(event)
   api.notifyDesktopEvent({ type: 'job_started', data: { id: '2' } })
@@ -72,4 +72,53 @@ test('malformed desktop origins fail closed', () => {
     const api = load('platform', { window: browser({ apiBaseURL }) })
     assert.throws(() => api.resourceURL('/api/files/one'))
   }
+})
+
+test('blocked storage keeps URLs, requests and tokens usable for the session', () => {
+  const blocked = { getItem() { throw new Error('blocked') }, setItem() { throw new Error('blocked') }, removeItem() { throw new Error('blocked') } }
+  const api = load('platform', { window: { location: { origin: 'https://web.example' }, localStorage: blocked } })
+  assert.equal(api.readStorage('API_TOKEN'), null)
+  assert.equal(api.readApiToken(), null)
+  assert.equal(api.webSocketURL(), 'wss://web.example/ws')
+  assert.equal(api.writeApiToken('session-secret'), false)
+  assert.equal(api.readApiToken(), 'session-secret')
+  assert.equal(new URL(api.webSocketURL()).searchParams.get('token'), 'session-secret')
+  assert.equal(api.writeApiToken(null), false)
+  assert.equal(api.readApiToken(), null)
+})
+
+test('readable but unwritable storage cannot override a replacement or cleared session token', () => {
+  const api = load('platform', { window: { location: { origin: 'https://web.example' }, localStorage: {
+    getItem: () => 'rejected-token', setItem() { throw new Error('quota') }, removeItem() { throw new Error('blocked') },
+  } } })
+  assert.equal(api.readApiToken(), 'rejected-token')
+  assert.equal(api.writeApiToken('replacement'), false)
+  assert.equal(api.readApiToken(), 'replacement')
+  assert.equal(new URL(api.webSocketURL()).searchParams.get('token'), 'replacement')
+  assert.equal(api.writeApiToken(null), false)
+  assert.equal(api.readApiToken(), null)
+  assert.equal(new URL(api.webSocketURL()).searchParams.has('token'), false)
+})
+
+test('blocked notification storage preserves session opt-outs at delivery time', () => {
+  const calls = []
+  const platform = { desktopRuntime: () => ({ notify: value => calls.push(value) }), writeStorage: () => false }
+  const api = load('desktopNotifications', { require: name => name === '../i18n' ? { t: key => key } : platform, localStorage: { getItem: () => '{}' } })
+  api.saveNotificationPreferences({ finished: false, failed: false, critical: false })
+  api.notifyDesktopEvent({ type: 'job_completed', data: { id: 'disabled' } })
+  assert.equal(calls.length, 0)
+  assert.equal(api.notificationPreferences().finished, false)
+  api.saveNotificationPreferences({ finished: true, failed: false, critical: false })
+  api.notifyDesktopEvent({ type: 'job_completed', data: { id: 'enabled' } })
+  assert.equal(calls.length, 1)
+})
+
+test('working storage remains the source of truth for the API token', () => {
+  let saved = null
+  const api = load('platform', { window: { location: { origin: 'https://web.example' }, localStorage: { getItem: () => saved, setItem: (_, value) => { saved = value }, removeItem: () => { saved = null } } } })
+  assert.equal(api.writeApiToken('persisted'), true)
+  assert.equal(saved, 'persisted')
+  assert.equal(api.readApiToken(), 'persisted')
+  assert.equal(api.writeApiToken(null), true)
+  assert.equal(api.readApiToken(), null)
 })

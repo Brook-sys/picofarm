@@ -18,6 +18,7 @@ This document defines the current operational baseline for PicoFarm. Use it befo
 | HTTP API | `go-chi/chi` router in `internal/api` |
 | Database | SQLite via `github.com/glebarez/go-sqlite`, with the schema embedded in the binary (`internal/database/schema.sql`) applied on startup, plus idempotent in-Go compatibility migrations for older databases |
 | Frontend | React 19, TypeScript 6.0, Vite 8 (Rolldown), Tailwind CSS 4 |
+| Interface languages | `i18next` + `react-i18next`, bundled JSON catalogs for `en` and `pt-BR`; per-browser/device preference, see `docs/I18N.md` |
 | Realtime | WebSocket hub in `internal/realtime`; browser hook in `web/src/hooks/useWebSocket.ts` |
 | Integrations | Etsy, Squarespace, Bambu Lab, OctoPrint, Moonraker/Klipper |
 | Build | `Makefile`, `web/package.json`, `Dockerfile` |
@@ -75,9 +76,17 @@ Run the relevant subset during development. Before finishing a consolidation cyc
 ```sh
 git status --short
 go test -v ./...
+node --test web/tests/*.test.mjs
 cd web && npm run lint
 cd web && npm run build
 make build
+```
+
+Frontend copy/i18n checks (diagnostic, not proof of translation quality):
+
+```sh
+node --test web/tests/i18n-catalogs.test.mjs web/tests/i18n-source.test.mjs
+node web/scripts/audit-ui-text.mjs
 ```
 
 Desktop-specific validation (module internals are in `desktop/README.md`):
@@ -118,10 +127,18 @@ On the baseline collection pass for this plan:
 - `make build` passed.
 - `cd web && npm run lint` passed with zero errors.
 
+Current validation output after the interface-localization cycle (2026-11-19):
+
+- `node --test web/tests/*.test.mjs` passed: 57 tests, 0 failures (includes catalog parity/interpolation, literal-key coverage and currency/locale independence).
+- `GOTOOLCHAIN=auto go test ./...` passed (the pinned local toolchain is older than the `go.mod` minimum; `scripts/dev.sh test` with `GOTOOLCHAIN=local` fails on the version check, not on tests).
+- `cd web && npm run build` passed (`tsc -b` clean).
+- `cd web && npm run lint` passed with zero errors and 29 warnings.
+- Browser smoke visited 20 routes in each language: no JavaScript errors or raw interpolation placeholders. Browser-language fallback, blocked-storage language switching and keyboard skip-link focus passed. This does not cover every modal, mobile viewport, screen reader or native desktop workflow.
+
 Known validation warnings after the dependency compatibility update:
 
-- `cd web && npm run lint` passes with 27 React Hooks warnings; these remain follow-up work, not a clean lint baseline.
-- The production frontend main bundle is approximately 786 kB minified (162 kB gzip), above the configured 600 kB warning threshold.
+- `cd web && npm run lint` passes with 29 React Hooks warnings (27 before localization); the same pre-existing families remain (`set-state-in-effect`, declaration order and `exhaustive-deps` in effects that already used empty dependency arrays). This is follow-up work, not a clean lint baseline.
+- The production frontend main bundle grew from approximately 786 kB minified (162 kB gzip) to 1108.92 kB (255.88 kB gzip) after localization: both languages and every namespace are bundled eagerly in the entry chunk. This is a real loading-cost regression on slow links. Follow-up: load the inactive language and non-critical namespaces on demand, or split catalogs into separately cached chunks. Do not describe this as a neutral change.
 - TypeScript is held at `~6.0.3`: `typescript-eslint@8.73.0` requires TypeScript `<6.1.0`, so the proposed TypeScript 7 update cannot yet be adopted without an unsupported peer combination.
 - Vite 8 chunk groups use `rolldownOptions.output.codeSplitting.groups`; the former object-form `manualChunks` is not supported.
 

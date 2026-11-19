@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import { useState } from 'react'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import { useJobEvents } from '../hooks/usePrinters'
@@ -18,9 +19,11 @@ const EVENT_ICONS: Record<string, { icon: string; color: string }> = {
   retried:   { icon: '\u21BB', color: 'text-amber-400' },
 }
 
-function formatEventTime(dateString: string): string {
+const JOB_STATUS_LABELS: Record<string, string> = {"queued":"Queued","assigned":"Assigned","uploaded":"Uploaded","started":"Started","progress":"Progress","paused":"Paused","resumed":"Resumed","completed":"Completed","failed":"Failed","cancelled":"Cancelled","retried":"Retried","idle":"Idle","printing":"Printing","offline":"Offline","error":"Error","unassigned":"Unassigned","available":"Available","empty":"Empty","in_use":"In use","running":"Running","succeeded":"Succeeded","interrupted":"Interrupted","user":"User","system":"System","printer":"Printer","api":"Api"}
+
+function formatEventTime(dateString: string, dateLocale: string): string {
   const d = new Date(dateString)
-  return d.toLocaleString(undefined, {
+  return d.toLocaleString(dateLocale, {
     month: 'short',
     day: 'numeric',
     hour: '2-digit',
@@ -30,6 +33,8 @@ function formatEventTime(dateString: string): string {
 }
 
 function EventRow({ event }: { event: JobEvent }) {
+  const { t, i18n } = useTranslation('components')
+  const dateLocale = i18n.resolvedLanguage === 'pt-BR' ? 'pt-BR' : 'en-US'
   const config = EVENT_ICONS[event.event_type] || { icon: '?', color: 'text-surface-400' }
 
   return (
@@ -39,8 +44,8 @@ function EventRow({ event }: { event: JobEvent }) {
       </span>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
-          <span className="text-sm text-surface-200 capitalize">{event.event_type}</span>
-          <span className="text-xs text-surface-500">{event.actor_type}</span>
+          <span className="text-sm text-surface-200 capitalize">{t(JOB_STATUS_LABELS[event.event_type] || event.event_type)}</span>
+          <span className="text-xs text-surface-500">{t(JOB_STATUS_LABELS[event.actor_type] || event.actor_type)}</span>
         </div>
         {event.error_message && (
           <div className="text-xs text-red-400 mt-0.5">{event.error_message}</div>
@@ -50,21 +55,22 @@ function EventRow({ event }: { event: JobEvent }) {
         )}
       </div>
       <span className="text-xs text-surface-500 flex-shrink-0">
-        {formatEventTime(event.occurred_at)}
+        {formatEventTime(event.occurred_at, dateLocale)}
       </span>
     </div>
   )
 }
 
 export function JobEventTimeline({ jobId }: { jobId: string }) {
+  const { t } = useTranslation('components')
   const { data: events, isLoading } = useJobEvents(jobId)
 
   if (isLoading) {
-    return <div className="text-xs text-surface-500 py-2 pl-7">Loading events...</div>
+    return <div className="text-xs text-surface-500 py-2 pl-7">{t("Loading events...")}</div>
   }
 
   if (!events || events.length === 0) {
-    return <div className="text-xs text-surface-500 py-2 pl-7">No events recorded</div>
+    return <div className="text-xs text-surface-500 py-2 pl-7">{t("No events recorded")}</div>
   }
 
   // Filter out frequent progress events, keep first, last, and every ~25% milestone
@@ -86,6 +92,7 @@ export function JobEventTimeline({ jobId }: { jobId: string }) {
 }
 
 export function ExpandableJobEvents({ jobId }: { jobId: string }) {
+  const { t } = useTranslation('components')
   const [expanded, setExpanded] = useState(false)
 
   return (
@@ -95,8 +102,7 @@ export function ExpandableJobEvents({ jobId }: { jobId: string }) {
         className="flex items-center gap-1 text-xs text-surface-400 hover:text-surface-300 transition-colors"
       >
         {expanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
-        Event Timeline
-      </button>
+        {t("Event Timeline")}</button>
       {expanded && <JobEventTimeline jobId={jobId} />}
     </div>
   )

@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import { resourceURL } from '../lib/platform'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createRequestGate, paginateLibrary, slicePreviewKey, sortLibraryItems, type LibraryItem, type LibrarySortMode as SortMode } from '../lib/gcodeLibraryView'
@@ -11,7 +12,7 @@ import AppToast, { type AppToastState } from '../components/AppToast'
 import { MaterialBadge } from '../components/MaterialBadge'
 import { STLViewer3D } from '../components/STLViewer3D'
 import type { GCodeLibraryFile, STLLibraryFile, Tag } from '../types'
-import { cn, formatDuration } from '../lib/utils'
+import { cn, formatDuration, PRINTER_STATUS_LABELS } from '../lib/utils'
 import { renderSTLThumbnailWithTimeout } from '../lib/stlThumbnail'
 import {
   CANONICAL_MATERIAL_TYPES,
@@ -28,6 +29,7 @@ const slicerJobsTransport = {
 }
 
 export default function GCodeFiles() {
+  const { t } = useTranslation('library')
   const [files, setFiles] = useState<GCodeLibraryFile[]>([])
   const [stlFiles, setSTLFiles] = useState<STLLibraryFile[]>([])
   const [tags, setTags] = useState<Tag[]>([])
@@ -68,7 +70,7 @@ export default function GCodeFiles() {
     }
   }
 
-  const loadFiles = async () => {
+  const loadFiles = useCallback(async () => {
     const request = libraryRequests.current.begin()
     setLoading(true)
     setError('')
@@ -83,11 +85,11 @@ export default function GCodeFiles() {
       setSlicingSTL(current => current ? nextSTLs.find(file => file.id === current.id) || current : current)
       setViewingFile(current => current ? [...nextRootGCodes, ...nextSTLs.flatMap(file => file.gcodes || [])].find(file => file.id === current.id) || current : current)
     } catch (err) {
-      if (libraryRequests.current.isCurrent(request)) setError(err instanceof Error ? err.message : 'Failed to load files')
+      if (libraryRequests.current.isCurrent(request)) setError(err instanceof Error ? err.message : t("Failed to load files"))
     } finally {
       if (libraryRequests.current.isCurrent(request)) setLoading(false)
     }
-  }
+  }, [t])
 
   const showToast = (next: AppToastState) => {
     setToast(next)
@@ -100,7 +102,7 @@ export default function GCodeFiles() {
     const gate = libraryRequests.current
     loadFiles()
     return () => gate.invalidate()
-  }, [])
+  }, [loadFiles])
 
   // Filament label colors. Read as a plain setting so the badge renders the
   // colors configured in Settings → Other; the key matches the react-query key
@@ -134,20 +136,20 @@ export default function GCodeFiles() {
 
   const getFilterChips = () => {
     const chips: { label: string; onRemove: () => void }[] = []
-    if (material) chips.push({ label: `Material: ${material.toUpperCase()}`, onRemove: () => setMaterial('') })
-    if (printProfile) chips.push({ label: `Impressão: ${printProfile}`, onRemove: () => setPrintProfile('') })
-    if (filamentProfile) chips.push({ label: `Filamento: ${filamentProfile}`, onRemove: () => setFilamentProfile('') })
-    if (printerProfile) chips.push({ label: `Impressora: ${printerProfile}`, onRemove: () => setPrinterProfile('') })
-    if (nozzle) chips.push({ label: `Nozzle: ${nozzle}mm`, onRemove: () => setNozzle('') })
-    if (layer) chips.push({ label: `Layer: ${layer}mm`, onRemove: () => setLayer('') })
+    if (material) chips.push({ label: t("Material: {{name}}", { name: material.toUpperCase() }), onRemove: () => setMaterial('') })
+    if (printProfile) chips.push({ label: t("Print: {{name}}", { name: printProfile }), onRemove: () => setPrintProfile('') })
+    if (filamentProfile) chips.push({ label: t("Filament: {{name}}", { name: filamentProfile }), onRemove: () => setFilamentProfile('') })
+    if (printerProfile) chips.push({ label: t("Printer: {{name}}", { name: printerProfile }), onRemove: () => setPrinterProfile('') })
+    if (nozzle) chips.push({ label: t("Nozzle: {{name}}mm", { name: nozzle }), onRemove: () => setNozzle('') })
+    if (layer) chips.push({ label: t("Layer: {{name}}mm", { name: layer }), onRemove: () => setLayer('') })
     if (timeBucket) {
       const map: Record<string, string> = { lt_30: '<30m', '30_60': '30-60m', '1_3h': '1-3h', gt_3h: '3h+' }
-      chips.push({ label: `Tempo: ${map[timeBucket]}`, onRemove: () => setTimeBucket('') })
+      chips.push({ label: t("Time: {{name}}", { name: map[timeBucket] }), onRemove: () => setTimeBucket('') })
     }
-    if (usage) chips.push({ label: usage === 'never' ? 'Nunca impresso' : 'Já impresso', onRemove: () => setUsage('') })
+    if (usage) chips.push({ label: usage === 'never' ? t("Never printed") : t("Previously printed"), onRemove: () => setUsage('') })
     if (tagFilter) {
-      const tagName = tags.find(t => t.id === tagFilter)?.name || 'Tag'
-      chips.push({ label: `Tag: ${tagName}`, onRemove: () => setTagFilter('') })
+      const tagName = tags.find(t => t.id === tagFilter)?.name || t("Tag")
+      chips.push({ label: t("Tag: {{name}}", { name: tagName }), onRemove: () => setTagFilter('') })
     }
     return chips
   }
@@ -234,19 +236,19 @@ export default function GCodeFiles() {
         const file = selectedFiles[i]
         const progress = selectedFiles.length > 1 ? ` (${i + 1}/${selectedFiles.length})` : ''
         if (type === 'stl') {
-          setUploadStatus(`Generating preview${progress}...`)
+          setUploadStatus(t("Generating preview{{name}}...", { name: progress }))
           const thumbnail = await renderSTLThumbnailWithTimeout(file)
-          setUploadStatus(`Uploading STL${progress}...`)
+          setUploadStatus(t("Uploading STL{{name}}...", { name: progress }))
           await stlLibraryApi.upload(file, thumbnail)
         } else {
-          setUploadStatus(`Uploading G-code${progress}...`)
+          setUploadStatus(t("Uploading G-code{{name}}...", { name: progress }))
           await gcodeLibraryApi.upload(file, parentSTLId)
         }
       }
       await loadFiles()
-      showToast({ title: 'Upload complete', message: `${selectedFiles.length} file${selectedFiles.length === 1 ? '' : 's'} added to the library.`, tone: 'success' })
+      showToast({ title: t("Upload complete"), message: t("{{count}} file added to the library.", { count: selectedFiles.length }), tone: 'success' })
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Upload failed')
+      setError(err instanceof Error ? err.message : t("Upload failed"))
     } finally {
       setUploadStatus('')
       setUploading(false)
@@ -259,9 +261,9 @@ export default function GCodeFiles() {
     try {
       await gcodeLibraryApi.setParentSTL(gcodeId, parentSTLId)
       await loadFiles()
-      showToast({ title: parentSTLId ? 'G-code linked' : 'G-code moved to root', message: 'Library organization updated.', tone: 'success' })
+      showToast({ title: parentSTLId ? t("G-code linked") : t("G-code moved to root"), message: t("Library organization updated."), tone: 'success' })
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to move G-code')
+      setError(err instanceof Error ? err.message : t("Failed to move G-code"))
     } finally {
       setBusy('')
     }
@@ -272,7 +274,7 @@ export default function GCodeFiles() {
     try {
       await gcodeLibraryApi.setDefaultForSTL(id)
       await loadFiles()
-      showToast({ title: 'Default G-code updated', message: 'This STL will use the selected G-code by default.', tone: 'success' })
+      showToast({ title: t("Default G-code updated"), message: t("This STL will use the selected G-code by default."), tone: 'success' })
     } finally {
       setBusy('')
     }
@@ -283,9 +285,9 @@ export default function GCodeFiles() {
     setError('')
     try {
       await gcodeLibraryApi.addToQueue(id)
-      showToast({ title: 'Added to queue', message: 'G-code is ready in the print queue.', tone: 'success' })
+      showToast({ title: t("Added to queue"), message: t("G-code is ready in the print queue."), tone: 'success' })
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to add to queue')
+      setError(err instanceof Error ? err.message : t("Failed to add to queue"))
     } finally {
       setBusy('')
     }
@@ -297,9 +299,9 @@ export default function GCodeFiles() {
     try {
       const res = await gcodeLibraryApi.sendToPrinter(file.id, { printer_id: printerId, remote_path: remotePath, start_print: startPrint })
       setSendingFile(null)
-      showToast({ title: startPrint ? 'Print started' : 'Sent to printer', message: `Remote file: ${res.remote_path}`, tone: 'success' })
+      showToast({ title: startPrint ? t("Print started") : t("Sent to printer"), message: t("Remote file: {{name}}", { name: res.remote_path }), tone: 'success' })
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to send to printer')
+      setError(err instanceof Error ? err.message : t("Failed to send to printer"))
     } finally {
       setBusy('')
     }
@@ -314,7 +316,7 @@ export default function GCodeFiles() {
       await stlLibraryApi.update(file.id, { display_name: next })
       await loadFiles()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to rename file')
+      setError(err instanceof Error ? err.message : t("Failed to rename file"))
     } finally {
       setBusy('')
     }
@@ -325,15 +327,15 @@ export default function GCodeFiles() {
     setError('')
     try {
       const response = await fetch(resourceURL(`/api/files/${file.file_id}`))
-      if (!response.ok) throw new Error('Failed to load STL file')
+      if (!response.ok) throw new Error(t("Failed to load STL file"))
       const blob = await response.blob()
       const stlFile = new File([blob], file.file_name || `${file.display_name}.stl`, { type: 'model/stl' })
       const thumbnail = await renderSTLThumbnailWithTimeout(stlFile)
-      if (!thumbnail) throw new Error('Failed to generate thumbnail')
+      if (!thumbnail) throw new Error(t("Failed to generate thumbnail"))
       await stlLibraryApi.updateThumbnail(file.id, thumbnail)
       await loadFiles()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to generate STL thumbnail')
+      setError(err instanceof Error ? err.message : t("Failed to generate STL thumbnail"))
     } finally {
       setBusy('')
     }
@@ -351,7 +353,7 @@ export default function GCodeFiles() {
       setConfirmDelete('')
       await loadFiles()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete file')
+      setError(err instanceof Error ? err.message : t("Failed to delete file"))
     } finally {
       setBusy('')
     }
@@ -366,7 +368,7 @@ export default function GCodeFiles() {
       await gcodeLibraryApi.update(file.id, { display_name: next })
       await loadFiles()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to rename file')
+      setError(err instanceof Error ? err.message : t("Failed to rename file"))
     } finally {
       setBusy('')
     }
@@ -381,7 +383,7 @@ export default function GCodeFiles() {
       await loadTags()
       await loadFiles()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create tag')
+      setError(err instanceof Error ? err.message : t("Failed to create tag"))
     }
   }
 
@@ -392,7 +394,7 @@ export default function GCodeFiles() {
       await gcodeLibraryApi.addTag(fileId, tagId)
       await loadFiles()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to add tag')
+      setError(err instanceof Error ? err.message : t("Failed to add tag"))
     }
   }
 
@@ -402,7 +404,7 @@ export default function GCodeFiles() {
       await gcodeLibraryApi.removeTag(fileId, tagId)
       await loadFiles()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to remove tag')
+      setError(err instanceof Error ? err.message : t("Failed to remove tag"))
     }
   }
 
@@ -413,7 +415,7 @@ export default function GCodeFiles() {
       await stlLibraryApi.addTag(fileId, tagId)
       await loadFiles()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to add tag')
+      setError(err instanceof Error ? err.message : t("Failed to add tag"))
     }
   }
 
@@ -423,7 +425,7 @@ export default function GCodeFiles() {
       await stlLibraryApi.removeTag(fileId, tagId)
       await loadFiles()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to remove tag')
+      setError(err instanceof Error ? err.message : t("Failed to remove tag"))
     }
   }
 
@@ -439,7 +441,7 @@ export default function GCodeFiles() {
       setConfirmDelete('')
       await loadFiles()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete file')
+      setError(err instanceof Error ? err.message : t("Failed to delete file"))
     } finally {
       setBusy('')
     }
@@ -451,17 +453,16 @@ export default function GCodeFiles() {
         <div>
           <h1 className="text-3xl font-display font-bold text-surface-100 flex items-center gap-3">
             <FileCode className="h-8 w-8 text-accent-500" />
-            Files
-          </h1>
-          <p className="text-surface-400 mt-1">Organize STL source files with linked printable G-code files</p>
+            {t("Files")}</h1>
+          <p className="text-surface-400 mt-1">{t("Organize STL source files with linked printable G-code files")}</p>
         </div>
         <div className="flex gap-2">
           <label className="btn btn-secondary cursor-pointer">
-            <Upload className="h-4 w-4 mr-2" />{uploading && uploadStatus ? uploadStatus : 'Upload STL'}
+            <Upload className="h-4 w-4 mr-2" />{uploading && uploadStatus ? uploadStatus : t("Upload STL")}
             <input type="file" accept=".stl" multiple className="hidden" disabled={uploading} onChange={e => uploadFiles(e.target.files, 'stl')} />
           </label>
           <label className="btn btn-primary cursor-pointer">
-            <Upload className="h-4 w-4 mr-2" />{uploading && uploadStatus ? uploadStatus : 'Upload G-code'}
+            <Upload className="h-4 w-4 mr-2" />{uploading && uploadStatus ? uploadStatus : t("Upload G-code")}
             <input type="file" accept=".gcode" multiple className="hidden" disabled={uploading} onChange={e => uploadFiles(e.target.files, 'gcode')} />
           </label>
         </div>
@@ -470,32 +471,32 @@ export default function GCodeFiles() {
       <div className="card p-4 mb-4"><SlicerJobsPanel api={slicerJobsTransport} onOpenResult={id => {
         fileLibraryApi.get().then(library => {
           const file = [...(library.root_gcode_files || []), ...(library.stl_files || []).flatMap(stl => stl.gcodes || [])].find(gcode => gcode.id === id)
-          if (!file) throw new Error('Resultado removido ou não encontrado na biblioteca')
+          if (!file) throw new Error(t("Result removed or not found in library"))
           setViewingFile(file)
           void loadFiles()
-        }).catch(err => setError(err instanceof Error ? err.message : 'Resultado não encontrado na biblioteca'))
+        }).catch(err => setError(err instanceof Error ? err.message : t("Result not found in library")))
       }} /></div>
 
       <div className="card p-2 mb-4">
         <div className="grid grid-cols-[minmax(220px,1fr)_auto_auto_auto] gap-2 items-center">
           <div className="relative min-w-0">
             <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-surface-500" />
-            <input value={query} onChange={e => setQuery(e.target.value)} className="input input-with-icon py-1.5 text-sm h-9 w-full" placeholder="Buscar arquivos..." />
+            <input value={query} onChange={e => setQuery(e.target.value)} className="input input-with-icon py-1.5 text-sm h-9 w-full" placeholder={t("Search files...")} />
           </div>
 
           <button onClick={() => setShowFilters(!showFilters)} className={cn('btn btn-secondary h-9 text-sm px-3 whitespace-nowrap', (activeFilters > 0 || showFilters) && 'border-accent-500/40 text-accent-300')}>
-            Filtros{activeFilters > 0 ? ` (${activeFilters})` : ''}
+            {t("Filters")}{activeFilters > 0 ? ` (${activeFilters})` : ''}
           </button>
 
           <select value={sortMode} onChange={e => setSortMode(e.target.value as SortMode)} className="input w-36 py-1.5 text-xs h-9">
-            <option value="created_desc">Recentes</option>
-            <option value="created_asc">Antigos</option>
-            <option value="name_asc">A-Z</option>
-            <option value="name_desc">Z-A</option>
-            <option value="prints_desc">Usados</option>
-            <option value="time_asc">Tempo↑</option>
-            <option value="grams_asc">Filamento↑</option>
-            <option value="grams_desc">Filamento↓</option>
+            <option value="created_desc">{t("Newest")}</option>
+            <option value="created_asc">{t("Oldest")}</option>
+            <option value="name_asc">{t("A-Z")}</option>
+            <option value="name_desc">{t("Z-A")}</option>
+            <option value="prints_desc">{t("Used")}</option>
+            <option value="time_asc">{t("Time↑")}</option>
+            <option value="grams_asc">{t("Filament↑")}</option>
+            <option value="grams_desc">{t("Filament↓")}</option>
           </select>
 
           <div className="flex items-center border-l border-surface-800 pl-2">
@@ -508,35 +509,35 @@ export default function GCodeFiles() {
           <div className="flex gap-1.5 mt-2 overflow-x-auto whitespace-nowrap pb-0.5">
             {getFilterChips().map(chip => (
               <span key={chip.label} className="inline-flex items-center gap-1 rounded-full bg-surface-800 px-2 py-0.5 text-[11px] text-surface-300 shrink-0">
-                {chip.label}<button onClick={chip.onRemove} className="text-surface-500 hover:text-red-400">×</button>
+                {chip.label}<button onClick={chip.onRemove} className="text-surface-500 hover:text-red-400">{t("×")}</button>
               </span>
             ))}
-            <button onClick={clearFilters} className="text-[11px] text-surface-500 hover:text-surface-300 px-1 shrink-0">limpar tudo</button>
+            <button onClick={clearFilters} className="text-[11px] text-surface-500 hover:text-surface-300 px-1 shrink-0">{t("clear all")}</button>
           </div>
         )}
 
         {showFilters && (
           <div className="mt-2 pt-2 border-t border-surface-800">
             <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-9 gap-2">
-              <Field label="Material"><select value={material} onChange={e => setMaterial(e.target.value)} className="input text-xs py-1"><option value="">Any</option>{materialOptions.map(m => <option key={m} value={m}>{m.toUpperCase()}</option>)}</select></Field>
-              <Field label="Perfil de Impressão"><select value={printProfile} onChange={e => setPrintProfile(e.target.value)} className="input text-xs py-1"><option value="">Any</option>{printProfileOptions.map(p => <option key={p} value={p}>{p}</option>)}</select></Field>
-              <Field label="Perfil de Filamento"><select value={filamentProfile} onChange={e => setFilamentProfile(e.target.value)} className="input text-xs py-1"><option value="">Any</option>{filamentProfileOptions.map(p => <option key={p} value={p}>{p}</option>)}</select></Field>
-              <Field label="Perfil de Impressora"><select value={printerProfile} onChange={e => setPrinterProfile(e.target.value)} className="input text-xs py-1"><option value="">Any</option>{printerProfileOptions.map(p => <option key={p} value={p}>{p}</option>)}</select></Field>
-              <Field label="Tag"><select value={tagFilter} onChange={e => setTagFilter(e.target.value)} className="input text-xs py-1"><option value="">Any</option>{tags.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select></Field>
-              <Field label="Nozzle"><select value={nozzle} onChange={e => setNozzle(e.target.value)} className="input text-xs py-1"><option value="">Any</option>{nozzleOptions.map(n => <option key={n} value={String(n)}>{n}mm</option>)}</select></Field>
-              <Field label="Layer"><select value={layer} onChange={e => setLayer(e.target.value)} className="input text-xs py-1"><option value="">Any</option>{layerOptions.map(l => <option key={l} value={String(l)}>{l}mm</option>)}</select></Field>
-              <Field label="Tempo"><select value={timeBucket} onChange={e => setTimeBucket(e.target.value)} className="input text-xs py-1"><option value="">Any</option><option value="lt_30">&lt;30m</option><option value="30_60">30-60m</option><option value="1_3h">1-3h</option><option value="gt_3h">3h+</option></select></Field>
-              <Field label="Uso"><select value={usage} onChange={e => setUsage(e.target.value)} className="input text-xs py-1"><option value="">Any</option><option value="never">Nunca impresso</option><option value="printed">Já impresso</option></select></Field>
+              <Field label={t("Material")}><select value={material} onChange={e => setMaterial(e.target.value)} className="input text-xs py-1"><option value="">{t("Any")}</option>{materialOptions.map(m => <option key={m} value={m}>{m.toUpperCase()}</option>)}</select></Field>
+              <Field label={t("Print profile")}><select value={printProfile} onChange={e => setPrintProfile(e.target.value)} className="input text-xs py-1"><option value="">{t("Any")}</option>{printProfileOptions.map(p => <option key={p} value={p}>{p}</option>)}</select></Field>
+              <Field label={t("Filament profile")}><select value={filamentProfile} onChange={e => setFilamentProfile(e.target.value)} className="input text-xs py-1"><option value="">{t("Any")}</option>{filamentProfileOptions.map(p => <option key={p} value={p}>{p}</option>)}</select></Field>
+              <Field label={t("Printer profile")}><select value={printerProfile} onChange={e => setPrinterProfile(e.target.value)} className="input text-xs py-1"><option value="">{t("Any")}</option>{printerProfileOptions.map(p => <option key={p} value={p}>{p}</option>)}</select></Field>
+              <Field label={t("Tag")}><select value={tagFilter} onChange={e => setTagFilter(e.target.value)} className="input text-xs py-1"><option value="">{t("Any")}</option>{tags.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select></Field>
+              <Field label={t("Nozzle")}><select value={nozzle} onChange={e => setNozzle(e.target.value)} className="input text-xs py-1"><option value="">{t("Any")}</option>{nozzleOptions.map(n => <option key={n} value={String(n)}>{n}{t("mm")}</option>)}</select></Field>
+              <Field label={t("Layer")}><select value={layer} onChange={e => setLayer(e.target.value)} className="input text-xs py-1"><option value="">{t("Any")}</option>{layerOptions.map(l => <option key={l} value={String(l)}>{l}{t("mm")}</option>)}</select></Field>
+              <Field label={t("Time")}><select value={timeBucket} onChange={e => setTimeBucket(e.target.value)} className="input text-xs py-1"><option value="">{t("Any")}</option><option value="lt_30">{t("&lt;30m")}</option><option value="30_60">{t("30-60m")}</option><option value="1_3h">{t("1-3h")}</option><option value="gt_3h">{t("3h+")}</option></select></Field>
+              <Field label={t("Usage")}><select value={usage} onChange={e => setUsage(e.target.value)} className="input text-xs py-1"><option value="">{t("Any")}</option><option value="never">{t("Never printed")}</option><option value="printed">{t("Previously printed")}</option></select></Field>
             </div>
             <div className="flex justify-end gap-2 mt-2">
-              <button onClick={clearFilters} className="btn btn-ghost text-xs">Limpar</button>
-              <button onClick={() => setShowFilters(false)} className="btn btn-primary text-xs">Aplicar</button>
+              <button onClick={clearFilters} className="btn btn-ghost text-xs">{t("Clear")}</button>
+              <button onClick={() => setShowFilters(false)} className="btn btn-primary text-xs">{t("Apply")}</button>
             </div>
           </div>
         )}
       </div>
 
-      {['prints_desc', 'time_asc', 'grams_asc', 'grams_desc'].includes(sortMode) && <p className="mb-3 text-xs text-surface-400">Ordenação de STL usa o G-code marcado como padrão; sem padrão ou metadado, o grupo fica ao final. Filhos permanecem no grupo do STL.</p>}
+      {['prints_desc', 'time_asc', 'grams_asc', 'grams_desc'].includes(sortMode) && <p className="mb-3 text-xs text-surface-400">{t("STL sorting uses the default G-code; groups without a default or metadata appear last. Child files stay with their STL group.")}</p>}
       {error && <div className="mb-4 rounded-lg border border-red-500/20 bg-red-500/10 text-red-400 px-4 py-3 text-sm">{error}</div>}
       {toast && <AppToast toast={toast} onClose={() => setToast(null)} />}
       {viewingFile && <FileDetailsModal file={viewingFile} colors={materialColors} tags={tags} onCreateTag={createTag} onAddTag={addTagToFile} onRemoveTag={removeTagFromFile} onClose={() => setViewingFile(null)} />}
@@ -544,17 +545,17 @@ export default function GCodeFiles() {
       {viewingSTL && <STLDetailsModal key={viewingSTL.id} file={viewingSTL} tags={tags} onCreateTag={createTag} onAddTag={addTagToSTL} onRemoveTag={removeTagFromSTL} onClose={() => setViewingSTL(null)} onRetryThumbnail={() => retrySTLThumbnail(viewingSTL)} onSlice={() => setSlicingSTL(viewingSTL)} />}
       {slicingSTL && <SliceSTLModal key={slicingSTL.id} file={slicingSTL} onClose={() => setSlicingSTL(null)} onDone={() => { setSlicingSTL(null); loadFiles() }} />}
 
-      {loading ? <div className="text-surface-500">Loading files...</div> : libraryItems.length === 0 ? (
+      {loading ? <div className="text-surface-500">{t("Loading files...")}</div> : libraryItems.length === 0 ? (
         <div className="text-center py-16">
           <FileCode className="h-16 w-16 mx-auto mb-4 text-surface-600" />
-          <h3 className="text-xl font-semibold text-surface-300 mb-2">No stored files</h3>
-          <p className="text-surface-500">Upload STL source files and G-code files to build your library.</p>
+          <h3 className="text-xl font-semibold text-surface-300 mb-2">{t("No stored files")}</h3>
+          <p className="text-surface-500">{t("Upload STL source files and G-code files to build your library.")}</p>
         </div>
       ) : (
         <div onDragOver={e => e.preventDefault()} onDrop={e => { e.preventDefault(); const id = e.dataTransfer.getData('text/gcode-id'); if (id) setGCodeParent(id, null) }} className="rounded-xl border border-dashed border-surface-800 p-3">
           <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-sm font-semibold uppercase tracking-wider text-surface-400">Library files</h2>
-            <span className="text-xs text-surface-500">STL em azul · G-code em laranja · drop no vazio desvincula</span>
+            <h2 className="text-sm font-semibold uppercase tracking-wider text-surface-400">{t("Library files")}</h2>
+            <span className="text-xs text-surface-500">{t("STL in blue · G-code in orange · drop on empty space to unlink")}</span>
           </div>
           {viewMode === 'grid' ? (
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
@@ -565,7 +566,7 @@ export default function GCodeFiles() {
           ) : (
             <div className="card overflow-hidden">
               <div className="grid grid-cols-[56px_minmax(220px,1.7fr)_0.7fr_minmax(120px,1fr)_minmax(130px,1fr)_0.8fr_0.7fr_220px] gap-3 px-4 py-2 text-xs text-surface-500 border-b border-surface-800">
-                <span>Preview</span><span>Name</span><span>Type</span><span>Link</span><span>Material / Profile</span><span>Size / Time</span><span>Usage</span><span>Ações</span>
+                <span>{t("Preview")}</span><span>{t("Name")}</span><span>{t("Type")}</span><span>{t("Link")}</span><span>{t("Material / Profile")}</span><span>{t("Size / Time")}</span><span>{t("Usage")}</span><span>{t("Actions")}</span>
               </div>
               {visibleItems.map(item => item.type === 'stl'
                 ? <div key={`stl-group-${item.file.id}`}>
@@ -580,10 +581,10 @@ export default function GCodeFiles() {
 
       {libraryItems.length > pageSize && (
         <div className="flex items-center justify-between mt-4 text-sm text-surface-400">
-          <span>{visibleItems.length} de {libraryItems.length} grupos/arquivos · página {pagination.current} de {pagination.pages}</span>
+          <span>{t("{{visible}} of {{total}} groups/files · page {{current}} of {{pages}}", { visible: visibleItems.length, total: libraryItems.length, current: pagination.current, pages: pagination.pages })}</span>
           <div className="flex gap-2">
-            <button className="btn btn-secondary text-sm" disabled={pagination.current === 1} onClick={() => setPage(pagination.current - 1)}>Previous</button>
-            <button className="btn btn-secondary text-sm" disabled={pagination.current === pagination.pages} onClick={() => setPage(pagination.current + 1)}>Next</button>
+            <button className="btn btn-secondary text-sm" disabled={pagination.current === 1} onClick={() => setPage(pagination.current - 1)}>{t("Previous")}</button>
+            <button className="btn btn-secondary text-sm" disabled={pagination.current === pagination.pages} onClick={() => setPage(pagination.current + 1)}>{t("Next")}</button>
           </div>
         </div>
       )}
@@ -592,6 +593,7 @@ export default function GCodeFiles() {
 }
 
 function SliceSTLModal({ file, onClose, onDone }: { file: STLLibraryFile; onClose: () => void; onDone: () => void }) {
+  const { t } = useTranslation('library')
   const [profiles, setProfiles] = useState<Record<'printers' | 'presets' | 'filaments', Array<Record<string, unknown>>>>({ printers: [], presets: [], filaments: [] })
   const [form, setForm] = useState({ printer: '', preset: '', filament: '', arrange: true, orient: true, enable_support: false, brim_type: false, print_sequence_by_object: false, display_name: `${file.display_name || file.file_name}.gcode` })
   const [busy, setBusy] = useState('')
@@ -615,24 +617,24 @@ function SliceSTLModal({ file, onClose, onDone }: { file: STLLibraryFile; onClos
       setProfiles({ printers, presets, filaments })
       const defaults = config.default_profiles || {}
       setForm(current => ({ ...current, printer: defaults.printers || String(printers.find(p => p.default)?.name || printers[0]?.name || ''), preset: defaults.presets || String(presets.find(p => p.default)?.name || presets[0]?.name || ''), filament: defaults.filaments || String(filaments.find(p => p.default)?.name || filaments[0]?.name || '') }))
-    }).catch(err => { if (!ignore) setMessage(err instanceof Error ? err.message : 'Failed to load slicer profiles') })
+    }).catch(err => { if (!ignore) setMessage(err instanceof Error ? err.message : t("Failed to load slicer profiles")) })
     return () => { ignore = true; gate.invalidate() }
-  }, [])
+  }, [t])
 
   const generatePreview = async () => {
     const request = requestGate.current.begin()
     const requestedKey = currentPreviewKey
     setBusy('preview')
-    setMessage('Generating preview. Large models can take a while...')
+    setMessage(t("Generating preview. Large models can take a while..."))
     setPreviewResult(null)
     try {
       const result = await slicerApi.preview({ stl_file_id: file.id, printer: form.printer, preset: form.preset, filament: form.filament, arrange: form.arrange, orient: form.orient, enable_support: form.enable_support, brim_type: form.brim_type, print_sequence_by_object: form.print_sequence_by_object })
       if (!requestGate.current.isCurrent(request)) return
       setPreviewResult(result)
       setPreviewKey(requestedKey)
-      setMessage('Preview gerado para os parâmetros enviados.')
+      setMessage(t("Preview generated for the submitted parameters."))
     } catch (err) {
-      if (requestGate.current.isCurrent(request)) setMessage(err instanceof Error ? err.message : 'Failed to generate preview')
+      if (requestGate.current.isCurrent(request)) setMessage(err instanceof Error ? err.message : t("Failed to generate preview"))
     } finally {
       if (requestGate.current.isCurrent(request)) setBusy('')
     }
@@ -641,15 +643,15 @@ function SliceSTLModal({ file, onClose, onDone }: { file: STLLibraryFile; onClos
   const slice = async () => {
     const request = requestGate.current.begin()
     setBusy('slice')
-    setMessage('Enviando tarefa em segundo plano. Em caso de erro, tente novamente sem mudar os parâmetros para reutilizar a mesma chave.')
+    setMessage(t("Submitting a background job. If it fails, retry without changing parameters to reuse the same key."))
     try {
       const payload = { stl_file_id: file.id, ...form, export_type: 'gcode' }
       await slicerApi.submitJob(payload, slicerSubmissionKey(payload))
       if (!requestGate.current.isCurrent(request)) return
-      setMessage('Tarefa registrada. Acompanhe no painel da biblioteca.')
+      setMessage(t("Job registered. Follow it in the library panel."))
       onDone()
     } catch (err) {
-      if (requestGate.current.isCurrent(request)) setMessage(err instanceof Error ? err.message : 'Failed to slice STL')
+      if (requestGate.current.isCurrent(request)) setMessage(err instanceof Error ? err.message : t("Failed to slice STL"))
     } finally {
       if (requestGate.current.isCurrent(request)) setBusy('')
     }
@@ -658,21 +660,21 @@ function SliceSTLModal({ file, onClose, onDone }: { file: STLLibraryFile; onClos
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
       <div className="card p-6 w-full max-w-4xl max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between mb-4"><div><h2 className="text-xl font-semibold text-surface-100">Fatiar STL com Orca</h2><p className="text-sm text-surface-500 truncate">{file.display_name}</p></div><button onClick={closeModal} className="btn btn-ghost text-sm">Close</button></div>
+        <div className="flex items-center justify-between mb-4"><div><h2 className="text-xl font-semibold text-surface-100">{t("Slice STL with Orca")}</h2><p className="text-sm text-surface-500 truncate">{file.display_name}</p></div><button onClick={closeModal} className="btn btn-ghost text-sm">{t("Close")}</button></div>
         {message && <div className="mb-4 rounded-lg border border-surface-800 bg-surface-900/70 p-3 text-sm text-surface-300">{message}</div>}
-        {previewIsStale && <div role="status" className="mb-4 rounded-lg border border-amber-500/40 p-3 text-sm text-amber-300">Preview desatualizado — os parâmetros mudaram. Imagem e estimativas abaixo não são válidas para a configuração atual. Gere outro preview.</div>}
-        {busy && <p className="mb-3 text-xs text-surface-400">Fechar ignora a resposta nesta janela, mas não cancela o trabalho no servidor.</p>}
+        {previewIsStale && <div role="status" className="mb-4 rounded-lg border border-amber-500/40 p-3 text-sm text-amber-300">{t("Preview out of date — parameters changed. The image and estimates below are not valid for the current configuration. Generate another preview.")}</div>}
+        {busy && <p className="mb-3 text-xs text-surface-400">{t("Closing ignores the response in this window but does not cancel server work.")}</p>}
         <div className="grid gap-5 md:grid-cols-[1fr_340px]">
           <div className="space-y-4">
-            <label className="block"><span className="text-xs text-surface-500 mb-1 block">Printer profile</span><select className="input" value={form.printer} onChange={e => setForm({ ...form, printer: e.target.value })}>{profiles.printers.map(p => <option key={String(p.name)} value={String(p.name)}>{String(p.name)}</option>)}</select></label>
-            <label className="block"><span className="text-xs text-surface-500 mb-1 block">Preset profile</span><select className="input" value={form.preset} onChange={e => setForm({ ...form, preset: e.target.value })}>{profiles.presets.map(p => <option key={String(p.name)} value={String(p.name)}>{String(p.name)}</option>)}</select></label>
-            <label className="block"><span className="text-xs text-surface-500 mb-1 block">Filament profile</span><select className="input" value={form.filament} onChange={e => setForm({ ...form, filament: e.target.value })}>{profiles.filaments.map(p => <option key={String(p.name)} value={String(p.name)}>{String(p.name)}</option>)}</select></label>
-            <label className="block"><span className="text-xs text-surface-500 mb-1 block">G-code name</span><input className="input" value={form.display_name} onChange={e => setForm({ ...form, display_name: e.target.value })} /></label>
-            <div className="rounded-xl border border-surface-800 bg-surface-900/60 p-4"><div className="text-xs font-medium text-surface-400 mb-3">Opções de fatiamento</div><div className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm"><label className="inline-flex items-center gap-3 cursor-pointer select-none"><input type="checkbox" className="sr-only peer" checked={form.arrange} onChange={e => setForm({ ...form, arrange: e.target.checked })} /><span className="relative inline-flex h-6 w-11 shrink-0 items-center rounded-full bg-surface-700 transition-colors peer-focus-visible:ring-2 peer-focus-visible:ring-accent-500/50 peer-checked:bg-accent-500 after:absolute after:left-0.5 after:top-0.5 after:h-5 after:w-5 after:rounded-full after:bg-white after:shadow after:transition-all peer-checked:after:translate-x-5" /><span>Auto-arrange</span></label><label className="inline-flex items-center gap-3 cursor-pointer select-none"><input type="checkbox" className="sr-only peer" checked={form.orient} onChange={e => setForm({ ...form, orient: e.target.checked })} /><span className="relative inline-flex h-6 w-11 shrink-0 items-center rounded-full bg-surface-700 transition-colors peer-focus-visible:ring-2 peer-focus-visible:ring-accent-500/50 peer-checked:bg-accent-500 after:absolute after:left-0.5 after:top-0.5 after:h-5 after:w-5 after:rounded-full after:bg-white after:shadow after:transition-all peer-checked:after:translate-x-5" /><span>Auto-orient</span></label><label className="inline-flex items-center gap-3 cursor-pointer select-none"><input type="checkbox" className="sr-only peer" checked={form.enable_support} onChange={e => setForm({ ...form, enable_support: e.target.checked })} /><span className="relative inline-flex h-6 w-11 shrink-0 items-center rounded-full bg-surface-700 transition-colors peer-focus-visible:ring-2 peer-focus-visible:ring-accent-500/50 peer-checked:bg-accent-500 after:absolute after:left-0.5 after:top-0.5 after:h-5 after:w-5 after:rounded-full after:bg-white after:shadow after:transition-all peer-checked:after:translate-x-5" /><span>Suporte</span></label><label className="inline-flex items-center gap-3 cursor-pointer select-none"><input type="checkbox" className="sr-only peer" checked={form.brim_type} onChange={e => setForm({ ...form, brim_type: e.target.checked })} /><span className="relative inline-flex h-6 w-11 shrink-0 items-center rounded-full bg-surface-700 transition-colors peer-focus-visible:ring-2 peer-focus-visible:ring-accent-500/50 peer-checked:bg-accent-500 after:absolute after:left-0.5 after:top-0.5 after:h-5 after:w-5 after:rounded-full after:bg-white after:shadow after:transition-all peer-checked:after:translate-x-5" /><span>Borda</span></label><label className="inline-flex items-center gap-3 cursor-pointer select-none"><input type="checkbox" className="sr-only peer" checked={form.print_sequence_by_object} onChange={e => setForm({ ...form, print_sequence_by_object: e.target.checked })} /><span className="relative inline-flex h-6 w-11 shrink-0 items-center rounded-full bg-surface-700 transition-colors peer-focus-visible:ring-2 peer-focus-visible:ring-accent-500/50 peer-checked:bg-accent-500 after:absolute after:left-0.5 after:top-0.5 after:h-5 after:w-5 after:rounded-full after:bg-white after:shadow after:transition-all peer-checked:after:translate-x-5" /><span>Sequência por objeto</span></label>{form.print_sequence_by_object && <div className="col-span-2 mt-1 text-xs text-amber-400">Atenção: Pode causar colisão</div>}</div></div>
-            <div className="flex gap-2"><button className="btn btn-secondary" disabled={!!busy || !form.printer || !form.preset || !form.filament} onClick={generatePreview} type="button">{busy === 'preview' ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Gerando preview...</> : 'Gerar Preview'}</button><button className="btn btn-primary" disabled={!!busy || !form.printer || !form.preset || !form.filament} onClick={slice} type="button">{busy === 'slice' ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Gerando G-code...</> : 'Gerar em segundo plano'}</button></div>
-            <p className="text-xs text-surface-400">Você pode navegar após o envio. Repetir os mesmos parâmetros consulta a mesma tarefa, inclusive após falha de rede; para refazer, remova explicitamente o registro encerrado do histórico. Mudar parâmetros pode criar outra tarefa. Após recarregar a página, confira o painel antes de reenviar: a chave local não sobrevive ao reload.</p>
+            <label className="block"><span className="text-xs text-surface-500 mb-1 block">{t("Printer profile")}</span><select className="input" value={form.printer} onChange={e => setForm({ ...form, printer: e.target.value })}>{profiles.printers.map(p => <option key={String(p.name)} value={String(p.name)}>{String(p.name)}</option>)}</select></label>
+            <label className="block"><span className="text-xs text-surface-500 mb-1 block">{t("Preset profile")}</span><select className="input" value={form.preset} onChange={e => setForm({ ...form, preset: e.target.value })}>{profiles.presets.map(p => <option key={String(p.name)} value={String(p.name)}>{String(p.name)}</option>)}</select></label>
+            <label className="block"><span className="text-xs text-surface-500 mb-1 block">{t("Filament profile")}</span><select className="input" value={form.filament} onChange={e => setForm({ ...form, filament: e.target.value })}>{profiles.filaments.map(p => <option key={String(p.name)} value={String(p.name)}>{String(p.name)}</option>)}</select></label>
+            <label className="block"><span className="text-xs text-surface-500 mb-1 block">{t("G-code name")}</span><input className="input" value={form.display_name} onChange={e => setForm({ ...form, display_name: e.target.value })} /></label>
+            <div className="rounded-xl border border-surface-800 bg-surface-900/60 p-4"><div className="text-xs font-medium text-surface-400 mb-3">{t("Slicing options")}</div><div className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm"><label className="inline-flex items-center gap-3 cursor-pointer select-none"><input type="checkbox" className="sr-only peer" checked={form.arrange} onChange={e => setForm({ ...form, arrange: e.target.checked })} /><span className="relative inline-flex h-6 w-11 shrink-0 items-center rounded-full bg-surface-700 transition-colors peer-focus-visible:ring-2 peer-focus-visible:ring-accent-500/50 peer-checked:bg-accent-500 after:absolute after:left-0.5 after:top-0.5 after:h-5 after:w-5 after:rounded-full after:bg-white after:shadow after:transition-all peer-checked:after:translate-x-5" /><span>{t("Auto-arrange")}</span></label><label className="inline-flex items-center gap-3 cursor-pointer select-none"><input type="checkbox" className="sr-only peer" checked={form.orient} onChange={e => setForm({ ...form, orient: e.target.checked })} /><span className="relative inline-flex h-6 w-11 shrink-0 items-center rounded-full bg-surface-700 transition-colors peer-focus-visible:ring-2 peer-focus-visible:ring-accent-500/50 peer-checked:bg-accent-500 after:absolute after:left-0.5 after:top-0.5 after:h-5 after:w-5 after:rounded-full after:bg-white after:shadow after:transition-all peer-checked:after:translate-x-5" /><span>{t("Auto-orient")}</span></label><label className="inline-flex items-center gap-3 cursor-pointer select-none"><input type="checkbox" className="sr-only peer" checked={form.enable_support} onChange={e => setForm({ ...form, enable_support: e.target.checked })} /><span className="relative inline-flex h-6 w-11 shrink-0 items-center rounded-full bg-surface-700 transition-colors peer-focus-visible:ring-2 peer-focus-visible:ring-accent-500/50 peer-checked:bg-accent-500 after:absolute after:left-0.5 after:top-0.5 after:h-5 after:w-5 after:rounded-full after:bg-white after:shadow after:transition-all peer-checked:after:translate-x-5" /><span>{t("Support")}</span></label><label className="inline-flex items-center gap-3 cursor-pointer select-none"><input type="checkbox" className="sr-only peer" checked={form.brim_type} onChange={e => setForm({ ...form, brim_type: e.target.checked })} /><span className="relative inline-flex h-6 w-11 shrink-0 items-center rounded-full bg-surface-700 transition-colors peer-focus-visible:ring-2 peer-focus-visible:ring-accent-500/50 peer-checked:bg-accent-500 after:absolute after:left-0.5 after:top-0.5 after:h-5 after:w-5 after:rounded-full after:bg-white after:shadow after:transition-all peer-checked:after:translate-x-5" /><span>{t("Brim")}</span></label><label className="inline-flex items-center gap-3 cursor-pointer select-none"><input type="checkbox" className="sr-only peer" checked={form.print_sequence_by_object} onChange={e => setForm({ ...form, print_sequence_by_object: e.target.checked })} /><span className="relative inline-flex h-6 w-11 shrink-0 items-center rounded-full bg-surface-700 transition-colors peer-focus-visible:ring-2 peer-focus-visible:ring-accent-500/50 peer-checked:bg-accent-500 after:absolute after:left-0.5 after:top-0.5 after:h-5 after:w-5 after:rounded-full after:bg-white after:shadow after:transition-all peer-checked:after:translate-x-5" /><span>{t("Print by object")}</span></label>{form.print_sequence_by_object && <div className="col-span-2 mt-1 text-xs text-amber-400">{t("Warning: May cause a collision")}</div>}</div></div>
+            <div className="flex gap-2"><button className="btn btn-secondary" disabled={!!busy || !form.printer || !form.preset || !form.filament} onClick={generatePreview} type="button">{busy === 'preview' ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />{t("Generating preview...")}</> : t("Generate preview")}</button><button className="btn btn-primary" disabled={!!busy || !form.printer || !form.preset || !form.filament} onClick={slice} type="button">{busy === 'slice' ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />{t("Generating G-code...")}</> : t("Generate in background")}</button></div>
+            <p className="text-xs text-surface-400">{t("You can navigate after submitting. Repeating the same parameters looks up the same job, even after a network failure; to rerun it, explicitly remove the finished history entry. Changing parameters may create another job. After reloading the page, check the panel before resubmitting: the local key does not survive a reload.")}</p>
           </div>
-          <div className="rounded-xl border border-surface-800 bg-surface-900/70 p-3"><div className="mb-2 text-sm font-medium text-surface-200">Preview</div>{busy === 'preview' ? <SlicerLoadingState title="Gerando preview" description="Preparando o modelo e renderizando a prévia. Arquivos grandes podem demorar alguns minutos." /> : busy === 'slice' ? <SlicerLoadingState title="Gerando G-code" description="Registrando tarefa no PicoFarm. Fechar esta janela não cancela uma tarefa já aceita; acompanhe o painel da biblioteca." /> : previewResult ? <div className="space-y-3"><img src={`data:image/png;base64,${previewResult.thumbnail}`} alt="Preview" className="rounded border border-surface-800" /><div className="text-xs space-y-1 text-surface-300"><div>Tempo: {Math.floor(previewResult.printTime / 3600)}h {Math.floor((previewResult.printTime % 3600) / 60)}m</div><div>Filamento: {previewResult.filamentUsedG.toFixed(1)} g / {previewResult.filamentUsedMm.toFixed(0)} mm</div>{previewResult.usesSupport && <div className="text-emerald-400">Usa suporte</div>}{form.print_sequence_by_object && <div className="text-amber-400">Atenção: Pode causar colisão</div>}</div></div> : <div className="flex h-64 items-center justify-center rounded-lg border border-dashed border-surface-700 bg-surface-950/40 text-sm text-surface-600">Clique em Gerar Preview</div>}</div>
+          <div className="rounded-xl border border-surface-800 bg-surface-900/70 p-3"><div className="mb-2 text-sm font-medium text-surface-200">{t("Preview")}</div>{busy === 'preview' ? <SlicerLoadingState title={t("Generating preview")} description={t("Preparing the model and rendering the preview. Large files may take a few minutes.")} /> : busy === 'slice' ? <SlicerLoadingState title={t("Generating G-code")} description={t("Registering the job in PicoFarm. Closing this window does not cancel an accepted job; follow it in the library panel.")} /> : previewResult ? <div className="space-y-3"><img src={`data:image/png;base64,${previewResult.thumbnail}`} alt={t("Preview")} className="rounded border border-surface-800" /><div className="text-xs space-y-1 text-surface-300"><div>{t("Time:")}{' '}{Math.floor(previewResult.printTime / 3600)}{t("h")}{Math.floor((previewResult.printTime % 3600) / 60)}{t("m")}</div><div>{t("Filament:")}{' '}{previewResult.filamentUsedG.toFixed(1)} {t("g /")}{previewResult.filamentUsedMm.toFixed(0)} {t("mm")}</div>{previewResult.usesSupport && <div className="text-emerald-400">{t("Uses support")}</div>}{form.print_sequence_by_object && <div className="text-amber-400">{t("Warning: May cause a collision")}</div>}</div></div> : <div className="flex h-64 items-center justify-center rounded-lg border border-dashed border-surface-700 bg-surface-950/40 text-sm text-surface-600">{t("Click Generate preview")}</div>}</div>
         </div>
       </div>
     </div>
@@ -693,30 +695,37 @@ function SlicerLoadingState({ title, description }: { title: string; description
 }
 
 function STLDetailsModal({ file, tags, onCreateTag, onAddTag, onRemoveTag, onClose, onSlice }: { file: STLLibraryFile; tags: Tag[]; onCreateTag: (name: string, color?: string) => void; onAddTag: (fileId: string, tagId: string) => void; onRemoveTag: (fileId: string, tagId: string) => void; onClose: () => void; onRetryThumbnail: () => void; onSlice: () => void }) {
+  const { t, i18n } = useTranslation('library')
+  const formatSTLDate = (value?: string | null) => {
+    if (!value) return '—'
+    const date = new Date(value)
+    return Number.isNaN(date.getTime()) ? '—' : date.toLocaleString(i18n.resolvedLanguage)
+  }
+
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
       <div className="card p-6 w-full max-w-3xl max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-semibold text-surface-100">STL Details</h2>
-          <button onClick={onClose} className="btn btn-ghost text-sm">Close</button>
+          <h2 className="text-xl font-semibold text-surface-100">{t("STL Details")}</h2>
+          <button onClick={onClose} className="btn btn-ghost text-sm">{t("Close")}</button>
         </div>
         <div className="grid gap-5 md:grid-cols-[280px_1fr]">
           <div className="h-72 rounded-xl border border-surface-800 bg-surface-800 flex flex-col overflow-hidden">
             <STLViewer3D url={resourceURL(`/api/files/${file.file_id}`)} />
           </div>
           <div className="space-y-4">
-            <div><span className="text-xs text-surface-500">Display name</span><div className="text-surface-100 text-lg font-medium">{file.display_name}</div></div>
-            <div><span className="text-xs text-surface-500">Source file</span><div className="text-surface-100 break-all">{file.file_name}</div></div>
+            <div><span className="text-xs text-surface-500">{t("Display name")}</span><div className="text-surface-100 text-lg font-medium">{file.display_name}</div></div>
+            <div><span className="text-xs text-surface-500">{t("Source file")}</span><div className="text-surface-100 break-all">{file.file_name}</div></div>
             <div className="grid grid-cols-2 gap-3">
-              <div><span className="text-xs text-surface-500">Size</span><div className="text-surface-100">{formatBytes(file.size_bytes)}</div></div>
-              <div><span className="text-xs text-surface-500">Linked G-code</span><div className="text-surface-100">{file.gcodes?.length || 0}</div></div>
-              <div><span className="text-xs text-surface-500">Created</span><div className="text-surface-100">{new Date(file.created_at).toLocaleString()}</div></div>
-              <div><span className="text-xs text-surface-500">Updated</span><div className="text-surface-100">{new Date(file.updated_at).toLocaleString()}</div></div>
+              <div><span className="text-xs text-surface-500">{t("Size")}</span><div className="text-surface-100">{formatBytes(file.size_bytes)}</div></div>
+              <div><span className="text-xs text-surface-500">{t("Linked G-code")}</span><div className="text-surface-100">{file.gcodes?.length || 0}</div></div>
+              <div><span className="text-xs text-surface-500">{t("Created")}</span><div className="text-surface-100">{formatSTLDate(file.created_at)}</div></div>
+              <div><span className="text-xs text-surface-500">{t("Updated")}</span><div className="text-surface-100">{formatSTLDate(file.updated_at)}</div></div>
             </div>
             <FileTagManager itemId={file.id} currentTags={file.tags} tags={tags} onCreateTag={onCreateTag} onAddTag={onAddTag} onRemoveTag={onRemoveTag} />
             <div className="flex gap-2">
-              <button onClick={onSlice} className="btn btn-primary w-fit">Fatiar</button>
-              <a href={resourceURL(`/api/files/${file.file_id}`)} target="_blank" rel="noreferrer" className="btn btn-secondary w-fit">Open STL</a>
+              <button onClick={onSlice} className="btn btn-primary w-fit">{t("Slice")}</button>
+              <a href={resourceURL(`/api/files/${file.file_id}`)} target="_blank" rel="noreferrer" className="btn btn-secondary w-fit">{t("Open STL")}</a>
             </div>
           </div>
         </div>
@@ -727,6 +736,7 @@ function STLDetailsModal({ file, tags, onCreateTag, onAddTag, onRemoveTag, onClo
 }
 
 function STLFileCard({ file, busy, confirmDelete, onRename, onDelete, onDropGCode, onUploadGCode, onViewGCode, onRenameGCode, onAddGCode, onSendGCode, onUnlinkGCode, onMakeDefaultGCode, onRetryThumbnail, onViewSTL, onSlice, isGCodeMatch }: { file: STLLibraryFile; busy: boolean; confirmDelete: boolean; onRename: (name: string) => void; onDelete: () => void; onDropGCode: (gcodeId: string) => void; onUploadGCode: (files?: FileList | null) => void; onViewGCode: (file: GCodeLibraryFile) => void; onRenameGCode: (file: GCodeLibraryFile, name: string) => void; onAddGCode: (id: string) => void; onSendGCode: (file: GCodeLibraryFile) => void; onUnlinkGCode: (id: string) => void; onMakeDefaultGCode: (id: string) => void; onRetryThumbnail: () => void; onViewSTL: () => void; onSlice: () => void; isGCodeMatch: (file: GCodeLibraryFile) => boolean }) {
+  const { t } = useTranslation('library')
   const [editingName, setEditingName] = useState(false)
   const [expanded, setExpanded] = useState(false)
   const [dragOver, setDragOver] = useState(false)
@@ -741,7 +751,7 @@ function STLFileCard({ file, busy, confirmDelete, onRename, onDelete, onDropGCod
     <div onDragOver={e => { e.preventDefault(); setDragOver(true) }} onDragLeave={() => setDragOver(false)} onDrop={e => { e.preventDefault(); e.stopPropagation(); setDragOver(false); const id = e.dataTransfer.getData('text/gcode-id'); if (id) onDropGCode(id) }} className={cn('card relative overflow-hidden p-4 border-sky-500/45 bg-sky-500/[0.075] shadow-[0_0_0_1px_rgba(14,165,233,0.08)] hover:border-sky-400/75 hover:bg-sky-500/[0.11] transition-colors before:absolute before:inset-y-0 before:left-0 before:w-1 before:bg-sky-400', dragOver && 'border-sky-400/90 bg-sky-500/15')}>
       <div className="flex gap-3 mb-3 pl-1">
         <div className="w-16 h-16 rounded-lg border border-sky-400/35 bg-sky-500/10 flex items-center justify-center shrink-0 overflow-hidden">
-          {file.thumbnail_file_id ? <img src={resourceURL(`/api/files/${file.thumbnail_file_id}`)} alt="STL preview" className="h-full w-full object-contain" /> : <button type="button" disabled={busy} onClick={onRetryThumbnail} className="flex h-full w-full flex-col items-center justify-center text-[10px] text-sky-300 hover:bg-sky-500/10 disabled:opacity-60"><Upload className="mb-1 h-4 w-4" />Retry</button>}
+          {file.thumbnail_file_id ? <img src={resourceURL(`/api/files/${file.thumbnail_file_id}`)} alt={t("STL preview")} className="h-full w-full object-contain" /> : <button type="button" disabled={busy} onClick={onRetryThumbnail} className="flex h-full w-full flex-col items-center justify-center text-[10px] text-sky-300 hover:bg-sky-500/10 disabled:opacity-60"><Upload className="mb-1 h-4 w-4" />{t("Retry")}</button>}
         </div>
         <div className="min-w-0 flex-1">
           {editingName ? (
@@ -749,34 +759,34 @@ function STLFileCard({ file, busy, confirmDelete, onRename, onDelete, onDropGCod
           ) : (
             <button type="button" onClick={() => setEditingName(true)} title={file.display_name} className="font-medium text-sky-100 truncate block max-w-full text-left hover:text-sky-300">{file.display_name}</button>
           )}
-          <div className="mb-1 inline-flex rounded-full border border-sky-500/30 bg-sky-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-sky-300">STL</div>
+          <div className="mb-1 inline-flex rounded-full border border-sky-500/30 bg-sky-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-sky-300">{t("STL")}</div>
           <div className="text-xs text-surface-500 truncate" title={file.file_name}>{file.file_name}</div>
-          <div className="text-xs text-surface-500 mt-1">{formatBytes(file.size_bytes)} · {children.length} G-code{children.length === 1 ? '' : 's'}</div>
+          <div className="text-xs text-surface-500 mt-1">{formatBytes(file.size_bytes)} · {t("{{count}} G-code", { count: children.length })}</div>
           <TagChips tags={file.tags} />
         </div>
       </div>
       <div className="mb-3 rounded-lg border border-dashed border-sky-500/25 bg-surface-950/60 p-2">
         <div className="mb-2 flex items-center justify-between text-xs text-surface-500">
-          <span>Linked G-code</span>
+          <span>{t("Linked G-code")}</span>
           <label className="cursor-pointer text-accent-300 hover:text-accent-200">
-            Upload here
-            <input type="file" accept=".gcode" multiple className="hidden" onChange={e => onUploadGCode(e.target.files)} />
+            {t("Upload here")}<input type="file" accept=".gcode" multiple className="hidden" onChange={e => onUploadGCode(e.target.files)} />
           </label>
         </div>
-        {visibleChildren.length === 0 ? <div className="py-4 text-center text-xs text-surface-600">Drop G-code here to link</div> : <div className="space-y-2">{visibleChildren.map(gcode => <LinkedGCodeRow key={gcode.id} file={gcode} matched={isGCodeMatch(gcode)} onView={() => onViewGCode(gcode)} onRename={(name) => onRenameGCode(gcode, name)} onAdd={() => onAddGCode(gcode.id)} onSend={() => onSendGCode(gcode)} onUnlink={() => onUnlinkGCode(gcode.id)} onMakeDefault={() => onMakeDefaultGCode(gcode.id)} />)}</div>}
-        {children.length > 3 && <button onClick={() => setExpanded(v => !v)} className="mt-2 text-xs text-accent-300 hover:text-accent-200">{expanded ? 'Show less' : `+${children.length - 3} more`}</button>}
+        {visibleChildren.length === 0 ? <div className="py-4 text-center text-xs text-surface-600">{t("Drop G-code here to link")}</div> : <div className="space-y-2">{visibleChildren.map(gcode => <LinkedGCodeRow key={gcode.id} file={gcode} matched={isGCodeMatch(gcode)} onView={() => onViewGCode(gcode)} onRename={(name) => onRenameGCode(gcode, name)} onAdd={() => onAddGCode(gcode.id)} onSend={() => onSendGCode(gcode)} onUnlink={() => onUnlinkGCode(gcode.id)} onMakeDefault={() => onMakeDefaultGCode(gcode.id)} />)}</div>}
+        {children.length > 3 && <button onClick={() => setExpanded(v => !v)} className="mt-2 text-xs text-accent-300 hover:text-accent-200">{expanded ? t("Show less") : t("Show {{count}} more", { count: children.length - 3 })}</button>}
       </div>
       <div className="flex gap-2">
-        <button onClick={onViewSTL} className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-surface-700 bg-surface-800 text-surface-200 hover:border-accent-500/60 hover:bg-accent-500/15 hover:text-accent-200" title="Details"><InfoIcon className="h-4 w-4" /></button>
-        <button onClick={onSlice} className="btn btn-primary text-sm">Fatiar</button>
-        <a href={resourceURL(`/api/files/${file.file_id}`)} target="_blank" rel="noreferrer" className="btn btn-secondary text-sm flex-1">Open STL</a>
-        <button disabled={busy} onClick={onDelete} className={cn('btn text-sm', confirmDelete ? 'border-red-500/50 bg-red-500/20 text-red-200' : 'btn-ghost text-red-400')}>{confirmDelete ? 'Confirm?' : 'Delete'}</button>
+        <button onClick={onViewSTL} className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-surface-700 bg-surface-800 text-surface-200 hover:border-accent-500/60 hover:bg-accent-500/15 hover:text-accent-200" title={t("Details")}><InfoIcon className="h-4 w-4" /></button>
+        <button onClick={onSlice} className="btn btn-primary text-sm">{t("Slice")}</button>
+        <a href={resourceURL(`/api/files/${file.file_id}`)} target="_blank" rel="noreferrer" className="btn btn-secondary text-sm flex-1">{t("Open STL")}</a>
+        <button disabled={busy} onClick={onDelete} className={cn('btn text-sm', confirmDelete ? 'border-red-500/50 bg-red-500/20 text-red-200' : 'btn-ghost text-red-400')}>{confirmDelete ? t("Confirm?") : t("Delete")}</button>
       </div>
     </div>
   )
 }
 
 function LinkedGCodeRow({ file, matched, onView, onRename, onAdd, onSend, onUnlink, onMakeDefault }: { file: GCodeLibraryFile; matched: boolean; onView: () => void; onRename: (name: string) => void; onAdd: () => void; onSend: () => void; onUnlink: () => void; onMakeDefault: () => void }) {
+  const { t } = useTranslation('library')
   const [editingName, setEditingName] = useState(false)
   const [name, setName] = useState(file.display_name)
   const saveName = () => {
@@ -787,19 +797,19 @@ function LinkedGCodeRow({ file, matched, onView, onRename, onAdd, onSend, onUnli
   return <div draggable={!editingName} onDragStart={e => e.dataTransfer.setData('text/gcode-id', file.id)} className={cn('group flex items-center gap-3 rounded-xl border border-accent-500/25 border-l-4 border-l-accent-400 bg-gradient-to-r from-accent-500/[0.12] to-surface-900/75 p-3 text-xs shadow-sm transition hover:border-accent-400/45 hover:from-accent-500/[0.16] cursor-grab', editingName && 'cursor-default', matched && 'ring-1 ring-emerald-400/60 from-emerald-500/15')}>
     <div className="h-10 w-10 rounded-lg border border-surface-700 bg-surface-800 overflow-hidden shrink-0 flex items-center justify-center shadow-inner">{file.thumbnail_file_id ? <img src={resourceURL(`/api/files/${file.thumbnail_file_id}`)} className="h-full w-full object-cover" /> : <FileCode className="h-5 w-5 text-accent-300" />}</div>
     <div className="min-w-0 flex-1">
-      {editingName ? <input value={name} autoFocus onChange={e => setName(e.target.value)} onBlur={saveName} onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); if (e.key === 'Escape') { setName(file.display_name); setEditingName(false) } }} className="input py-1 text-xs" /> : <div className="flex items-center gap-2"><button type="button" onClick={() => setEditingName(true)} className="max-w-full truncate text-left font-medium text-surface-100 hover:text-accent-300" title="Rename G-code">{file.display_name}</button>{file.default_for_stl && <span className="rounded-full border border-emerald-500/40 bg-emerald-500/15 px-2 py-0.5 text-[10px] font-bold uppercase text-emerald-300">Default</span>}{matched && <span className="rounded-full border border-emerald-500/30 bg-emerald-500/15 px-2 py-0.5 text-[10px] font-semibold uppercase text-emerald-300">Match</span>}</div>}
+      {editingName ? <input value={name} autoFocus onChange={e => setName(e.target.value)} onBlur={saveName} onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); if (e.key === 'Escape') { setName(file.display_name); setEditingName(false) } }} className="input py-1 text-xs" /> : <div className="flex items-center gap-2"><button type="button" onClick={() => setEditingName(true)} className="max-w-full truncate text-left font-medium text-surface-100 hover:text-accent-300" title={t("Rename G-code")}>{file.display_name}</button>{file.default_for_stl && <span className="rounded-full border border-emerald-500/40 bg-emerald-500/15 px-2 py-0.5 text-[10px] font-bold uppercase text-emerald-300">{t("Default")}</span>}{matched && <span className="rounded-full border border-emerald-500/30 bg-emerald-500/15 px-2 py-0.5 text-[10px] font-semibold uppercase text-emerald-300">{t("Match")}</span>}</div>}
       <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-surface-500">
-        <span className="truncate">{file.metadata?.print_settings_id || 'No profile'}</span>
-        <span>Layer {file.layer_height ? `${file.layer_height}mm` : '—'}</span>
-        <span>{file.estimated_seconds ? formatDuration(file.estimated_seconds) : 'No ETA'}</span>
+        <span className="truncate">{file.metadata?.print_settings_id || t("No profile")}</span>
+        <span>{file.layer_height ? t("Layer: {{name}}mm", { name: file.layer_height }) : '—'}</span>
+        <span>{file.estimated_seconds ? formatDuration(file.estimated_seconds) : t("No ETA")}</span>
       </div>
     </div>
     <div className="flex shrink-0 items-center gap-1.5">
-      {!file.default_for_stl && <button onClick={onMakeDefault} className={actionClass} title="Set this G-code as the default for this STL"><Star className="h-4 w-4" /></button>}
-      <button onClick={onView} className={actionClass} title="View G-code details"><InfoIcon className="h-4 w-4" /></button>
-      <button onClick={onAdd} className={actionClass} title="Add this G-code to the print queue"><Plus className="h-4 w-4" /></button>
-      <button onClick={onSend} className={actionClass} title="Send this G-code to printer storage"><Send className="h-4 w-4" /></button>
-      <button onClick={onUnlink} className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-red-500/30 bg-red-500/10 text-red-300 transition hover:border-red-400/60 hover:bg-red-500/20 hover:text-red-200" title="Unlink this G-code from the STL"><Link2Off className="h-4 w-4" /></button>
+      {!file.default_for_stl && <button onClick={onMakeDefault} className={actionClass} title={t("Set this G-code as the default for this STL")}><Star className="h-4 w-4" /></button>}
+      <button onClick={onView} className={actionClass} title={t("View G-code details")}><InfoIcon className="h-4 w-4" /></button>
+      <button onClick={onAdd} className={actionClass} title={t("Add this G-code to the print queue")}><Plus className="h-4 w-4" /></button>
+      <button onClick={onSend} className={actionClass} title={t("Send this G-code to printer storage")}><Send className="h-4 w-4" /></button>
+      <button onClick={onUnlink} className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-red-500/30 bg-red-500/10 text-red-300 transition hover:border-red-400/60 hover:bg-red-500/20 hover:text-red-200" title={t("Unlink this G-code from the STL")}><Link2Off className="h-4 w-4" /></button>
     </div>
   </div>
 }
@@ -822,6 +832,7 @@ function TagChips({ tags, limit = 3 }: { tags?: Tag[]; limit?: number }) {
 }
 
 function SendToPrinterModal({ file, printers, busy, onClose, onSend }: { file: GCodeLibraryFile; printers: import('../types').Printer[]; busy: boolean; onClose: () => void; onSend: (printerId: string, remotePath: string, startPrint: boolean) => void }) {
+  const { t } = useTranslation('library')
   const moonrakerPrinters = printers.filter(printer => printer.connection_type === 'moonraker')
   const [printerId, setPrinterId] = useState(moonrakerPrinters[0]?.id || '')
   const [remotePath, setRemotePath] = useState('')
@@ -853,8 +864,8 @@ function SendToPrinterModal({ file, printers, busy, onClose, onSend }: { file: G
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
       <div className="card p-6 w-full max-w-lg">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-semibold text-surface-100">Send to Printer</h2>
-          <button onClick={onClose} className="btn btn-ghost text-sm">Close</button>
+          <h2 className="text-xl font-semibold text-surface-100">{t("Send to Printer")}</h2>
+          <button onClick={onClose} className="btn btn-ghost text-sm">{t("Close")}</button>
         </div>
         <div className="space-y-4">
           <div>
@@ -862,9 +873,9 @@ function SendToPrinterModal({ file, printers, busy, onClose, onSend }: { file: G
             <div className="text-xs text-surface-500">{file.file_name}</div>
           </div>
           <label className="block">
-            <span className="text-xs text-surface-500 mb-1 block">Moonraker printer</span>
+            <span className="text-xs text-surface-500 mb-1 block">{t("Moonraker printer")}</span>
             <select className="input" value={printerId} onChange={e => setPrinterId(e.target.value)}>
-              {moonrakerPrinters.length === 0 && <option value="">No Moonraker printers available</option>}
+              {moonrakerPrinters.length === 0 && <option value="">{t("No Moonraker printers available")}</option>}
               {moonrakerPrinters.map(printer => <option key={printer.id} value={printer.id}>{printer.name}</option>)}
             </select>
           </label>
@@ -872,25 +883,25 @@ function SendToPrinterModal({ file, printers, busy, onClose, onSend }: { file: G
             <div className={cn('rounded-lg border p-3 text-sm', isOffline ? 'border-red-500/30 bg-red-500/10 text-red-200' : 'border-surface-800 bg-surface-900/70 text-surface-400')}>
               <div className="flex items-center gap-2">
                 {isOffline && <AlertTriangle className="h-4 w-4 text-red-300" />}
-                <span>{isOffline ? `${selectedPrinter.name} is offline. Sending is disabled until it comes back online.` : `${selectedPrinter.name} is ${printerStatus || 'checking status...'}.`}</span>
+                <span>{isOffline ? t("{{name}} is offline. Sending is disabled until it comes back online.", { name: selectedPrinter.name }) : t("{{name}}: {{status}}", { name: selectedPrinter.name, status: printerStatus ? t(PRINTER_STATUS_LABELS[printerStatus] || printerStatus) : t("checking status...") })}</span>
               </div>
             </div>
           )}
           <label className="block">
-            <span className="text-xs text-surface-500 mb-1 block">Remote folder under gcodes</span>
-            <input className="input" value={remotePath} onChange={e => setRemotePath(e.target.value)} placeholder="Optional, e.g. projects/calibration" />
+            <span className="text-xs text-surface-500 mb-1 block">{t("Remote folder under gcodes")}</span>
+            <input className="input" value={remotePath} onChange={e => setRemotePath(e.target.value)} placeholder={t("Optional, e.g. projects/calibration")} />
           </label>
           <label className="flex items-center gap-3 rounded-lg border border-surface-800 bg-surface-900/70 p-3">
             <input type="checkbox" checked={startPrint} onChange={e => setStartPrint(e.target.checked)} />
             <span>
-              <span className="block text-sm text-surface-200">Start print immediately</span>
-              <span className="text-xs text-surface-500">Uploads the file and then starts it on the printer.</span>
+              <span className="block text-sm text-surface-200">{t("Start print immediately")}</span>
+              <span className="text-xs text-surface-500">{t("Uploads the file and then starts it on the printer.")}</span>
             </span>
           </label>
           <div className="flex justify-end gap-2">
-            <button onClick={onClose} className="btn btn-secondary">Cancel</button>
+            <button onClick={onClose} className="btn btn-secondary">{t("Cancel")}</button>
             <button disabled={!printerId || busy || isOffline} onClick={() => onSend(printerId, remotePath, startPrint)} className="btn btn-primary">
-              <Send className="h-4 w-4 mr-2" />{busy ? 'Sending...' : startPrint ? 'Send & Print' : 'Send'}
+              <Send className="h-4 w-4 mr-2" />{busy ? t("Sending...") : startPrint ? t("Send & Print") : t("Send")}
             </button>
           </div>
         </div>
@@ -900,6 +911,7 @@ function SendToPrinterModal({ file, printers, busy, onClose, onSend }: { file: G
 }
 
 function FileTagManager({ itemId, currentTags, tags, onCreateTag, onAddTag, onRemoveTag }: { itemId: string; currentTags?: Tag[]; tags: Tag[]; onCreateTag: (name: string, color?: string) => void; onAddTag: (fileId: string, tagId: string) => void; onRemoveTag: (fileId: string, tagId: string) => void }) {
+  const { t } = useTranslation('library')
   const [query, setQuery] = useState('')
   const [color, setColor] = useState('#1883FF')
   const current = currentTags || []
@@ -911,19 +923,19 @@ function FileTagManager({ itemId, currentTags, tags, onCreateTag, onAddTag, onRe
     <div className="rounded-xl border border-surface-800 bg-surface-900/70 p-3">
       <div className="mb-3 flex items-center justify-between gap-2">
         <div>
-          <div className="text-sm font-medium text-surface-200">Tags</div>
-          <div className="text-xs text-surface-500">Organize root files with reusable labels</div>
+          <div className="text-sm font-medium text-surface-200">{t("Tags")}</div>
+          <div className="text-xs text-surface-500">{t("Organize root files with reusable labels")}</div>
         </div>
         <span className="rounded-full bg-surface-800 px-2 py-0.5 text-xs text-surface-400">{current.length}</span>
       </div>
 
       <div className="mb-3 flex min-h-10 flex-wrap gap-2 rounded-lg border border-surface-800 bg-surface-950/40 p-2">
-        {current.length === 0 && <span className="text-sm text-surface-600">No tags yet</span>}
+        {current.length === 0 && <span className="text-sm text-surface-600">{t("No tags yet")}</span>}
         {current.map(tag => (
           <span key={tag.id} className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium" style={{ backgroundColor: tag.color + '18', borderColor: tag.color + '55', color: tag.color }}>
             <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: tag.color }} />
             {tag.name}
-            <button onClick={() => onRemoveTag(itemId, tag.id)} className="ml-1 text-surface-400 hover:text-red-300">×</button>
+            <button onClick={() => onRemoveTag(itemId, tag.id)} className="ml-1 text-surface-400 hover:text-red-300">{t("×")}</button>
           </span>
         ))}
       </div>
@@ -931,9 +943,9 @@ function FileTagManager({ itemId, currentTags, tags, onCreateTag, onAddTag, onRe
       <div className="flex gap-2">
         <div className="relative flex-1">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-surface-500" />
-          <input value={query} onChange={e => setQuery(e.target.value)} className="input input-with-icon text-sm" placeholder="Search or create tag..." />
+          <input value={query} onChange={e => setQuery(e.target.value)} className="input input-with-icon text-sm" placeholder={t("Search or create tag...")} />
         </div>
-        <input type="color" value={color} onChange={e => setColor(e.target.value)} className="h-10 w-12 cursor-pointer rounded-lg border border-surface-700 bg-surface-900 p-1" title="Tag color" />
+        <input type="color" value={color} onChange={e => setColor(e.target.value)} className="h-10 w-12 cursor-pointer rounded-lg border border-surface-700 bg-surface-900 p-1" title={t("Tag color")} />
       </div>
 
       {(available.length > 0 || canCreate) && (
@@ -946,7 +958,7 @@ function FileTagManager({ itemId, currentTags, tags, onCreateTag, onAddTag, onRe
           ))}
           {canCreate && (
             <button onClick={() => { onCreateTag(query, color); setQuery('') }} className="inline-flex items-center gap-1.5 rounded-full border border-accent-500/40 bg-accent-500/10 px-2.5 py-1 text-xs text-accent-200 hover:bg-accent-500/20">
-              <Plus className="h-3 w-3" /> Create “{query.trim()}”
+              <Plus className="h-3 w-3" /> {t("Create “{{name}}”", { name: query.trim() })}
             </button>
           )}
         </div>
@@ -963,10 +975,12 @@ function formatBytes(bytes: number) {
 }
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return <label className="block"><span className="text-[10px] uppercase tracking-wide text-surface-500 mb-1 block">{label}</span>{children}</label>
+  const { t } = useTranslation('library')
+  return <label className="block"><span className="text-[10px] uppercase tracking-wide text-surface-500 mb-1 block">{t(label)}</span>{children}</label>
 }
 
 function FileCard({ file, colors, busy, confirmDelete, onView, onRename, onAdd, onSend, onDelete }: { file: GCodeLibraryFile; colors: MaterialColorMap; busy: boolean; confirmDelete: boolean; onView: () => void; onRename: (name: string) => void; onAdd: () => void; onSend: () => void; onDelete: () => void }) {
+  const { t } = useTranslation('library')
   const [editingName, setEditingName] = useState(false)
   const [name, setName] = useState(file.display_name)
   const saveName = () => {
@@ -977,7 +991,7 @@ function FileCard({ file, colors, busy, confirmDelete, onView, onRename, onAdd, 
     <div draggable onDragStart={e => e.dataTransfer.setData('text/gcode-id', file.id)} className="card relative overflow-hidden p-4 border-accent-500/45 bg-accent-500/[0.075] shadow-[0_0_0_1px_rgba(249,115,22,0.08)] hover:border-accent-400/75 hover:bg-accent-500/[0.11] transition-colors cursor-grab before:absolute before:inset-y-0 before:left-0 before:w-1 before:bg-accent-400">
       <div className="flex gap-3 mb-3 pl-1">
         <div className="w-16 h-16 rounded-lg border border-accent-400/35 bg-accent-500/10 flex items-center justify-center shrink-0 overflow-hidden">
-          {file.thumbnail_file_id ? <img src={resourceURL(`/api/files/${file.thumbnail_file_id}`)} alt="G-code preview" className="w-full h-full object-cover" /> : <FileCode className="h-8 w-8 text-accent-300" />}
+          {file.thumbnail_file_id ? <img src={resourceURL(`/api/files/${file.thumbnail_file_id}`)} alt={t("G-code preview")} className="w-full h-full object-cover" /> : <FileCode className="h-8 w-8 text-accent-300" />}
         </div>
         <div className="min-w-0 flex-1">
           {editingName ? (
@@ -985,27 +999,27 @@ function FileCard({ file, colors, busy, confirmDelete, onView, onRename, onAdd, 
           ) : (
             <button type="button" onClick={() => setEditingName(true)} className="font-medium text-surface-100 truncate text-left hover:text-accent-300" title={file.display_name}>{file.display_name}</button>
           )}
-          <div className="mb-1 inline-flex rounded-full border border-accent-500/30 bg-accent-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-accent-300">G-code</div>
+          <div className="mb-1 inline-flex rounded-full border border-accent-500/30 bg-accent-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-accent-300">{t("G-code")}</div>
           <div className="mt-1"><MaterialBadge material={file.material_type} colors={colors} /></div>
-          {file.filament_name && <div className="text-xs text-surface-400 truncate">Filamento: {file.filament_name}</div>}
-          <div className="text-xs text-surface-500">{file.print_count} successful prints</div>
+          {file.filament_name && <div className="text-xs text-surface-400 truncate">{t("Filament:")}{' '}{file.filament_name}</div>}
+          <div className="text-xs text-surface-500">{file.print_count} {t("successful prints")}</div>
           {!file.parent_stl_id && <TagChips tags={file.tags} />}
         </div>
       </div>
       <div className="grid grid-cols-2 gap-2 text-xs mb-4">
-        <Info label={file.estimated_seconds ? formatDuration(file.estimated_seconds) : 'No ETA'} />
-        <Info label={file.filament_grams ? `${Math.round(file.filament_grams)}g filament` : 'No grams'} />
-        <Info label={file.layer_height ? `${file.layer_height}mm layer` : 'No layer'} />
-        <Info label={file.nozzle_diameter ? `${file.nozzle_diameter}mm nozzle` : 'No nozzle'} />
+        <Info label={file.estimated_seconds ? formatDuration(file.estimated_seconds) : t("No ETA")} />
+        <Info label={file.filament_grams ? t("{{name}}g filament", { name: Math.round(file.filament_grams) }) : t("No grams")} />
+        <Info label={file.layer_height ? t("{{name}}mm layer", { name: file.layer_height }) : t("No layer")} />
+        <Info label={file.nozzle_diameter ? t("{{name}}mm nozzle", { name: file.nozzle_diameter }) : t("No nozzle")} />
       </div>
       <div className="flex gap-2">
-        <button onClick={onView} className="btn btn-secondary text-sm flex-1" title="Details"><InfoIcon className="h-4 w-4" /></button>
-        <button onClick={onAdd} disabled={busy} className="btn btn-primary text-sm flex-1"><Plus className="h-4 w-4 mr-2" />{busy ? 'Adding...' : 'Add to Queue'}</button>
-        <button onClick={onSend} disabled={busy} className="btn btn-secondary text-sm flex-1"><Send className="h-4 w-4 mr-2" />Send to Printer</button>
+        <button onClick={onView} className="btn btn-secondary text-sm flex-1" title={t("Details")}><InfoIcon className="h-4 w-4" /></button>
+        <button onClick={onAdd} disabled={busy} className="btn btn-primary text-sm flex-1"><Plus className="h-4 w-4 mr-2" />{busy ? t("Adding...") : t("Add to Queue")}</button>
+        <button onClick={onSend} disabled={busy} className="btn btn-secondary text-sm flex-1"><Send className="h-4 w-4 mr-2" />{t("Send to Printer")}</button>
         {confirmDelete ? (
-          <button onClick={onDelete} disabled={busy} className="btn btn-secondary text-sm text-red-400">Confirm</button>
+          <button onClick={onDelete} disabled={busy} className="btn btn-secondary text-sm text-red-400">{t("Confirm")}</button>
         ) : (
-          <button onClick={onDelete} disabled={busy} className="btn btn-ghost text-sm text-red-400">Delete</button>
+          <button onClick={onDelete} disabled={busy} className="btn btn-ghost text-sm text-red-400">{t("Delete")}</button>
         )}
       </div>
     </div>
@@ -1013,6 +1027,7 @@ function FileCard({ file, colors, busy, confirmDelete, onView, onRename, onAdd, 
 }
 
 function STLFileRow({ file, busy, confirmDelete, onView, onRename, onDelete, onRetryThumbnail, onDropGCode, onSlice }: { file: STLLibraryFile; busy: boolean; confirmDelete: boolean; onView: () => void; onRename: (name: string) => void; onDelete: () => void; onRetryThumbnail: () => void; onDropGCode: (gcodeId: string) => void; onSlice: () => void }) {
+  const { t } = useTranslation('library')
   const [editingName, setEditingName] = useState(false)
   const [dragOver, setDragOver] = useState(false)
   const [name, setName] = useState(file.display_name)
@@ -1023,29 +1038,30 @@ function STLFileRow({ file, busy, confirmDelete, onView, onRename, onDelete, onR
   return (
     <div onDragOver={e => { e.preventDefault(); setDragOver(true) }} onDragLeave={() => setDragOver(false)} onDrop={e => { e.preventDefault(); e.stopPropagation(); setDragOver(false); const id = e.dataTransfer.getData('text/gcode-id'); if (id) onDropGCode(id) }} className={cn('grid grid-cols-[56px_minmax(220px,1.7fr)_0.7fr_minmax(120px,1fr)_minmax(130px,1fr)_0.8fr_0.7fr_220px] gap-3 items-center border-l-4 border-l-sky-400 px-4 py-3 border-b border-sky-500/20 last:border-b-0 bg-sky-500/[0.065] hover:bg-sky-500/[0.11]', dragOver && 'bg-sky-500/15 border-sky-400/60')}>
       <div className="w-10 h-10 rounded-lg bg-sky-500/10 border border-sky-500/25 flex items-center justify-center overflow-hidden">
-        {file.thumbnail_file_id ? <img src={resourceURL(`/api/files/${file.thumbnail_file_id}`)} alt="STL preview" className="w-full h-full object-contain" /> : <button type="button" disabled={busy} onClick={onRetryThumbnail} className="text-[9px] text-sky-300 disabled:opacity-60">Retry</button>}
+        {file.thumbnail_file_id ? <img src={resourceURL(`/api/files/${file.thumbnail_file_id}`)} alt={t("STL preview")} className="w-full h-full object-contain" /> : <button type="button" disabled={busy} onClick={onRetryThumbnail} className="text-[9px] text-sky-300 disabled:opacity-60">{t("Retry")}</button>}
       </div>
       <div className="min-w-0">
         {editingName ? <input value={name} autoFocus onChange={e => setName(e.target.value)} onBlur={saveName} onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); if (e.key === 'Escape') { setName(file.display_name); setEditingName(false) } }} className="input py-1 text-sm" /> : <button type="button" onClick={() => setEditingName(true)} className="text-left text-surface-100 hover:text-sky-300 truncate max-w-full">{file.display_name}</button>}
         <div className="text-xs text-surface-500 truncate">{file.file_name}</div>
         <TagChips tags={file.tags} limit={2} />
       </div>
-      <div className="text-sm text-sky-300 font-medium">STL</div>
-      <div className="text-sm text-surface-300">Parent model</div>
-      <div className="text-sm text-surface-400">Source geometry</div>
+      <div className="text-sm text-sky-300 font-medium">{t("STL")}</div>
+      <div className="text-sm text-surface-300">{t("Parent model")}</div>
+      <div className="text-sm text-surface-400">{t("Source geometry")}</div>
       <div className="text-sm text-surface-300">{formatBytes(file.size_bytes)}</div>
-      <div className="text-sm text-surface-300">{file.gcodes?.length || 0} G-code</div>
+      <div className="text-sm text-surface-300">{file.gcodes?.length || 0} {t("G-code")}</div>
       <div className="flex gap-2 justify-end">
-        <button onClick={onView} className="btn btn-secondary text-xs"><InfoIcon className="h-3.5 w-3.5" /></button>
-        <button onClick={onSlice} className="btn btn-primary text-xs">Fatiar</button>
-        <a href={resourceURL(`/api/files/${file.file_id}`)} target="_blank" rel="noreferrer" className="btn btn-secondary text-xs">Open</a>
-        <button onClick={onDelete} disabled={busy} className={cn('btn text-xs', confirmDelete ? 'btn-secondary text-red-400' : 'btn-ghost text-red-400')}>{confirmDelete ? 'Confirm' : 'Delete'}</button>
+        <button aria-label={t("Details")} onClick={onView} className="btn btn-secondary text-xs"><InfoIcon className="h-3.5 w-3.5" /></button>
+        <button onClick={onSlice} className="btn btn-primary text-xs">{t("Slice")}</button>
+        <a href={resourceURL(`/api/files/${file.file_id}`)} target="_blank" rel="noreferrer" className="btn btn-secondary text-xs">{t("Open")}</a>
+        <button onClick={onDelete} disabled={busy} className={cn('btn text-xs', confirmDelete ? 'btn-secondary text-red-400' : 'btn-ghost text-red-400')}>{confirmDelete ? t("Confirm") : t("Delete")}</button>
       </div>
     </div>
   )
 }
 
 function FileRow({ file, colors, busy, confirmDelete, indented = false, matched = false, parentName, onView, onRename, onAdd, onSend, onDelete }: { file: GCodeLibraryFile; colors: MaterialColorMap; busy: boolean; confirmDelete: boolean; indented?: boolean; matched?: boolean; parentName?: string; onView: () => void; onRename: (name: string) => void; onAdd: () => void; onSend: () => void; onDelete: () => void }) {
+  const { t } = useTranslation('library')
   const [editingName, setEditingName] = useState(false)
   const [name, setName] = useState(file.display_name)
   const saveName = () => {
@@ -1055,64 +1071,65 @@ function FileRow({ file, colors, busy, confirmDelete, indented = false, matched 
   return (
     <div draggable onDragStart={e => e.dataTransfer.setData('text/gcode-id', file.id)} className={cn('grid grid-cols-[56px_minmax(220px,1.7fr)_0.7fr_minmax(120px,1fr)_minmax(130px,1fr)_0.8fr_0.7fr_220px] gap-3 items-center border-l-4 border-l-accent-400 px-4 py-3 border-b border-accent-500/20 last:border-b-0 bg-accent-500/[0.055] hover:bg-accent-500/[0.1] cursor-grab', indented && 'ml-8 border-l-sky-500/35 bg-accent-500/[0.07]', matched && 'ring-1 ring-emerald-400/60 bg-emerald-500/[0.08]')}>
       <div className="w-10 h-10 rounded-lg bg-surface-800 flex items-center justify-center overflow-hidden">
-        {file.thumbnail_file_id ? <img src={resourceURL(`/api/files/${file.thumbnail_file_id}`)} alt="G-code preview" className="w-full h-full object-cover" /> : <FileCode className="h-5 w-5 text-surface-500" />}
+        {file.thumbnail_file_id ? <img src={resourceURL(`/api/files/${file.thumbnail_file_id}`)} alt={t("G-code preview")} className="w-full h-full object-cover" /> : <FileCode className="h-5 w-5 text-surface-500" />}
       </div>
       <div className="min-w-0">
         {editingName ? <input value={name} autoFocus onChange={e => setName(e.target.value)} onBlur={saveName} onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); if (e.key === 'Escape') { setName(file.display_name); setEditingName(false) } }} className="input py-1 text-sm" /> : <button type="button" onClick={() => setEditingName(true)} className="text-left text-surface-100 hover:text-accent-300 truncate max-w-full">{file.display_name}</button>}
-        <div className="flex items-center gap-2 text-xs text-surface-500 truncate"><span className="truncate">{file.file_name}</span>{matched && <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] text-emerald-300">match</span>}</div>
+        <div className="flex items-center gap-2 text-xs text-surface-500 truncate"><span className="truncate">{file.file_name}</span>{matched && <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] text-emerald-300">{t("match")}</span>}</div>
         {!file.parent_stl_id && <TagChips tags={file.tags} limit={2} />}
       </div>
-      <div className="text-sm text-accent-300 font-medium">G-code</div>
-      <div className="text-sm text-surface-300 truncate" title={parentName || 'Root'}>{parentName ? `Inside ${parentName}` : 'Root file'}</div>
+      <div className="text-sm text-accent-300 font-medium">{t("G-code")}</div>
+      <div className="text-sm text-surface-300 truncate" title={parentName || t("Root")}>{parentName ? t("Inside {{name}}", { name: parentName }) : t("Root file")}</div>
       <div className="min-w-0 text-sm text-surface-300">
         <MaterialBadge material={file.material_type} colors={colors} />
-        <div className="text-xs text-surface-500 truncate mt-0.5">{file.metadata?.print_settings_id || 'No profile'}</div>
+        <div className="text-xs text-surface-500 truncate mt-0.5">{file.metadata?.print_settings_id || t("No profile")}</div>
       </div>
       <div className="min-w-0 text-sm text-surface-300">
-        <div>{file.estimated_seconds ? formatDuration(file.estimated_seconds) : 'No ETA'}</div>
-        <div className="text-xs text-surface-500">Layer {file.layer_height ? `${file.layer_height}mm` : '—'}</div>
+        <div>{file.estimated_seconds ? formatDuration(file.estimated_seconds) : t("No ETA")}</div>
+        <div className="text-xs text-surface-500">{file.layer_height ? t("Layer: {{name}}mm", { name: file.layer_height }) : '—'}</div>
       </div>
-      <div className="text-sm text-surface-300">{file.print_count} prints</div>
+      <div className="text-sm text-surface-300">{file.print_count} {t("prints")}</div>
       <div className="flex gap-2 justify-end">
-        <button onClick={onView} className="btn btn-secondary text-xs" title="Details"><InfoIcon className="h-3.5 w-3.5" /></button>
-        <button onClick={onAdd} disabled={busy} className="btn btn-primary text-xs">{busy ? 'Adding...' : 'Queue'}</button>
-        <button onClick={onSend} disabled={busy} className="btn btn-secondary text-xs"><Send className="h-3.5 w-3.5 mr-1" />Send</button>
-        <button onClick={onDelete} disabled={busy} className={cn('btn text-xs', confirmDelete ? 'btn-secondary text-red-400' : 'btn-ghost text-red-400')}>{confirmDelete ? 'Confirm' : 'Delete'}</button>
+        <button onClick={onView} className="btn btn-secondary text-xs" title={t("Details")}><InfoIcon className="h-3.5 w-3.5" /></button>
+        <button onClick={onAdd} disabled={busy} className="btn btn-primary text-xs">{busy ? t("Adding...") : t("Queue")}</button>
+        <button onClick={onSend} disabled={busy} className="btn btn-secondary text-xs"><Send className="h-3.5 w-3.5 mr-1" />{t("Send")}</button>
+        <button onClick={onDelete} disabled={busy} className={cn('btn text-xs', confirmDelete ? 'btn-secondary text-red-400' : 'btn-ghost text-red-400')}>{confirmDelete ? t("Confirm") : t("Delete")}</button>
       </div>
     </div>
   )
 }
 
 function FileDetailsModal({ file, colors, tags, onCreateTag, onAddTag, onRemoveTag, onClose }: { file: GCodeLibraryFile; colors: MaterialColorMap; tags: Tag[]; onCreateTag: (name: string, color?: string) => void; onAddTag: (fileId: string, tagId: string) => void; onRemoveTag: (fileId: string, tagId: string) => void; onClose: () => void }) {
+  const { t } = useTranslation('library')
   const isRoot = !file.parent_stl_id
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
       <div className="card p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-semibold text-surface-100">File Details</h2>
-          <button onClick={onClose} className="btn btn-ghost text-sm">Close</button>
+          <h2 className="text-xl font-semibold text-surface-100">{t("File Details")}</h2>
+          <button onClick={onClose} className="btn btn-ghost text-sm">{t("Close")}</button>
         </div>
         <div className="space-y-4">
-          {file.thumbnail_file_id && <img src={resourceURL(`/api/files/${file.thumbnail_file_id}`)} alt="G-code preview" className="w-28 h-28 rounded-xl object-cover bg-surface-800" />}
+          {file.thumbnail_file_id && <img src={resourceURL(`/api/files/${file.thumbnail_file_id}`)} alt={t("G-code preview")} className="w-28 h-28 rounded-xl object-cover bg-surface-800" />}
            <div className="font-medium text-surface-100 text-lg">{file.display_name}</div>
            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <label className="block"><span className="text-xs text-surface-500 mb-1 block">Perfil de Impressão</span><input value={file.metadata?.print_settings_id || 'Não encontrado'} disabled className="input opacity-70" /></label>
-              <label className="block"><span className="text-xs text-surface-500 mb-1 block">Perfil de Impressora</span><input value={file.metadata?.printer_settings_id || 'Não encontrado'} disabled className="input opacity-70" /></label>
-              <label className="block"><span className="text-xs text-surface-500 mb-1 block">Perfil de Filamento</span><input value={file.metadata?.filament_settings_id || file.filament_name || 'Não encontrado'} disabled className="input opacity-70" /></label>
-              <label className="block"><span className="text-xs text-surface-500 mb-1 block">Impressora</span><input value={file.metadata?.printer_model || 'Não encontrado'} disabled className="input opacity-70" /></label>
-             <label className="block"><span className="text-xs text-surface-500 mb-1 block">Material</span><div className="input opacity-70 flex items-center"><MaterialBadge material={file.material_type} colors={colors} /></div></label>
-             <div className="text-xs text-surface-500">Filament grams<div className="text-surface-100 text-base mt-0.5">{file.filament_grams ? Math.round(file.filament_grams) : '—'}</div></div>
-             <div className="text-xs text-surface-500">Estimated seconds<div className="text-surface-100 text-base mt-0.5">{file.estimated_seconds ? formatDuration(file.estimated_seconds) : '—'}</div></div>
-             <div className="text-xs text-surface-500">Layer height<div className="text-surface-100 text-base mt-0.5">{file.layer_height || '—'}</div></div>
-             <div className="text-xs text-surface-500">Nozzle diameter<div className="text-surface-100 text-base mt-0.5">{file.nozzle_diameter || '—'}</div></div>
-             <div className="text-xs text-surface-500">Bed temp<div className="text-surface-100 text-base mt-0.5">{file.bed_temp || '—'}</div></div>
-             <div className="text-xs text-surface-500">Nozzle temp<div className="text-surface-100 text-base mt-0.5">{file.nozzle_temp || '—'}</div></div>
+              <label className="block"><span className="text-xs text-surface-500 mb-1 block">{t("Print profile")}</span><input value={file.metadata?.print_settings_id || t("Not found")} disabled className="input opacity-70" /></label>
+              <label className="block"><span className="text-xs text-surface-500 mb-1 block">{t("Printer Profile")}</span><input value={file.metadata?.printer_settings_id || t("Not found")} disabled className="input opacity-70" /></label>
+              <label className="block"><span className="text-xs text-surface-500 mb-1 block">{t("Filament Profile")}</span><input value={file.metadata?.filament_settings_id || file.filament_name || t("Not found")} disabled className="input opacity-70" /></label>
+              <label className="block"><span className="text-xs text-surface-500 mb-1 block">{t("Printer")}</span><input value={file.metadata?.printer_model || t("Not found")} disabled className="input opacity-70" /></label>
+             <label className="block"><span className="text-xs text-surface-500 mb-1 block">{t("Material")}</span><div className="input opacity-70 flex items-center"><MaterialBadge material={file.material_type} colors={colors} /></div></label>
+             <div className="text-xs text-surface-500">{t("Filament grams")}<div className="text-surface-100 text-base mt-0.5">{file.filament_grams ? Math.round(file.filament_grams) : '—'}</div></div>
+             <div className="text-xs text-surface-500">{t("Estimated seconds")}<div className="text-surface-100 text-base mt-0.5">{file.estimated_seconds ? formatDuration(file.estimated_seconds) : '—'}</div></div>
+             <div className="text-xs text-surface-500">{t("Layer height")}<div className="text-surface-100 text-base mt-0.5">{file.layer_height || '—'}</div></div>
+             <div className="text-xs text-surface-500">{t("Nozzle diameter")}<div className="text-surface-100 text-base mt-0.5">{file.nozzle_diameter || '—'}</div></div>
+             <div className="text-xs text-surface-500">{t("Bed temp")}<div className="text-surface-100 text-base mt-0.5">{file.bed_temp || '—'}</div></div>
+             <div className="text-xs text-surface-500">{t("Nozzle temp")}<div className="text-surface-100 text-base mt-0.5">{file.nozzle_temp || '—'}</div></div>
            </div>
 
-           {isRoot ? <FileTagManager itemId={file.id} currentTags={file.tags} tags={tags} onCreateTag={onCreateTag} onAddTag={onAddTag} onRemoveTag={onRemoveTag} /> : <div className="rounded-lg border border-surface-800 bg-surface-900/70 px-3 py-2 text-sm text-surface-500">Tags only apply to root files. This G-code inherits organization from its parent STL.</div>}
+           {isRoot ? <FileTagManager itemId={file.id} currentTags={file.tags} tags={tags} onCreateTag={onCreateTag} onAddTag={onAddTag} onRemoveTag={onRemoveTag} /> : <div className="rounded-lg border border-surface-800 bg-surface-900/70 px-3 py-2 text-sm text-surface-500">{t("Tags only apply to root files. This G-code inherits organization from its parent STL.")}</div>}
 
            <div className="flex gap-2 justify-end">
-             <button onClick={onClose} className="btn btn-secondary">Close</button>
+             <button onClick={onClose} className="btn btn-secondary">{t("Close")}</button>
            </div>
         </div>
       </div>

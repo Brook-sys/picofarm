@@ -1,4 +1,6 @@
+import { useTranslation } from 'react-i18next'
 export default function ErrorFallback() {
+  const { t } = useTranslation('components')
   return (
     <div className="flex items-center justify-center min-h-screen bg-surface-950">
       <div className="text-center p-8 max-w-md">
@@ -8,17 +10,14 @@ export default function ErrorFallback() {
           </svg>
         </div>
         <h1 className="text-2xl font-display font-semibold text-surface-100 mb-3">
-          Something went wrong
-        </h1>
+          {t("Something went wrong")}</h1>
         <p className="text-surface-400 mb-6">
-          An unexpected error occurred. The error has been reported and we'll look into it.
-        </p>
+          {t("An unexpected error occurred. The error has been reported and we'll look into it.")}</p>
         <button
           onClick={() => window.location.reload()}
           className="px-6 py-2.5 bg-accent-600 hover:bg-accent-500 text-white rounded-lg font-medium transition-colors"
         >
-          Reload Page
-        </button>
+          {t("Reload Page")}</button>
       </div>
     </div>
   )

@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import { useEffect, useState } from 'react'
 import { Plus, X, Tag as TagIcon } from 'lucide-react'
 import { tagsApi } from '../api/client'
@@ -18,15 +19,12 @@ export function TagSelector({
   entityId,
   className = '',
 }: TagSelectorProps) {
+  const { t } = useTranslation('components')
   const [allTags, setAllTags] = useState<Tag[]>([])
   const [showDropdown, setShowDropdown] = useState(false)
   const [newTagName, setNewTagName] = useState('')
   const [newTagColor, setNewTagColor] = useState('#6b7280')
   const [creating, setCreating] = useState(false)
-
-  useEffect(() => {
-    loadTags()
-  }, [])
 
   const loadTags = async () => {
     try {
@@ -36,6 +34,10 @@ export function TagSelector({
       console.error('Failed to load tags:', err)
     }
   }
+
+  useEffect(() => {
+    loadTags()
+  }, [])
 
   const handleAddTag = async (tag: Tag) => {
     if (selectedTags.find(t => t.id === tag.id)) return
@@ -123,7 +125,7 @@ export function TagSelector({
             <button
               onClick={() => handleRemoveTag(tag)}
               className="hover:bg-white/20 rounded-full p-0.5"
-              title={`Remove tag ${tag.name}`}
+              title={t("Remove tag {{name}}", { name: tag.name })}
             >
               <X className="w-3 h-3" />
             </button>
@@ -136,8 +138,7 @@ export function TagSelector({
           className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium text-surface-400 border border-dashed border-surface-700 hover:text-surface-100 hover:border-surface-500 transition-colors"
         >
           <Plus className="w-3 h-3" />
-          Add tag
-        </button>
+          {t("Add tag")}</button>
       </div>
 
       {/* Dropdown */}
@@ -146,7 +147,7 @@ export function TagSelector({
           {/* Existing tags */}
           {availableTags.length > 0 && (
             <div className="p-2 border-b border-surface-700">
-              <div className="text-xs font-medium text-surface-500 mb-2">Existing tags</div>
+              <div className="text-xs font-medium text-surface-500 mb-2">{t("Existing tags")}</div>
               <div className="flex flex-wrap gap-1">
                 {availableTags.map(tag => (
                   <button
@@ -165,13 +166,13 @@ export function TagSelector({
 
           {/* Create new tag */}
           <div className="p-2">
-            <div className="text-xs font-medium text-surface-500 mb-2">Create new tag</div>
+            <div className="text-xs font-medium text-surface-500 mb-2">{t("Create new tag")}</div>
             <div className="flex gap-2 mb-2">
               <input
                 type="text"
                 value={newTagName}
                 onChange={e => setNewTagName(e.target.value)}
-                placeholder="Tag name"
+                placeholder={t("Tag name")}
                 className="input h-auto py-1 flex-1"
                 onKeyDown={e => e.key === 'Enter' && handleCreateTag()}
               />
@@ -180,7 +181,7 @@ export function TagSelector({
                 disabled={!newTagName.trim() || creating}
                 className="px-3 py-1 text-sm bg-accent-600 text-white rounded hover:bg-accent-500 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {creating ? '...' : 'Create'}
+                {creating ? '...' : t("Create")}
               </button>
             </div>
 
@@ -205,8 +206,7 @@ export function TagSelector({
               onClick={() => setShowDropdown(false)}
               className="w-full px-3 py-1.5 text-sm text-surface-400 hover:bg-surface-700 hover:text-surface-100 rounded"
             >
-              Close
-            </button>
+              {t("Close")}</button>
           </div>
         </div>
       )}

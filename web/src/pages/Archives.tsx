@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import { useEffect, useMemo, useState } from 'react'
 import { archivesApi } from '../api/client'
 import type { PrintArchive } from '../types'
@@ -12,6 +13,8 @@ type ArchiveComparison = {
   differences: Record<string, boolean>
 }
 
+const JOB_STATUS_LABELS: Record<string, string> = {"queued":"Queued","assigned":"Assigned","uploaded":"Uploaded","started":"Started","progress":"Progress","paused":"Paused","resumed":"Resumed","completed":"Completed","failed":"Failed","cancelled":"Cancelled","retried":"Retried","idle":"Idle","printing":"Printing","offline":"Offline","error":"Error","unassigned":"Unassigned","available":"Available","empty":"Empty","in_use":"In use","running":"Running","succeeded":"Succeeded","interrupted":"Interrupted","user":"User","system":"System","printer":"Printer","api":"Api"}
+
 const STATUS_FILTERS = [
   { value: '', label: 'All statuses' },
   { value: 'completed', label: 'Completed' },
@@ -20,6 +23,7 @@ const STATUS_FILTERS = [
 ]
 
 export default function Archives() {
+  const { t, i18n } = useTranslation('library')
   const { formatCents } = useCurrency()
   const { data: printers } = usePrinters()
   const [items, setItems] = useState<PrintArchive[]>([])
@@ -48,7 +52,7 @@ export default function Archives() {
       })
       .catch((err: unknown) => {
         if (!active) return
-        setError(err instanceof Error ? err.message : 'Failed to load archives')
+        setError(err instanceof Error ? err.message : t("Failed to load archives"))
       })
       .finally(() => {
         if (active) setLoading(false)
@@ -56,7 +60,7 @@ export default function Archives() {
     return () => {
       active = false
     }
-  }, [statusFilter])
+  }, [statusFilter, t])
 
   // A new filter invalidates both the selection and an open comparison.
   useEffect(() => {
@@ -83,7 +87,7 @@ export default function Archives() {
       setComparison(result)
     } catch (err: unknown) {
       setComparison(null)
-      setCompareError(err instanceof Error ? err.message : 'Failed to compare archives')
+      setCompareError(err instanceof Error ? err.message : t("Failed to compare archives"))
     } finally {
       setComparing(false)
     }
@@ -91,35 +95,41 @@ export default function Archives() {
 
   const printerLabel = (id?: string) => (id ? printerNames.get(id) ?? id : '—')
 
+  const formatEndTime = (value?: string | null) => {
+    if (!value) return '—'
+    const date = new Date(value)
+    return Number.isNaN(date.getTime()) ? '—' : date.toLocaleString(i18n.resolvedLanguage)
+  }
+
   const comparisonRows = comparison
     ? [
         {
           field: 'status',
-          label: 'Status',
-          a: comparison.a.status,
-          b: comparison.b.status,
+          label: t("Status"),
+          a: t(comparison.a.status === 'completed' ? 'Completed' : comparison.a.status === 'failed' ? 'Failed' : 'Cancelled'),
+          b: t(comparison.b.status === 'completed' ? 'Completed' : comparison.b.status === 'failed' ? 'Failed' : 'Cancelled'),
         },
         {
           field: 'printer_id',
-          label: 'Printer',
+          label: t("Printer"),
           a: printerLabel(comparison.a.printer_id),
           b: printerLabel(comparison.b.printer_id),
         },
         {
           field: 'duration_seconds',
-          label: 'Duration',
+          label: t("Duration"),
           a: formatDuration(comparison.a.duration_seconds),
           b: formatDuration(comparison.b.duration_seconds),
         },
         {
           field: 'filament_used_grams',
-          label: 'Filament',
+          label: t("Filament"),
           a: `${comparison.a.filament_used_grams.toFixed(1)}g`,
           b: `${comparison.b.filament_used_grams.toFixed(1)}g`,
         },
         {
           field: 'cost_cents',
-          label: 'Cost',
+          label: t("Cost"),
           a: formatCents(comparison.a.cost_cents),
           b: formatCents(comparison.b.cost_cents),
         },
@@ -129,16 +139,16 @@ export default function Archives() {
   return (
     <div className="p-6">
       <div className="flex items-center justify-between mb-4">
-        <h1 className="text-2xl font-semibold">Print Archives</h1>
+        <h1 className="text-2xl font-semibold">{t("Print Archives")}</h1>
         <div className="flex items-center gap-2">
           <select
             className="input"
-            aria-label="Filter by status"
+            aria-label={t("Filter by status")}
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
           >
             {STATUS_FILTERS.map((option) => (
-              <option key={option.value} value={option.value}>{option.label}</option>
+              <option key={option.value} value={option.value}>{t(option.label)}</option>
             ))}
           </select>
           <button
@@ -146,30 +156,30 @@ export default function Archives() {
             disabled={selected.length !== 2 || comparing}
             onClick={runCompare}
           >
-            {comparing ? 'Comparing...' : 'Compare selected'}
+            {comparing ? t("Comparing...") : t("Compare selected")}
           </button>
-          <a className="btn btn-secondary" href={archivesApi.exportCSV()}>Export CSV</a>
+          <a className="btn btn-secondary" href={archivesApi.exportCSV()}>{t("Export CSV")}</a>
         </div>
       </div>
 
       {error && (
         <div className="card p-3 mb-4 text-sm text-red-400 border border-red-500/40">
-          Failed to load archives: {error}
+          {t("Failed to load archives:")}{' '}{error}
         </div>
       )}
 
       {comparison && (
         <div className="card p-4 mb-4">
           <div className="flex items-center justify-between mb-3">
-            <h2 className="text-lg font-medium">Comparison</h2>
-            <button className="btn btn-secondary" onClick={() => setComparison(null)}>Close</button>
+            <h2 className="text-lg font-medium">{t("Comparison")}</h2>
+            <button className="btn btn-secondary" onClick={() => setComparison(null)}>{t("Close")}</button>
           </div>
           <table className="w-full text-sm">
             <thead className="bg-surface-800 text-surface-400">
               <tr>
-                <th className="p-3 text-left">Metric</th>
-                <th className="p-3 text-left">A</th>
-                <th className="p-3 text-left">B</th>
+                <th className="p-3 text-left">{t("Metric")}</th>
+                <th className="p-3 text-left">{t("A")}</th>
+                <th className="p-3 text-left">{t("B")}</th>
               </tr>
             </thead>
             <tbody>
@@ -185,13 +195,13 @@ export default function Archives() {
               })}
             </tbody>
           </table>
-          <p className="mt-2 text-xs text-surface-500">Highlighted rows are the fields that differ between the two archives.</p>
+          <p className="mt-2 text-xs text-surface-500">{t("Highlighted rows are the fields that differ between the two archives.")}</p>
         </div>
       )}
 
       {compareError && (
         <div className="card p-3 mb-4 text-sm text-red-400 border border-red-500/40">
-          Failed to compare archives: {compareError}
+          {t("Failed to compare archives:")}{' '}{compareError}
         </div>
       )}
 
@@ -200,13 +210,13 @@ export default function Archives() {
           <thead className="bg-surface-800 text-surface-400">
             <tr>
               <th className="p-3 w-8" />
-              <th className="p-3 text-left">Status</th>
-              <th className="p-3 text-left">Printer</th>
-              <th className="p-3 text-left">Duration</th>
-              <th className="p-3 text-left">Filament</th>
-              <th className="p-3 text-left">Cost</th>
-              <th className="p-3 text-left">Ended</th>
-              <th className="p-3 text-left">Notes</th>
+              <th className="p-3 text-left">{t("Status")}</th>
+              <th className="p-3 text-left">{t("Printer")}</th>
+              <th className="p-3 text-left">{t("Duration")}</th>
+              <th className="p-3 text-left">{t("Filament")}</th>
+              <th className="p-3 text-left">{t("Cost")}</th>
+              <th className="p-3 text-left">{t("Ended")}</th>
+              <th className="p-3 text-left">{t("Notes")}</th>
             </tr>
           </thead>
           <tbody>
@@ -215,30 +225,30 @@ export default function Archives() {
                 <td className="p-3">
                   <input
                     type="checkbox"
-                    aria-label={`Select archive ${item.id}`}
+                    aria-label={t("Select archive {{name}}", { name: item.id })}
                     checked={selected.includes(item.id)}
                     onChange={() => toggleSelect(item.id)}
                   />
                 </td>
                 <td className="p-3">
-                  <span className={`px-2 py-0.5 rounded text-xs ${getStatusBadge(item.status)}`}>{item.status}</span>
+                  <span className={`px-2 py-0.5 rounded text-xs ${getStatusBadge(item.status)}`}>{t(JOB_STATUS_LABELS[item.status] || item.status)}</span>
                 </td>
                 <td className="p-3">{printerLabel(item.printer_id)}</td>
                 <td className="p-3">{item.duration_seconds > 0 ? formatDuration(item.duration_seconds) : '—'}</td>
-                <td className="p-3">{item.filament_used_grams.toFixed(1)}g</td>
+                <td className="p-3">{item.filament_used_grams.toFixed(1)}{t("g")}</td>
                 <td className="p-3">{formatCents(item.cost_cents)}</td>
-                <td className="p-3 text-surface-400">{item.end_time ? new Date(item.end_time).toLocaleString() : '—'}</td>
+                <td className="p-3 text-surface-400">{formatEndTime(item.end_time)}</td>
                 <td className="p-3 text-surface-400 max-w-64 truncate" title={item.notes}>{item.notes || '—'}</td>
               </tr>
             ))}
             {items.length === 0 && !loading && (
-              <tr><td className="p-3 text-surface-400" colSpan={8}>No archives yet. Finished prints are archived automatically.</td></tr>
+              <tr><td className="p-3 text-surface-400" colSpan={8}>{t("No archives yet. Finished prints are archived automatically.")}</td></tr>
             )}
           </tbody>
         </table>
       </div>
 
-      {loading && <div className="p-3 text-surface-400">Loading archives...</div>}
+      {loading && <div className="p-3 text-surface-400">{t("Loading archives...")}</div>}
     </div>
   )
 }

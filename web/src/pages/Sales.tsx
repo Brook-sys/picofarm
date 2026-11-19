@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import { useState, useMemo } from 'react'
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query'
 import {
@@ -50,7 +51,15 @@ const formatTime = (seconds: number) => {
 const toCents = (val: string) => Math.round(parseFloat(val || '0') * 100)
 const fromCents = (cents: number) => (cents / 100).toFixed(2)
 
+const displayLabels: Record<string, string> = {
+  marketplace: 'Marketplace', etsy: 'Etsy', website: 'Website', direct: 'Direct', other: 'Other',
+  manual: 'Manual', imported: 'Imported',
+}
+
 export default function Sales() {
+  const { t, i18n } = useTranslation('commerce')
+  const locale = i18n.resolvedLanguage?.startsWith('en') ? 'en-US' : 'pt-BR'
+
   const { currencyCode, formatCents } = useCurrency()
   const queryClient = useQueryClient()
   const [editingSale, setEditingSale] = useState<Sale | null>(null)
@@ -108,62 +117,65 @@ export default function Sales() {
       <div className="flex items-center justify-between mb-8">
         <div>
           <h1 className="text-3xl font-display font-bold text-surface-100">
-            Sales
+
+            {t("Sales")}
           </h1>
           <p className="text-surface-400 mt-1">
-            Track revenue across all channels
+
+            {t("Track revenue across all channels")}
           </p>
         </div>
         <button onClick={openAdd} className="btn btn-primary">
           <Plus className="h-4 w-4 mr-2" />
-          Add Sale
+
+          {t("Add Sale")}
         </button>
       </div>
 
       {/* Summary Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
         <div className="card p-4">
-          <div className="text-sm text-surface-500 mb-1">Gross Revenue</div>
+          <div className="text-sm text-surface-500 mb-1">{t("Gross Revenue")}</div>
           <div className="text-2xl font-semibold text-emerald-400">
             {formatCents(totals.totalGross)}
           </div>
         </div>
         <div className="card p-4">
-          <div className="text-sm text-surface-500 mb-1">Net Revenue</div>
+          <div className="text-sm text-surface-500 mb-1">{t("Net Revenue")}</div>
           <div className="text-2xl font-semibold text-surface-100">
             {formatCents(totals.totalNet)}
           </div>
-          <div className="text-xs text-surface-500 mt-1">after fees</div>
+          <div className="text-xs text-surface-500 mt-1">{t("after fees")}</div>
         </div>
         <div className="card p-4">
-          <div className="text-sm text-surface-500 mb-1">Total COGS</div>
+          <div className="text-sm text-surface-500 mb-1">{t("Total COGS")}</div>
           <div className="text-2xl font-semibold text-red-400">
             {formatCents(totals.totalCOGS)}
           </div>
-          <div className="text-xs text-surface-500 mt-1">materials + printing + supplies</div>
+          <div className="text-xs text-surface-500 mt-1">{t("materials + printing + supplies")}</div>
         </div>
         <div className="card p-4">
-          <div className="text-sm text-surface-500 mb-1">Net Profit</div>
+          <div className="text-sm text-surface-500 mb-1">{t("Net Profit")}</div>
           <div className={cn(
             'text-2xl font-semibold',
             totals.totalProfit >= 0 ? 'text-emerald-400' : 'text-red-400'
           )}>
             {formatCents(totals.totalProfit)}
           </div>
-          <div className="text-xs text-surface-500 mt-1">revenue - fees - COGS</div>
+          <div className="text-xs text-surface-500 mt-1">{t("revenue - fees - COGS")}</div>
         </div>
         <div className="card p-4">
-          <div className="text-sm text-surface-500 mb-1">Sales</div>
+          <div className="text-sm text-surface-500 mb-1">{t("Sales")}</div>
           <div className="text-2xl font-semibold text-blue-400">
             {totals.count}
           </div>
-          <div className="text-xs text-surface-500 mt-1">avg {formatCents(totals.avgOrder)}</div>
+          <div className="text-xs text-surface-500 mt-1">{t("avg")} {formatCents(totals.avgOrder)}</div>
         </div>
       </div>
 
       {excludedCurrencyCount > 0 && (
         <div className="mb-6 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-300">
-          {excludedCurrencyCount} sale{excludedCurrencyCount === 1 ? '' : 's'} in other currencies are shown below but excluded from {currencyCode} totals.
+          {t("{{count}} sales in other currencies are listed below but excluded from {{currency}} totals.", { count: excludedCurrencyCount, currency: currencyCode })}
         </div>
       )}
 
@@ -176,18 +188,19 @@ export default function Sales() {
       {projectSales.length > 0 && (
         <div className="mb-8">
           <h2 className="text-lg font-semibold text-surface-100 mb-4">
-            Top Projects
+
+            {t("Top Projects")}
           </h2>
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-6">
             {/* Bar chart */}
             <div className="card p-6">
-              <h3 className="text-sm font-medium text-surface-400 mb-3">Revenue by Project</h3>
+              <h3 className="text-sm font-medium text-surface-400 mb-3">{t("Revenue by Project")}</h3>
               <div className="h-[250px]">
                 <Bar
                   data={{
                     labels: projectSales.map(p => p.project_name),
                     datasets: [{
-                      label: 'Revenue',
+                      label: t("Revenue"),
                       data: projectSales.map(p => p.gross_cents),
                       backgroundColor: '#10b981',
                       borderRadius: 4,
@@ -230,17 +243,17 @@ export default function Sales() {
 
             {/* Table */}
             <div className="card p-6 overflow-x-auto">
-              <h3 className="text-sm font-medium text-surface-400 mb-3">Breakdown</h3>
+              <h3 className="text-sm font-medium text-surface-400 mb-3">{t("Breakdown")}</h3>
               <table className="w-full text-sm">
                 <thead>
                   <tr className="text-left text-surface-500 border-b border-surface-700">
-                    <th className="pb-2 font-medium">Project</th>
-                    <th className="pb-2 font-medium text-right">Units</th>
-                    <th className="pb-2 font-medium text-right">Revenue</th>
-                    <th className="pb-2 font-medium text-right">Unit Cost</th>
-                    <th className="pb-2 font-medium text-right">COGS</th>
-                    <th className="pb-2 font-medium text-right">Print Time</th>
-                    <th className="pb-2 font-medium text-right">Profit</th>
+                    <th className="pb-2 font-medium">{t("Project")}</th>
+                    <th className="pb-2 font-medium text-right">{t("Units")}</th>
+                    <th className="pb-2 font-medium text-right">{t("Revenue")}</th>
+                    <th className="pb-2 font-medium text-right">{t("Unit Cost")}</th>
+                    <th className="pb-2 font-medium text-right">{t("COGS")}</th>
+                    <th className="pb-2 font-medium text-right">{t("Print Time")}</th>
+                    <th className="pb-2 font-medium text-right">{t("Profit")}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -268,7 +281,7 @@ export default function Sales() {
                 </tbody>
                 <tfoot>
                   <tr className="text-surface-100 font-semibold">
-                    <td className="pt-3">Total</td>
+                    <td className="pt-3">{t("Total")}</td>
                     <td className="pt-3 text-right">{projectSales.reduce((s, p) => s + p.count, 0)}</td>
                     <td className="pt-3 text-right text-emerald-400">{formatCents(projectSales.reduce((s, p) => s + p.gross_cents, 0))}</td>
                     <td className="pt-3 text-right">-</td>
@@ -295,19 +308,22 @@ export default function Sales() {
 
       {/* Sales List */}
       {isLoading ? (
-        <div className="text-surface-500">Loading sales...</div>
+        <div className="text-surface-500">{t("Loading sales...")}</div>
       ) : sales.length === 0 ? (
         <div className="card p-8 text-center">
           <ShoppingBag className="h-12 w-12 mx-auto mb-3 text-surface-600" />
           <h3 className="text-lg font-medium text-surface-300 mb-2">
-            No sales yet
+
+            {t("No sales yet")}
           </h3>
           <p className="text-surface-500 mb-4">
-            Record a sale to start tracking revenue
+
+            {t("Record a sale to start tracking revenue")}
           </p>
           <button onClick={openAdd} className="btn btn-primary">
             <Plus className="h-4 w-4 mr-2" />
-            Add Sale
+
+            {t("Add Sale")}
           </button>
         </div>
       ) : (
@@ -332,12 +348,12 @@ export default function Sales() {
                   </div>
                   <div>
                     <div className="font-medium text-surface-100">
-                      {sale.item_description || 'Sale'}
+                      {sale.item_description || t("Sale")}
                     </div>
                     <div className="text-sm text-surface-500 flex items-center gap-2">
-                      <span>{new Date(sale.occurred_at).toLocaleDateString()}</span>
+                      <span>{new Date(sale.occurred_at).toLocaleDateString(locale)}</span>
                       <span>·</span>
-                      <span className="capitalize">{sale.channel}</span>
+                      <span className="capitalize">{t(displayLabels[sale.channel] || sale.channel)}</span>
                       {sale.customer_name && (
                         <>
                           <span>·</span>
@@ -354,17 +370,18 @@ export default function Sales() {
                       {formatCents(sale.gross_cents, sale.currency)}
                     </div>
                     <div className="text-xs text-surface-500">
-                      net {formatCents(sale.net_cents, sale.currency)}
+
+                      {t("net")} {formatCents(sale.net_cents, sale.currency)}
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <button
+                    <button aria-label={t("Edit")}
                       onClick={() => openEdit(sale)}
                       className="btn btn-ghost text-xs py-1 px-2 text-surface-400 hover:text-surface-200"
                     >
                       <Edit3 className="h-3 w-3" />
                     </button>
-                    <button
+                    <button aria-label={t("Delete")}
                       onClick={() => deleteSale.mutate(sale.id)}
                       className="btn btn-ghost text-xs py-1 px-2 text-red-400 hover:text-red-300"
                     >
@@ -414,14 +431,17 @@ function ChangeBadge({ current, previous }: { current: number; previous: number 
   )
 }
 
-function formatWeekRange(start: string, end: string) {
+function formatWeekRange(start: string, end: string, locale: string) {
   const s = new Date(start + 'T00:00:00')
   const e = new Date(end + 'T00:00:00')
-  const fmt = (d: Date) => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  const fmt = (d: Date) => d.toLocaleDateString(locale, { month: 'short', day: 'numeric' })
   return `${fmt(s)} – ${fmt(e)}`
 }
 
 function WeeklyInsightsCard({ insights }: { insights: WeeklyInsights }) {
+  const { t, i18n } = useTranslation('commerce')
+  const locale = i18n.resolvedLanguage?.startsWith('en') ? 'en-US' : 'pt-BR'
+
   const { formatCents } = useCurrency()
   const tw = insights.this_week
   const lw = insights.last_week
@@ -434,36 +454,36 @@ function WeeklyInsightsCard({ insights }: { insights: WeeklyInsights }) {
   return (
     <div className="mb-8">
       <div className="flex items-center gap-3 mb-4">
-        <h2 className="text-lg font-semibold text-surface-100">This Week in Sales</h2>
-        <span className="text-sm text-surface-500">{formatWeekRange(insights.week_start, insights.week_end)}</span>
+        <h2 className="text-lg font-semibold text-surface-100">{t("This Week in Sales")}</h2>
+        <span className="text-sm text-surface-500">{formatWeekRange(insights.week_start, insights.week_end, locale)}</span>
       </div>
 
       {/* Completed sales row */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="card p-4">
           <div className="flex items-center justify-between mb-1">
-            <span className="text-sm text-surface-500">Gross Revenue</span>
+            <span className="text-sm text-surface-500">{t("Gross Revenue")}</span>
             <ChangeBadge current={tw.gross_cents} previous={lw.gross_cents} />
           </div>
           <div className="text-2xl font-semibold text-emerald-400">{formatCents(tw.gross_cents)}</div>
         </div>
         <div className="card p-4">
           <div className="flex items-center justify-between mb-1">
-            <span className="text-sm text-surface-500">Net Revenue</span>
+            <span className="text-sm text-surface-500">{t("Net Revenue")}</span>
             <ChangeBadge current={tw.net_cents} previous={lw.net_cents} />
           </div>
           <div className="text-2xl font-semibold text-surface-100">{formatCents(tw.net_cents)}</div>
         </div>
         <div className="card p-4">
           <div className="flex items-center justify-between mb-1">
-            <span className="text-sm text-surface-500"># Sales</span>
+            <span className="text-sm text-surface-500">{t("# Sales")}</span>
             <ChangeBadge current={tw.count} previous={lw.count} />
           </div>
           <div className="text-2xl font-semibold text-blue-400">{tw.count}</div>
         </div>
         <div className="card p-4">
           <div className="flex items-center justify-between mb-1">
-            <span className="text-sm text-surface-500">Avg Order</span>
+            <span className="text-sm text-surface-500">{t("Avg Order")}</span>
             <ChangeBadge current={avgOrder} previous={lastAvg} />
           </div>
           <div className="text-2xl font-semibold text-surface-100">{formatCents(avgOrder)}</div>
@@ -473,26 +493,26 @@ function WeeklyInsightsCard({ insights }: { insights: WeeklyInsights }) {
       {/* Pending sales row */}
       {insights.pending_count > 0 && (
         <div className="mt-4">
-          <div className="text-xs font-medium text-amber-400/80 uppercase tracking-wider mb-2">Pipeline — In Production</div>
+          <div className="text-xs font-medium text-amber-400/80 uppercase tracking-wider mb-2">{t("Pipeline — In Production")}</div>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             <div className="card p-4 border border-amber-500/20">
-              <div className="text-sm text-surface-500 mb-1">Pending Revenue</div>
+              <div className="text-sm text-surface-500 mb-1">{t("Pending Revenue")}</div>
               <div className="text-2xl font-semibold text-amber-400">{formatCents(insights.pending_revenue_cents)}</div>
             </div>
             <div className="card p-4 border border-amber-500/20">
-              <div className="text-sm text-surface-500 mb-1">Pending Units</div>
+              <div className="text-sm text-surface-500 mb-1">{t("Pending Units")}</div>
               <div className="text-2xl font-semibold text-amber-400">{insights.pending_count}</div>
             </div>
             <div className="card p-4 border border-amber-500/20">
-              <div className="text-sm text-surface-500 mb-1">Avg Unit Value</div>
+              <div className="text-sm text-surface-500 mb-1">{t("Avg Unit Value")}</div>
               <div className="text-2xl font-semibold text-surface-100">{formatCents(pendingAvg)}</div>
             </div>
             <div className="card p-4 border border-amber-500/20">
-              <div className="text-sm text-surface-500 mb-1">Total Pipeline</div>
+              <div className="text-sm text-surface-500 mb-1">{t("Total Pipeline")}</div>
               <div className="text-2xl font-semibold text-surface-100">
                 {formatCents(tw.gross_cents + insights.pending_revenue_cents)}
               </div>
-              <div className="text-xs text-surface-500 mt-1">completed + pending</div>
+              <div className="text-xs text-surface-500 mt-1">{t("completed + pending")}</div>
             </div>
           </div>
         </div>
@@ -504,8 +524,8 @@ function WeeklyInsightsCard({ insights }: { insights: WeeklyInsights }) {
           {insights.channels.map((ch) => {
             const cfg = channelConfig[ch.channel as keyof typeof channelConfig] || channelConfig.other
             return (
-              <span key={ch.channel} className={cn('inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full', cfg.bgColor, cfg.color)}>
-                <span className="capitalize">{ch.channel}</span>
+              <span key={t(displayLabels[ch.channel] || ch.channel)} className={cn('inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full', cfg.bgColor, cfg.color)}>
+                <span className="capitalize">{t(displayLabels[ch.channel] || ch.channel)}</span>
                 <span className="opacity-60">&times; {ch.count}</span>
               </span>
             )
@@ -525,6 +545,8 @@ function SaleModal({
   onClose: () => void
   onSuccess: () => void
 }) {
+  const { t } = useTranslation('commerce')
+
   const { currencyCode, formatCents } = useCurrency()
   const formCurrency = sale?.currency || currencyCode
   const symbol = currencySymbol(formCurrency)
@@ -646,9 +668,9 @@ function SaleModal({
       <div className="card w-full max-w-2xl p-6 my-8">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-xl font-semibold text-surface-100">
-            {isEdit ? 'Edit Sale' : 'Add Sale'}
+            {isEdit ? t("Edit Sale") : t("Add Sale")}
           </h2>
-          <button onClick={onClose} className="text-surface-400 hover:text-surface-200">
+          <button aria-label={t("Close")} onClick={onClose} className="text-surface-400 hover:text-surface-200">
             <X className="h-5 w-5" />
           </button>
         </div>
@@ -656,13 +678,13 @@ function SaleModal({
         <form onSubmit={handleSubmit} className="space-y-4">
           {/* Project Selector */}
           <div>
-            <label className="block text-sm text-surface-400 mb-1">Link to Project (optional)</label>
+            <label className="block text-sm text-surface-400 mb-1">{t("Link to Project (optional)")}</label>
             <select
               value={selectedProjectId}
               onChange={(e) => handleProjectChange(e.target.value)}
               className="input w-full"
             >
-              <option value="">-- No project --</option>
+              <option value="">{t("-- No project --")}</option>
               {projects.map((project) => (
                 <option key={project.id} value={project.id}>
                   {project.name}
@@ -670,41 +692,42 @@ function SaleModal({
               ))}
             </select>
             <p className="text-xs text-surface-500 mt-1">
-              Linking to a project lets you track profit by including material and printing costs
+
+              {t("Linking to a project lets you track profit by including material and printing costs")}
             </p>
           </div>
 
           {/* Project Cost Summary */}
           {selectedProjectId && (
             <div className="p-3 rounded-lg bg-surface-800/50 border border-surface-700">
-              <div className="text-sm font-medium text-surface-300 mb-2">Project Costs</div>
+              <div className="text-sm font-medium text-surface-300 mb-2">{t("Project Costs")}</div>
               {loadingSummary ? (
-                <div className="text-sm text-surface-500">Loading costs...</div>
+                <div className="text-sm text-surface-500">{t("Loading costs...")}</div>
               ) : projectSummary ? (
                 <div className="grid grid-cols-2 gap-2 text-sm">
                   <div className="flex justify-between">
-                    <span className="text-surface-500">Material Cost:</span>
+                    <span className="text-surface-500">{t("Material Cost:")}</span>
                     <span className="text-surface-300">{formatCents(projectSummary.material_cost_cents)}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-surface-500">Printer Time:</span>
+                    <span className="text-surface-500">{t("Printer Time:")}</span>
                     <span className="text-surface-300">{formatCents(projectSummary.printer_time_cost_cents)}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-surface-500">Supply Cost:</span>
+                    <span className="text-surface-500">{t("Supply Cost:")}</span>
                     <span className="text-surface-300">{formatCents(projectSummary.supply_cost_cents)}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-surface-500">Unit Cost:</span>
+                    <span className="text-surface-500">{t("Unit Cost:")}</span>
                     <span className="text-surface-300">{formatCents(projectSummary.unit_cost_cents)}</span>
                   </div>
                   <div className="col-span-2 pt-2 border-t border-surface-700 flex justify-between font-medium">
-                    <span className="text-surface-400">Total COGS:</span>
+                    <span className="text-surface-400">{t("Total COGS:")}</span>
                     <span className="text-red-400">{formatCents(projectSummary.total_cost_cents)}</span>
                   </div>
                   {toCents(gross) > 0 && (
                     <div className="col-span-2 flex justify-between font-medium">
-                      <span className="text-surface-400">Est. Profit:</span>
+                      <span className="text-surface-400">{t("Est. Profit:")}</span>
                       <span className={cn(
                         netCents - projectSummary.total_cost_cents >= 0 ? 'text-emerald-400' : 'text-red-400'
                       )}>
@@ -714,7 +737,7 @@ function SaleModal({
                   )}
                 </div>
               ) : (
-                <div className="text-sm text-surface-500">No cost data available</div>
+                <div className="text-sm text-surface-500">{t("No cost data available")}</div>
               )}
             </div>
           )}
@@ -722,7 +745,7 @@ function SaleModal({
           {/* Row 1: Date + Channel */}
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm text-surface-400 mb-1">Date</label>
+              <label className="block text-sm text-surface-400 mb-1">{t("Date")}</label>
               <input
                 type="date"
                 value={date}
@@ -732,17 +755,17 @@ function SaleModal({
               />
             </div>
             <div>
-              <label className="block text-sm text-surface-400 mb-1">Channel</label>
+              <label className="block text-sm text-surface-400 mb-1">{t("Channel")}</label>
               <select
                 value={channel}
                 onChange={(e) => setChannel(e.target.value as SalesChannel)}
                 className="input w-full"
               >
-                <option value="marketplace">Marketplace</option>
-                <option value="etsy">Etsy</option>
-                <option value="website">Website</option>
-                <option value="direct">Direct</option>
-                <option value="other">Other</option>
+                <option value="marketplace">{t("Marketplace")}</option>
+                <option value="etsy">{t("Etsy")}</option>
+                <option value="website">{t("Website")}</option>
+                <option value="direct">{t("Direct")}</option>
+                <option value="other">{t("Other")}</option>
               </select>
             </div>
           </div>
@@ -750,23 +773,23 @@ function SaleModal({
           {/* Row 2: Platform + Item Description */}
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm text-surface-400 mb-1">Platform</label>
+              <label className="block text-sm text-surface-400 mb-1">{t("Platform")}</label>
               <input
                 type="text"
                 value={platform}
                 onChange={(e) => setPlatform(e.target.value)}
                 className="input w-full"
-                placeholder="e.g. Facebook Marketplace"
+                placeholder={t("e.g. Facebook Marketplace")}
               />
             </div>
             <div>
-              <label className="block text-sm text-surface-400 mb-1">Item Description</label>
+              <label className="block text-sm text-surface-400 mb-1">{t("Item Description")}</label>
               <input
                 type="text"
                 value={itemDescription}
                 onChange={(e) => setItemDescription(e.target.value)}
                 className="input w-full"
-                placeholder="What was sold"
+                placeholder={t("What was sold")}
                 required
               />
             </div>
@@ -775,7 +798,7 @@ function SaleModal({
           {/* Row 3: Quantity + Gross Amount */}
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm text-surface-400 mb-1">Quantity</label>
+              <label className="block text-sm text-surface-400 mb-1">{t("Quantity")}</label>
               <input
                 type="number"
                 value={quantity}
@@ -785,7 +808,7 @@ function SaleModal({
               />
             </div>
             <div>
-              <label className="block text-sm text-surface-400 mb-1">Gross Amount ({symbol})</label>
+              <label className="block text-sm text-surface-400 mb-1">{t("Gross Amount (")}{symbol})</label>
               <input
                 type="number"
                 step="0.01"
@@ -801,7 +824,7 @@ function SaleModal({
           {/* Row 4: Fees + Shipping Charged */}
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm text-surface-400 mb-1">Fees ({symbol})</label>
+              <label className="block text-sm text-surface-400 mb-1">{t("Fees (")}{symbol})</label>
               <input
                 type="number"
                 step="0.01"
@@ -812,7 +835,7 @@ function SaleModal({
               />
             </div>
             <div>
-              <label className="block text-sm text-surface-400 mb-1">Shipping Charged ({symbol})</label>
+              <label className="block text-sm text-surface-400 mb-1">{t("Shipping Charged (")}{symbol})</label>
               <input
                 type="number"
                 step="0.01"
@@ -827,7 +850,7 @@ function SaleModal({
           {/* Row 5: Shipping Cost + Tax Collected */}
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm text-surface-400 mb-1">Shipping Cost ({symbol})</label>
+              <label className="block text-sm text-surface-400 mb-1">{t("Shipping Cost (")}{symbol})</label>
               <input
                 type="number"
                 step="0.01"
@@ -838,7 +861,7 @@ function SaleModal({
               />
             </div>
             <div>
-              <label className="block text-sm text-surface-400 mb-1">Tax Collected ({symbol})</label>
+              <label className="block text-sm text-surface-400 mb-1">{t("Tax Collected (")}{symbol})</label>
               <input
                 type="number"
                 step="0.01"
@@ -853,13 +876,13 @@ function SaleModal({
           {/* Row 6: Customer + Order Reference */}
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm text-surface-400 mb-1">Customer</label>
+              <label className="block text-sm text-surface-400 mb-1">{t("Customer")}</label>
               <select
                 value={selectedCustomerId}
                 onChange={(e) => handleCustomerChange(e.target.value)}
                 className="input w-full"
               >
-                <option value="">-- No customer --</option>
+                <option value="">{t("-- No customer --")}</option>
                 {customers.map((c: Customer) => (
                   <option key={c.id} value={c.id}>
                     {c.name}{c.company ? ` (${c.company})` : ''}
@@ -872,38 +895,38 @@ function SaleModal({
                   value={customerName}
                   onChange={(e) => setCustomerName(e.target.value)}
                   className="input w-full mt-2"
-                  placeholder="Or type a name for one-off sales"
+                  placeholder={t("Or type a name for one-off sales")}
                 />
               )}
             </div>
             <div>
-              <label className="block text-sm text-surface-400 mb-1">Order Reference</label>
+              <label className="block text-sm text-surface-400 mb-1">{t("Order Reference")}</label>
               <input
                 type="text"
                 value={orderReference}
                 onChange={(e) => setOrderReference(e.target.value)}
                 className="input w-full"
-                placeholder="Optional"
+                placeholder={t("Optional")}
               />
             </div>
           </div>
 
           {/* Row 7: Notes */}
           <div>
-            <label className="block text-sm text-surface-400 mb-1">Notes</label>
+            <label className="block text-sm text-surface-400 mb-1">{t("Notes")}</label>
             <textarea
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               className="input w-full"
               rows={2}
-              placeholder="Optional notes"
+              placeholder={t("Optional notes")}
             />
           </div>
 
           {/* Net calculation */}
           <div className="p-3 rounded-lg bg-surface-800/50 border border-surface-700">
             <div className="flex items-center justify-between">
-              <span className="text-sm text-surface-400">Calculated Net</span>
+              <span className="text-sm text-surface-400">{t("Calculated Net")}</span>
               <span className={cn(
                 'text-lg font-semibold',
                 netCents >= 0 ? 'text-emerald-400' : 'text-red-400'
@@ -912,16 +935,18 @@ function SaleModal({
               </span>
             </div>
             <div className="text-xs text-surface-500 mt-1">
-              Gross - Fees - Shipping Cost
+
+              {t("Gross - Fees - Shipping Cost")}
             </div>
           </div>
 
           <div className="flex justify-end gap-3 pt-2">
             <button type="button" onClick={onClose} className="btn btn-ghost">
-              Cancel
+
+              {t("Cancel")}
             </button>
             <button type="submit" disabled={submitting} className="btn btn-primary">
-              {submitting ? 'Saving...' : isEdit ? 'Update Sale' : 'Add Sale'}
+              {submitting ? t("Saving...") : isEdit ? t("Update Sale") : t("Add Sale")}
             </button>
           </div>
         </form>

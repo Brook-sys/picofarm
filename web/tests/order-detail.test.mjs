@@ -28,6 +28,7 @@ function harness({ tracking = null, api = {}, order = { id: 'test-order', status
       useEffect: () => {},
     },
     'react/jsx-runtime': { jsx, jsxs: jsx },
+    'react-i18next': { useTranslation: () => ({ t: (key, values = {}) => key.replace(/{{(\w+)}}/g, (_, name) => String(values[name] ?? '')), i18n: { resolvedLanguage: 'en' } }) },
     'react-router-dom': { useParams: () => ({ id: 'test-order' }), Link: 'a' },
     'lucide-react': new Proxy({}, { get: (_, name) => name }),
     '../api/client': { ordersApi: api, projectsApi: {} },

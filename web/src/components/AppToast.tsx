@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import { CheckCircle, Info, XCircle } from 'lucide-react'
 import { cn } from '../lib/utils'
 
@@ -16,6 +17,7 @@ const toneStyles: Record<AppToastTone, { box: string; icon: string; Icon: typeof
 }
 
 export default function AppToast({ toast, onClose }: { toast: AppToastState; onClose?: () => void }) {
+  const { t } = useTranslation('components')
   const tone = toast.tone || 'success'
   const styles = toneStyles[tone]
   const Icon = styles.Icon
@@ -28,7 +30,7 @@ export default function AppToast({ toast, onClose }: { toast: AppToastState; onC
         <div className="text-base font-bold leading-tight">{toast.title}</div>
         {toast.message && <div className="mt-1 text-sm font-medium text-white/85">{toast.message}</div>}
       </div>
-      {onClose && <button onClick={onClose} className="ml-2 rounded-full px-2 text-lg leading-none text-white/70 hover:bg-white/10 hover:text-white">×</button>}
+      {onClose && <button onClick={onClose} className="ml-2 rounded-full px-2 text-lg leading-none text-white/70 hover:bg-white/10 hover:text-white">{t("×")}</button>}
     </div>
   )
 }

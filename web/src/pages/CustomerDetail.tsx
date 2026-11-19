@@ -1,10 +1,23 @@
+import { useTranslation } from 'react-i18next'
 import { useCallback, useEffect, useState } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Mail, Building2, Phone, FileText, Package, Trash2, Plus, MapPin } from 'lucide-react'
 import { customersApi, quotesApi, ordersApi } from '../api/client'
 import type { Customer, Quote, Order, Address } from '../types'
 
+const displayLabels: Record<string, string> = {
+  marketplace: 'Marketplace', etsy: 'Etsy', website: 'Website', direct: 'Direct', other: 'Other',
+  manual: 'Manual', imported: 'Imported',
+  pending: 'Pending', in_progress: 'In Progress', completed: 'Completed', shipped: 'Shipped', cancelled: 'Cancelled',
+  draft: 'Draft', sent: 'Sent', accepted: 'Accepted', rejected: 'Rejected', expired: 'Expired',
+  confirmed: 'Confirmed', processing: 'Processing...', failed: 'Parse Failed', pending_review: 'Pending Review',
+  queued: 'Queued', printing: 'Printing', paused: 'Paused',
+}
+
 export default function CustomerDetail() {
+  const { t, i18n } = useTranslation('commerce')
+  const locale = i18n.resolvedLanguage?.startsWith('en') ? 'en-US' : 'pt-BR'
+
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const [customer, setCustomer] = useState<Customer | null>(null)
@@ -38,7 +51,7 @@ export default function CustomerDetail() {
   }, [loadData])
 
   const handleDelete = async () => {
-    if (!id || !confirm('Delete this customer? This cannot be undone.')) return
+    if (!id || !confirm(t("Delete this customer? This cannot be undone."))) return
     try {
       await customersApi.delete(id)
       navigate('/customers')
@@ -105,7 +118,7 @@ export default function CustomerDetail() {
 
   if (!customer) {
     return (
-      <div className="p-6 text-center text-surface-400">Customer not found</div>
+      <div className="p-6 text-center text-surface-400">{t("Customer not found")}</div>
     )
   }
 
@@ -123,7 +136,8 @@ export default function CustomerDetail() {
       <div className="mb-6">
         <Link to="/customers" className="inline-flex items-center gap-1.5 text-sm text-surface-400 hover:text-surface-200 mb-4">
           <ArrowLeft className="h-4 w-4" />
-          Back to Customers
+
+          {t("Back to Customers")}
         </Link>
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-display font-bold text-surface-100">{customer.name}</h1>
@@ -132,15 +146,16 @@ export default function CustomerDetail() {
               onClick={() => editing ? setEditing(false) : startEditing()}
               className="px-4 py-2 text-sm text-surface-400 hover:text-surface-200 border border-surface-700 rounded-lg hover:bg-surface-800"
             >
-              {editing ? 'Cancel' : 'Edit'}
+              {editing ? t("Cancel") : t("Edit")}
             </button>
             <button
               onClick={handleDelete}
               className="inline-flex items-center gap-1.5 px-4 py-2 text-sm text-red-400 hover:bg-red-500/10 border border-red-500/30 rounded-lg"
-              title="Delete customer"
+              title={t("Delete customer")}
             >
               <Trash2 className="h-4 w-4" />
-              Delete
+
+              {t("Delete")}
             </button>
           </div>
         </div>
@@ -153,57 +168,57 @@ export default function CustomerDetail() {
             <div className="bg-surface-900 border border-surface-800 rounded-lg p-4">
               <form onSubmit={handleUpdate} className="space-y-3">
                 <div>
-                  <label className="block text-xs font-medium text-surface-400 mb-1">Name</label>
+                  <label className="block text-xs font-medium text-surface-400 mb-1">{t("Name")}</label>
                   <input name="name" defaultValue={customer.name} required className="w-full px-3 py-2 bg-surface-800 border border-surface-700 rounded-lg text-surface-100 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500" />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-surface-400 mb-1">Email</label>
+                  <label className="block text-xs font-medium text-surface-400 mb-1">{t("Email")}</label>
                   <input name="email" type="email" defaultValue={customer.email} className="w-full px-3 py-2 bg-surface-800 border border-surface-700 rounded-lg text-surface-100 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500" />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-surface-400 mb-1">Company</label>
+                  <label className="block text-xs font-medium text-surface-400 mb-1">{t("Company")}</label>
                   <input name="company" defaultValue={customer.company} className="w-full px-3 py-2 bg-surface-800 border border-surface-700 rounded-lg text-surface-100 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500" />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-surface-400 mb-1">Phone</label>
+                  <label className="block text-xs font-medium text-surface-400 mb-1">{t("Phone")}</label>
                   <input name="phone" defaultValue={customer.phone} className="w-full px-3 py-2 bg-surface-800 border border-surface-700 rounded-lg text-surface-100 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500" />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-surface-400 mb-1">Notes</label>
+                  <label className="block text-xs font-medium text-surface-400 mb-1">{t("Notes")}</label>
                   <textarea name="notes" defaultValue={customer.notes} rows={3} className="w-full px-3 py-2 bg-surface-800 border border-surface-700 rounded-lg text-surface-100 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500" />
                 </div>
 
                 {/* Billing Address */}
                 <div className="pt-2 border-t border-surface-800">
-                  <label className="block text-xs font-medium text-surface-400 mb-1">Billing Address</label>
+                  <label className="block text-xs font-medium text-surface-400 mb-1">{t("Billing Address")}</label>
                   <div className="space-y-1.5">
-                    <input value={billingAddr.line1 || ''} onChange={e => setBillingAddr(a => ({ ...a, line1: e.target.value }))} placeholder="Address line 1" className="w-full px-3 py-1.5 bg-surface-800 border border-surface-700 rounded-lg text-surface-100 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500" />
-                    <input value={billingAddr.line2 || ''} onChange={e => setBillingAddr(a => ({ ...a, line2: e.target.value }))} placeholder="Address line 2" className="w-full px-3 py-1.5 bg-surface-800 border border-surface-700 rounded-lg text-surface-100 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500" />
+                    <input value={billingAddr.line1 || ''} onChange={e => setBillingAddr(a => ({ ...a, line1: e.target.value }))} placeholder={t("Address line 1")} className="w-full px-3 py-1.5 bg-surface-800 border border-surface-700 rounded-lg text-surface-100 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500" />
+                    <input value={billingAddr.line2 || ''} onChange={e => setBillingAddr(a => ({ ...a, line2: e.target.value }))} placeholder={t("Address line 2")} className="w-full px-3 py-1.5 bg-surface-800 border border-surface-700 rounded-lg text-surface-100 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500" />
                     <div className="grid grid-cols-3 gap-1.5">
-                      <input value={billingAddr.city || ''} onChange={e => setBillingAddr(a => ({ ...a, city: e.target.value }))} placeholder="City" className="px-3 py-1.5 bg-surface-800 border border-surface-700 rounded-lg text-surface-100 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500" />
-                      <input value={billingAddr.state || ''} onChange={e => setBillingAddr(a => ({ ...a, state: e.target.value }))} placeholder="State" className="px-3 py-1.5 bg-surface-800 border border-surface-700 rounded-lg text-surface-100 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500" />
-                      <input value={billingAddr.zip || ''} onChange={e => setBillingAddr(a => ({ ...a, zip: e.target.value }))} placeholder="Zip" className="px-3 py-1.5 bg-surface-800 border border-surface-700 rounded-lg text-surface-100 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500" />
+                      <input value={billingAddr.city || ''} onChange={e => setBillingAddr(a => ({ ...a, city: e.target.value }))} placeholder={t("City")} className="px-3 py-1.5 bg-surface-800 border border-surface-700 rounded-lg text-surface-100 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500" />
+                      <input value={billingAddr.state || ''} onChange={e => setBillingAddr(a => ({ ...a, state: e.target.value }))} placeholder={t("State")} className="px-3 py-1.5 bg-surface-800 border border-surface-700 rounded-lg text-surface-100 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500" />
+                      <input value={billingAddr.zip || ''} onChange={e => setBillingAddr(a => ({ ...a, zip: e.target.value }))} placeholder={t("Zip")} className="px-3 py-1.5 bg-surface-800 border border-surface-700 rounded-lg text-surface-100 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500" />
                     </div>
-                    <input value={billingAddr.country || ''} onChange={e => setBillingAddr(a => ({ ...a, country: e.target.value }))} placeholder="Country" className="w-full px-3 py-1.5 bg-surface-800 border border-surface-700 rounded-lg text-surface-100 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500" />
+                    <input value={billingAddr.country || ''} onChange={e => setBillingAddr(a => ({ ...a, country: e.target.value }))} placeholder={t("Country")} className="w-full px-3 py-1.5 bg-surface-800 border border-surface-700 rounded-lg text-surface-100 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500" />
                   </div>
                 </div>
 
                 {/* Shipping Address */}
                 <div>
-                  <label className="block text-xs font-medium text-surface-400 mb-1">Shipping Address</label>
+                  <label className="block text-xs font-medium text-surface-400 mb-1">{t("Shipping Address")}</label>
                   <div className="space-y-1.5">
-                    <input value={shippingAddr.line1 || ''} onChange={e => setShippingAddr(a => ({ ...a, line1: e.target.value }))} placeholder="Address line 1" className="w-full px-3 py-1.5 bg-surface-800 border border-surface-700 rounded-lg text-surface-100 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500" />
-                    <input value={shippingAddr.line2 || ''} onChange={e => setShippingAddr(a => ({ ...a, line2: e.target.value }))} placeholder="Address line 2" className="w-full px-3 py-1.5 bg-surface-800 border border-surface-700 rounded-lg text-surface-100 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500" />
+                    <input value={shippingAddr.line1 || ''} onChange={e => setShippingAddr(a => ({ ...a, line1: e.target.value }))} placeholder={t("Address line 1")} className="w-full px-3 py-1.5 bg-surface-800 border border-surface-700 rounded-lg text-surface-100 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500" />
+                    <input value={shippingAddr.line2 || ''} onChange={e => setShippingAddr(a => ({ ...a, line2: e.target.value }))} placeholder={t("Address line 2")} className="w-full px-3 py-1.5 bg-surface-800 border border-surface-700 rounded-lg text-surface-100 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500" />
                     <div className="grid grid-cols-3 gap-1.5">
-                      <input value={shippingAddr.city || ''} onChange={e => setShippingAddr(a => ({ ...a, city: e.target.value }))} placeholder="City" className="px-3 py-1.5 bg-surface-800 border border-surface-700 rounded-lg text-surface-100 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500" />
-                      <input value={shippingAddr.state || ''} onChange={e => setShippingAddr(a => ({ ...a, state: e.target.value }))} placeholder="State" className="px-3 py-1.5 bg-surface-800 border border-surface-700 rounded-lg text-surface-100 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500" />
-                      <input value={shippingAddr.zip || ''} onChange={e => setShippingAddr(a => ({ ...a, zip: e.target.value }))} placeholder="Zip" className="px-3 py-1.5 bg-surface-800 border border-surface-700 rounded-lg text-surface-100 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500" />
+                      <input value={shippingAddr.city || ''} onChange={e => setShippingAddr(a => ({ ...a, city: e.target.value }))} placeholder={t("City")} className="px-3 py-1.5 bg-surface-800 border border-surface-700 rounded-lg text-surface-100 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500" />
+                      <input value={shippingAddr.state || ''} onChange={e => setShippingAddr(a => ({ ...a, state: e.target.value }))} placeholder={t("State")} className="px-3 py-1.5 bg-surface-800 border border-surface-700 rounded-lg text-surface-100 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500" />
+                      <input value={shippingAddr.zip || ''} onChange={e => setShippingAddr(a => ({ ...a, zip: e.target.value }))} placeholder={t("Zip")} className="px-3 py-1.5 bg-surface-800 border border-surface-700 rounded-lg text-surface-100 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500" />
                     </div>
-                    <input value={shippingAddr.country || ''} onChange={e => setShippingAddr(a => ({ ...a, country: e.target.value }))} placeholder="Country" className="w-full px-3 py-1.5 bg-surface-800 border border-surface-700 rounded-lg text-surface-100 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500" />
+                    <input value={shippingAddr.country || ''} onChange={e => setShippingAddr(a => ({ ...a, country: e.target.value }))} placeholder={t("Country")} className="w-full px-3 py-1.5 bg-surface-800 border border-surface-700 rounded-lg text-surface-100 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500" />
                   </div>
                 </div>
 
-                <button type="submit" className="w-full px-4 py-2 bg-accent-500 text-white rounded-lg hover:bg-accent-600 text-sm font-medium">Save</button>
+                <button type="submit" className="w-full px-4 py-2 bg-accent-500 text-white rounded-lg hover:bg-accent-600 text-sm font-medium">{t("Save")}</button>
               </form>
             </div>
           ) : (
@@ -237,7 +252,8 @@ export default function CustomerDetail() {
                     <div>
                       <div className="flex items-center gap-1 text-xs font-medium text-surface-400 mb-0.5">
                         <MapPin className="h-3 w-3" />
-                        Billing
+
+                        {t("Billing")}
                       </div>
                       <div className="text-xs text-surface-300 space-y-0.5">
                         {customer.billing_address.line1 && <div>{customer.billing_address.line1}</div>}
@@ -253,7 +269,8 @@ export default function CustomerDetail() {
                     <div>
                       <div className="flex items-center gap-1 text-xs font-medium text-surface-400 mb-0.5">
                         <MapPin className="h-3 w-3" />
-                        Shipping
+
+                        {t("Shipping")}
                       </div>
                       <div className="text-xs text-surface-300 space-y-0.5">
                         {customer.shipping_address.line1 && <div>{customer.shipping_address.line1}</div>}
@@ -268,7 +285,8 @@ export default function CustomerDetail() {
                 </div>
               )}
               <div className="pt-2 border-t border-surface-800 text-xs text-surface-500">
-                Created {new Date(customer.created_at).toLocaleDateString()}
+
+                {t("Created")} {new Date(customer.created_at).toLocaleDateString(locale)}
               </div>
             </div>
           )}
@@ -282,14 +300,16 @@ export default function CustomerDetail() {
               className={`pb-2 text-sm font-medium transition-colors border-b-2 ${activeTab === 'quotes' ? 'border-accent-500 text-accent-400' : 'border-transparent text-surface-400 hover:text-surface-200'}`}
             >
               <FileText className="h-4 w-4 inline mr-1.5" />
-              Quotes ({quotes.length})
+
+              {t("Quotes (")}{quotes.length})
             </button>
             <button
               onClick={() => setActiveTab('orders')}
               className={`pb-2 text-sm font-medium transition-colors border-b-2 ${activeTab === 'orders' ? 'border-accent-500 text-accent-400' : 'border-transparent text-surface-400 hover:text-surface-200'}`}
             >
               <Package className="h-4 w-4 inline mr-1.5" />
-              Orders ({orders.length})
+
+              {t("Orders (")}{orders.length})
             </button>
           </div>
 
@@ -301,14 +321,15 @@ export default function CustomerDetail() {
                   className="inline-flex items-center gap-1.5 text-sm text-accent-400 hover:text-accent-300"
                 >
                   <Plus className="h-4 w-4" />
-                  New Quote
+
+                  {t("New Quote")}
                 </button>
               </div>
               {quotes.length === 0 ? (
-                <p className="text-sm text-surface-500 py-8 text-center">No quotes for this customer</p>
+                <p className="text-sm text-surface-500 py-8 text-center">{t("No quotes for this customer")}</p>
               ) : (
                 quotes.map((quote) => (
-                  <Link
+                  <Link aria-label={t("Open details")}
                     key={quote.id}
                     to={`/quotes/${quote.id}`}
                     className="block bg-surface-900 border border-surface-800 rounded-lg p-4 hover:bg-surface-800/50 transition-colors"
@@ -319,13 +340,13 @@ export default function CustomerDetail() {
                         <span className="text-sm font-medium text-surface-100">{quote.title}</span>
                       </div>
                       <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${statusColors[quote.status] || ''}`}>
-                        {quote.status}
+                        {t(displayLabels[quote.status] || quote.status)}
                       </span>
                     </div>
                     <div className="text-xs text-surface-500 mt-1">
-                      {new Date(quote.created_at).toLocaleDateString()}
+                      {new Date(quote.created_at).toLocaleDateString(locale)}
                       {quote.options && quote.options.length > 0 && (
-                        <> &middot; {quote.options.length} option{quote.options.length !== 1 ? 's' : ''}</>
+                        <> &middot; {t("{{count}} option", { count: quote.options.length })}</>
                       )}
                     </div>
                   </Link>
@@ -337,20 +358,20 @@ export default function CustomerDetail() {
           {activeTab === 'orders' && (
             <div className="space-y-2">
               {orders.length === 0 ? (
-                <p className="text-sm text-surface-500 py-8 text-center">No orders for this customer</p>
+                <p className="text-sm text-surface-500 py-8 text-center">{t("No orders for this customer")}</p>
               ) : (
                 orders.map((order) => (
-                  <Link
+                  <Link aria-label={t("Open details")}
                     key={order.id}
                     to={`/orders/${order.id}`}
                     className="block bg-surface-900 border border-surface-800 rounded-lg p-4 hover:bg-surface-800/50 transition-colors"
                   >
                     <div className="flex items-center justify-between">
                       <span className="text-sm font-medium text-surface-100">{order.customer_name}</span>
-                      <span className="text-xs text-surface-500">{order.status}</span>
+                      <span className="text-xs text-surface-500">{t(displayLabels[order.status] || order.status)}</span>
                     </div>
                     <div className="text-xs text-surface-500 mt-1">
-                      {order.source} &middot; {new Date(order.created_at).toLocaleDateString()}
+                      {t(displayLabels[order.source] || order.source)} &middot; {new Date(order.created_at).toLocaleDateString(locale)}
                     </div>
                   </Link>
                 ))
@@ -364,19 +385,19 @@ export default function CustomerDetail() {
       {showNewQuote && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-surface-900 border border-surface-700 rounded-xl p-6 w-full max-w-md">
-            <h2 className="text-lg font-display font-semibold text-surface-100 mb-4">New Quote for {customer.name}</h2>
+            <h2 className="text-lg font-display font-semibold text-surface-100 mb-4">{t("New quote for {{name}}", { name: customer.name })}</h2>
             <form onSubmit={handleCreateQuote} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-surface-300 mb-1">Title *</label>
-                <input name="title" required className="w-full px-3 py-2 bg-surface-800 border border-surface-700 rounded-lg text-surface-100 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500" placeholder="e.g. Custom enclosure build" />
+                <label className="block text-sm font-medium text-surface-300 mb-1">{t("Title *")}</label>
+                <input name="title" required className="w-full px-3 py-2 bg-surface-800 border border-surface-700 rounded-lg text-surface-100 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500" placeholder={t("e.g. Custom enclosure build")} />
               </div>
               <div>
-                <label className="block text-sm font-medium text-surface-300 mb-1">Notes</label>
+                <label className="block text-sm font-medium text-surface-300 mb-1">{t("Notes")}</label>
                 <textarea name="notes" rows={3} className="w-full px-3 py-2 bg-surface-800 border border-surface-700 rounded-lg text-surface-100 text-sm focus:outline-none focus:ring-1 focus:ring-accent-500" />
               </div>
               <div className="flex justify-end gap-3 pt-2">
-                <button type="button" onClick={() => setShowNewQuote(false)} className="px-4 py-2 text-sm text-surface-400 hover:text-surface-200">Cancel</button>
-                <button type="submit" className="px-4 py-2 bg-accent-500 text-white rounded-lg hover:bg-accent-600 text-sm font-medium">Create Quote</button>
+                <button type="button" onClick={() => setShowNewQuote(false)} className="px-4 py-2 text-sm text-surface-400 hover:text-surface-200">{t("Cancel")}</button>
+                <button type="submit" className="px-4 py-2 bg-accent-500 text-white rounded-lg hover:bg-accent-600 text-sm font-medium">{t("Create Quote")}</button>
               </div>
             </form>
           </div>

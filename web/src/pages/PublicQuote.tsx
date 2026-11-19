@@ -1,7 +1,8 @@
+import { useTranslation } from 'react-i18next'
 import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { publicApi } from '../api/client'
-import { formatMoneyCents, normalizeCurrencyCode } from '../lib/currency'
+import { normalizeCurrencyCode } from '../lib/currency'
 import type { Quote, QuoteOption, QuoteLineItem, QuoteLineItemType, Address } from '../types'
 
 // ── Helpers ────────────────────────────────────────────────
@@ -19,9 +20,9 @@ function calculateFinancials(subtotalCents: number, quote: Quote) {
   return { discountAmount, afterDiscount, withRush, taxAmount, grandTotal }
 }
 
-function formatDate(dateStr?: string): string {
+function formatDate(dateStr: string | undefined, locale: string): string {
   if (!dateStr) return ''
-  return new Date(dateStr).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
+  return new Date(dateStr).toLocaleDateString(locale, { year: 'numeric', month: 'long', day: 'numeric' })
 }
 
 function formatAddressLines(addr?: Address): string[] {
@@ -62,7 +63,19 @@ interface BusinessInfo {
 
 // ── Component ──────────────────────────────────────────────
 
+const displayLabels: Record<string, string> = {
+  marketplace: 'Marketplace', etsy: 'Etsy', website: 'Website', direct: 'Direct', other: 'Other',
+  manual: 'Manual', imported: 'Imported',
+  pending: 'Pending', in_progress: 'In Progress', completed: 'Completed', shipped: 'Shipped', cancelled: 'Cancelled',
+  draft: 'Draft', sent: 'Sent', accepted: 'Accepted', rejected: 'Rejected', expired: 'Expired',
+  confirmed: 'Confirmed', processing: 'Processing...', failed: 'Parse Failed', pending_review: 'Pending Review',
+  queued: 'Queued', printing: 'Printing', paused: 'Paused',
+}
+
 export default function PublicQuote() {
+  const { t, i18n } = useTranslation('commerce')
+  const locale = i18n.resolvedLanguage?.startsWith('en') ? 'en-US' : 'pt-BR'
+
   const { token } = useParams<{ token: string }>()
   const [quote, setQuote] = useState<Quote | null>(null)
   const [business, setBusiness] = useState<BusinessInfo>({})
@@ -89,12 +102,12 @@ export default function PublicQuote() {
         try { info.business_address = JSON.parse(addrJson) } catch { /* ignore malformed JSON */ }
       }
       setBusiness(info)
-    }).catch((err) => {
-      setError(err.message || 'Quote not found')
+    }).catch(() => {
+      setError(t("This quote link may be invalid or expired."))
     }).finally(() => {
       setLoading(false)
     })
-  }, [token])
+  }, [token, t])
 
   if (loading) {
     return (
@@ -108,8 +121,8 @@ export default function PublicQuote() {
     return (
       <div className="min-h-screen bg-white flex items-center justify-center">
         <div className="text-center">
-          <h1 className="text-2xl font-bold text-gray-800 mb-2">Quote Not Found</h1>
-          <p className="text-gray-500">{error || 'This quote link may be invalid or expired.'}</p>
+          <h1 className="text-2xl font-bold text-gray-800 mb-2">{t("Quote Not Found")}</h1>
+          <p className="text-gray-500">{error || t("This quote link may be invalid or expired.")}</p>
         </div>
       </div>
     )
@@ -130,7 +143,8 @@ export default function PublicQuote() {
             onClick={() => window.print()}
             className="px-4 py-2 bg-gray-800 text-white rounded-lg text-sm font-medium hover:bg-gray-700"
           >
-            Print Quote
+
+            {t("Print Quote")}
           </button>
         </div>
 
@@ -139,7 +153,7 @@ export default function PublicQuote() {
           <div className="flex justify-between items-start mb-8 pb-6 border-b border-gray-200">
             <div>
               <h1 className="text-2xl font-bold text-gray-900">
-                {business.business_name || 'Quote'}
+                {business.business_name || t("Quote")}
               </h1>
               {businessAddrLines.length > 0 && (
                 <div className="text-sm text-gray-500 mt-1">
@@ -158,16 +172,17 @@ export default function PublicQuote() {
           <div className="flex justify-between items-start mb-6">
             <div>
               <h2 className="text-xl font-semibold text-gray-900">
-                Quote <span className="font-mono">{quote.quote_number}</span>
+
+                {t("Quote")} <span className="font-mono">{quote.quote_number}</span>
               </h2>
               <div className="text-sm text-gray-500 mt-1 space-y-0.5">
-                <div>Date: {formatDate(quote.created_at)}</div>
-                {quote.valid_until && <div>Valid Until: {formatDate(quote.valid_until)}</div>}
-                {quote.requested_due_date && <div>Requested Due Date: {formatDate(quote.requested_due_date)}</div>}
+                <div>{t("Date:")} {formatDate(quote.created_at, locale)}</div>
+                {quote.valid_until && <div>{t("Valid Until:")} {formatDate(quote.valid_until, locale)}</div>}
+                {quote.requested_due_date && <div>{t("Requested Due Date:")} {formatDate(quote.requested_due_date, locale)}</div>}
               </div>
             </div>
             <div className="px-3 py-1 bg-gray-100 rounded-full text-xs font-medium text-gray-600 uppercase">
-              {quote.status}
+              {t(displayLabels[quote.status] || quote.status)}
             </div>
           </div>
 
@@ -175,7 +190,7 @@ export default function PublicQuote() {
           {(billingLines.length > 0 || shippingLines.length > 0) && (
             <div className="grid grid-cols-2 gap-8 mb-8 pb-6 border-b border-gray-200">
               <div>
-                <h3 className="text-xs font-semibold text-gray-400 uppercase mb-1">Bill To</h3>
+                <h3 className="text-xs font-semibold text-gray-400 uppercase mb-1">{t("Bill To")}</h3>
                 {quote.customer && (
                   <div className="text-sm font-medium text-gray-900">
                     {quote.customer.name}
@@ -187,7 +202,7 @@ export default function PublicQuote() {
                 </div>
               </div>
               <div>
-                <h3 className="text-xs font-semibold text-gray-400 uppercase mb-1">Ship To</h3>
+                <h3 className="text-xs font-semibold text-gray-400 uppercase mb-1">{t("Ship To")}</h3>
                 {quote.customer && (
                   <div className="text-sm font-medium text-gray-900">
                     {quote.customer.name}
@@ -217,7 +232,7 @@ export default function PublicQuote() {
           {/* Terms */}
           {quote.terms && (
             <div className="mt-8 pt-6 border-t border-gray-200">
-              <h3 className="text-sm font-semibold text-gray-900 uppercase mb-2">Terms & Conditions</h3>
+              <h3 className="text-sm font-semibold text-gray-900 uppercase mb-2">{t("Terms & Conditions")}</h3>
               <p className="text-sm text-gray-600 whitespace-pre-wrap">{quote.terms}</p>
             </div>
           )}
@@ -239,7 +254,10 @@ export default function PublicQuote() {
 // ── OptionSection ──────────────────────────────────────────
 
 function OptionSection({ option, quote, hasAdjustments, currencyCode }: { option: QuoteOption; quote: Quote; hasAdjustments: boolean; currencyCode: string }) {
-  const formatCents = (cents: number) => formatMoneyCents(cents, currencyCode)
+  const { t, i18n } = useTranslation('commerce')
+  const locale = i18n.resolvedLanguage?.startsWith('en') ? 'en-US' : 'pt-BR'
+
+  const formatCents = (cents: number) => new Intl.NumberFormat(locale, { style: 'currency', currency: currencyCode }).format(cents / 100)
   const financials = calculateFinancials(option.total_cents, quote)
 
   // Group items by type
@@ -264,7 +282,7 @@ function OptionSection({ option, quote, hasAdjustments, currencyCode }: { option
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-semibold text-gray-900">
             {option.name}
-            {isAccepted && <span className="ml-2 text-xs text-green-600">(Accepted)</span>}
+            {isAccepted && <span className="ml-2 text-xs text-green-600">{t("(Accepted)")}</span>}
           </h3>
           <span className="text-sm font-mono font-semibold text-gray-900">
             {hasAdjustments ? formatCents(financials.grandTotal) : formatCents(option.total_cents)}
@@ -280,7 +298,7 @@ function OptionSection({ option, quote, hasAdjustments, currencyCode }: { option
           <div key={type}>
             <div className="flex items-center justify-between px-4 py-1.5 bg-gray-50/50 border-b border-gray-100">
               <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">
-                {typeLabels[type] || type} ({items.length})
+                {t(typeLabels[type] || type)} ({items.length})
               </span>
               <span className="text-xs font-mono text-gray-400">{formatCents(groupTotal)}</span>
             </div>
@@ -304,30 +322,30 @@ function OptionSection({ option, quote, hasAdjustments, currencyCode }: { option
       {option.items && option.items.length > 0 && (
         <div className="border-t border-gray-200 px-4 py-3 space-y-1">
           <div className="flex justify-between text-xs text-gray-500">
-            <span>Subtotal</span>
+            <span>{t("Subtotal")}</span>
             <span className="font-mono">{formatCents(option.total_cents)}</span>
           </div>
           {quote.discount_type !== 'none' && financials.discountAmount > 0 && (
             <div className="flex justify-between text-xs text-gray-500">
-              <span>Discount {quote.discount_type === 'percent' ? `(${(quote.discount_value / 100).toFixed(2)}%)` : '(flat)'}</span>
+              <span>{t("Discount")} {quote.discount_type === 'percent' ? `(${(quote.discount_value / 100).toFixed(2)}%)` : t("(flat)")}</span>
               <span className="font-mono text-red-600">-{formatCents(financials.discountAmount)}</span>
             </div>
           )}
           {quote.rush_fee_cents > 0 && (
             <div className="flex justify-between text-xs text-gray-500">
-              <span>Rush Fee</span>
+              <span>{t("Rush Fee")}</span>
               <span className="font-mono">{formatCents(quote.rush_fee_cents)}</span>
             </div>
           )}
           {quote.tax_rate > 0 && (
             <div className="flex justify-between text-xs text-gray-500">
-              <span>Tax ({(quote.tax_rate / 100).toFixed(2)}%)</span>
+              <span>{t("Tax (")}{(quote.tax_rate / 100).toFixed(2)}%)</span>
               <span className="font-mono">{formatCents(financials.taxAmount)}</span>
             </div>
           )}
           {hasAdjustments && (
             <div className="flex justify-between text-sm font-semibold text-gray-900 pt-1 border-t border-gray-200">
-              <span>Total</span>
+              <span>{t("Total")}</span>
               <span className="font-mono">{formatCents(financials.grandTotal)}</span>
             </div>
           )}

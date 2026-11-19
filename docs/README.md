@@ -17,6 +17,8 @@ This directory contains the operational documentation for PicoFarm. Prefer updat
 - [Architecture](ARCHITECTURE.md) — backend, frontend, database, realtime, integrations, and where to make common changes.
 - [API and data contracts](API_CONTRACTS.md) — HTTP/JSON conventions, route groups, shared enum values, and Go/TypeScript synchronization rules.
 - [Sales channels architecture](SALES_CHANNELS.md) — modular provider/adapters plan for Etsy, Squarespace, Shopify, and future commerce channels.
+- [Interface languages](I18N.md) — en/pt-BR catalogs, per-device preference, currency independence, adding languages and validation.
+- [UX and accessibility review](UX_REVIEW.md) — heuristic findings, glossary/microcopy standard and the manual validation plan (proposals, not completed research).
 - [Regression matrix](REGRESSION_MATRIX.md) — critical user flows to validate manually or automate as tests.
 - [Improvements roadmap](IMPROVEMENTS_ROADMAP.md) — selected proposals and status of implemented local increments.
 - [Slicer refinements](SLICER_REFINEMENTS.md) — editor contracts, snapshots, viewer budgets, test evidence and limitations.

@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import { useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { X } from 'lucide-react'
@@ -15,6 +16,7 @@ const FEEDBACK_TYPES = [
 ] as const
 
 export default function FeedbackModal({ onClose }: FeedbackModalProps) {
+  const { t } = useTranslation('components')
   const location = useLocation()
   const [type, setType] = useState<string>('general')
   const [message, setMessage] = useState('')
@@ -40,7 +42,7 @@ export default function FeedbackModal({ onClose }: FeedbackModalProps) {
       setSubmitted(true)
       setTimeout(onClose, 1500)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to submit feedback')
+      setError(err instanceof Error ? err.message : t("Failed to submit feedback"))
     } finally {
       setLoading(false)
     }
@@ -56,15 +58,15 @@ export default function FeedbackModal({ onClose }: FeedbackModalProps) {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
               </svg>
             </div>
-            <h3 className="text-lg font-semibold text-surface-100">Thanks for your feedback!</h3>
-            <p className="text-sm text-surface-400 mt-1">We appreciate you helping improve PicoFarm.</p>
+            <h3 className="text-lg font-semibold text-surface-100">{t("Thanks for your feedback!")}</h3>
+            <p className="text-sm text-surface-400 mt-1">{t("We appreciate you helping improve PicoFarm.")}</p>
           </div>
         ) : (
           <>
             {/* Header */}
             <div className="flex items-center justify-between mb-5">
-              <h2 className="text-xl font-semibold text-surface-100">Send Feedback</h2>
-              <button
+              <h2 className="text-xl font-semibold text-surface-100">{t("Send Feedback")}</h2>
+              <button aria-label={t("Close")}
                 onClick={onClose}
                 className="w-8 h-8 flex items-center justify-center rounded-lg text-surface-400 hover:text-surface-100 hover:bg-surface-800 transition-colors"
               >
@@ -81,7 +83,7 @@ export default function FeedbackModal({ onClose }: FeedbackModalProps) {
             <form onSubmit={handleSubmit} className="space-y-4">
               {/* Type selector */}
               <div>
-                <label className="block text-sm font-medium text-surface-300 mb-2">Type</label>
+                <label className="block text-sm font-medium text-surface-300 mb-2">{t("Type")}</label>
                 <div className="flex gap-2">
                   {FEEDBACK_TYPES.map((ft) => (
                     <button
@@ -95,7 +97,7 @@ export default function FeedbackModal({ onClose }: FeedbackModalProps) {
                           : 'border-surface-700 text-surface-400 hover:border-surface-600 hover:text-surface-200'
                       )}
                     >
-                      {ft.label}
+                      {t(ft.label)}
                     </button>
                   ))}
                 </div>
@@ -103,11 +105,11 @@ export default function FeedbackModal({ onClose }: FeedbackModalProps) {
 
               {/* Message */}
               <div>
-                <label className="block text-sm font-medium text-surface-300 mb-2">Message</label>
+                <label className="block text-sm font-medium text-surface-300 mb-2">{t("Message")}</label>
                 <textarea
                   value={message}
                   onChange={(e) => setMessage(e.target.value)}
-                  placeholder="Tell us what's on your mind..."
+                  placeholder={t("Tell us what's on your mind...")}
                   required
                   rows={4}
                   className="w-full bg-surface-800 border border-surface-700 rounded-lg px-3 py-2 text-surface-100 placeholder-surface-500 resize-none focus:outline-none focus:border-accent-500 transition-colors"
@@ -117,13 +119,13 @@ export default function FeedbackModal({ onClose }: FeedbackModalProps) {
               {/* Contact */}
               <div>
                 <label className="block text-sm font-medium text-surface-300 mb-2">
-                  Contact <span className="text-surface-500">(optional)</span>
+                  {t("Contact")}<span className="text-surface-500">{t("(optional)")}</span>
                 </label>
                 <input
                   type="text"
                   value={contact}
                   onChange={(e) => setContact(e.target.value)}
-                  placeholder="Email if you'd like a response"
+                  placeholder={t("Email if you'd like a response")}
                   className="w-full bg-surface-800 border border-surface-700 rounded-lg px-3 py-2 text-surface-100 placeholder-surface-500 focus:outline-none focus:border-accent-500 transition-colors"
                 />
               </div>
@@ -136,14 +138,13 @@ export default function FeedbackModal({ onClose }: FeedbackModalProps) {
                   className="px-4 py-2 text-surface-400 hover:text-surface-200 transition-colors"
                   disabled={loading}
                 >
-                  Cancel
-                </button>
+                  {t("Cancel")}</button>
                 <button
                   type="submit"
                   disabled={loading || !message.trim()}
                   className="px-5 py-2 bg-accent-600 hover:bg-accent-500 text-white rounded-lg font-medium transition-colors disabled:opacity-50"
                 >
-                  {loading ? 'Sending...' : 'Send Feedback'}
+                  {loading ? t("Sending...") : t("Send Feedback")}
                 </button>
               </div>
             </form>

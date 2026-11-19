@@ -36,6 +36,7 @@ function harness(api = {}) {
       useEffect: (fn, deps) => { effects.push({ fn, deps }) },
     },
     'react/jsx-runtime': { jsx, jsxs: jsx },
+    'react-i18next': { useTranslation: () => ({ t: (key, values = {}) => key.replace(/{{(\w+)}}/g, (_, name) => String(values[name] ?? '')), i18n: { resolvedLanguage: 'en' } }) },
     'lucide-react': new Proxy({}, { get: (_, name) => name }),
     '../api/client': { slicerApi: api },
   }

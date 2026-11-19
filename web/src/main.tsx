@@ -5,6 +5,7 @@ import { BrowserRouter } from 'react-router-dom'
 import * as Sentry from '@sentry/react'
 import App from './App'
 import { CurrencyProvider } from './contexts/CurrencyContext'
+import './i18n'
 import './index.css'
 
 const sentryDsn = import.meta.env.VITE_SENTRY_DSN

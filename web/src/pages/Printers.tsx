@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import { externalLinkClick } from '../lib/platform'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
@@ -19,11 +20,13 @@ import {
 } from 'lucide-react'
 import { usePrinters, useCreatePrinter, useDeletePrinter, usePrinterStates, useDefaultPrinter, useSetDefaultPrinter } from '../hooks/usePrinters'
 import { printersApi, bambuCloudApi, type DiscoveredPrinter } from '../api/client'
-import { cn, getStatusBadge } from '../lib/utils'
+import { cn, getStatusBadge, PRINTER_STATUS_LABELS } from '../lib/utils'
 import { useCurrency } from '../hooks/useCurrency'
 import type { ConnectionType, CloudDevice } from '../types'
 
 export default function Printers() {
+  const { t } = useTranslation('fleet')
+
   const { formatAmount, symbol } = useCurrency()
   const { data: printers = [], isLoading, refetch } = usePrinters()
   const { data: printerStates = {} } = usePrinterStates()
@@ -72,7 +75,7 @@ export default function Printers() {
         setCloudStep('devices')
       }
     } catch (err) {
-      setCloudError(err instanceof Error ? err.message : 'Login failed')
+      setCloudError(err instanceof Error ? err.message : t("Login failed"))
     } finally {
       setCloudLoading(false)
     }
@@ -87,7 +90,7 @@ export default function Printers() {
       setCloudDevices(devices || [])
       setCloudStep('devices')
     } catch (err) {
-      setCloudError(err instanceof Error ? err.message : 'Verification failed')
+      setCloudError(err instanceof Error ? err.message : t("Verification failed"))
     } finally {
       setCloudLoading(false)
     }
@@ -101,7 +104,7 @@ export default function Printers() {
       setAddedCloudDevices(prev => new Set(prev).add(devId))
       refetch()
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Failed to add device'
+      const msg = err instanceof Error ? err.message : t("Failed to add device")
       setCloudError(msg)
       console.error('Failed to add cloud device:', err)
     } finally {
@@ -124,7 +127,7 @@ export default function Printers() {
     setShowDiscover(true)
     setDiscovering(true)
     setDiscovered([])
-    
+
     try {
       console.log('[Printers] Starting discovery...')
       const found = await printersApi.discover()
@@ -201,7 +204,7 @@ export default function Printers() {
     e.preventDefault()
     setCreateError('')
     const formData = new FormData(e.currentTarget)
-    
+
     try {
       await createPrinter.mutateAsync({
         name: formData.get('name') as string,
@@ -217,7 +220,7 @@ export default function Printers() {
       })
       setShowAdd(false)
     } catch (err) {
-      setCreateError(err instanceof Error ? err.message : 'Failed to add printer')
+      setCreateError(err instanceof Error ? err.message : t("Failed to add printer"))
     }
   }
 
@@ -261,21 +264,21 @@ export default function Printers() {
               <div className="flex items-center gap-3">
                 <div className="rounded-xl bg-red-500/20 p-3 text-red-300"><XCircle className="h-7 w-7" /></div>
                 <div>
-                  <h2 className="text-xl font-semibold text-red-200">Confirmar parada de emergência</h2>
+                  <h2 className="text-xl font-semibold text-red-200">{t("Confirm emergency stop")}</h2>
                   <p className="text-sm text-red-300/80">{emergencyTarget.name}</p>
                 </div>
               </div>
             </div>
             <div className="space-y-3 p-5 text-sm text-surface-300">
-              <p>Tem certeza que deseja executar a parada de emergência?</p>
-              <p>Essa ação tenta interromper imediatamente a impressora. A impressão atual pode ser perdida, o estado da máquina pode exigir inspeção manual e o equipamento pode precisar ser reinicializado ou re-homed antes de voltar a operar.</p>
+              <p>{t("Are you sure you want to perform an emergency stop?")}</p>
+              <p>{t("This attempts to stop the printer immediately. The current print job may be lost. Inspect the machine manually; a restart or homing may be needed before operating again.")}</p>
               <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-amber-200">
-                Use apenas quando houver risco, falha crítica ou necessidade real de interromper a máquina imediatamente.
+                {t("Use only for danger, critical failure, or a real need to stop the machine immediately.")}
               </div>
             </div>
             <div className="flex justify-end gap-2 border-t border-surface-800 p-5">
-              <button onClick={() => setEmergencyTarget(null)} className="btn btn-secondary cursor-pointer">Cancelar</button>
-              <button onClick={confirmEmergencyStop} className="inline-flex cursor-pointer items-center rounded-lg border border-red-500/70 bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-500">Sim, parar agora</button>
+              <button onClick={() => setEmergencyTarget(null)} className="btn btn-secondary cursor-pointer">{t("Cancel")}</button>
+              <button onClick={confirmEmergencyStop} className="inline-flex cursor-pointer items-center rounded-lg border border-red-500/70 bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-500">{t("Yes, stop now")}</button>
             </div>
           </div>
         </div>
@@ -284,10 +287,10 @@ export default function Printers() {
       <div className="flex items-center justify-between mb-8">
         <div>
           <h1 className="text-3xl font-display font-bold text-surface-100">
-            Printers
+            {t("Printers")}
           </h1>
           <p className="text-surface-400 mt-1">
-            Manage your print farm
+            {t("Manage your print farm")}
           </p>
         </div>
         <div className="flex gap-2">
@@ -303,36 +306,36 @@ export default function Printers() {
             className="btn btn-secondary"
           >
             <Radar className="h-4 w-4 mr-2" />
-            Scan Network
+            {t("Scan Network")}
           </button>
           <button
             onClick={() => { setCreateError(''); setShowAdd(true) }}
             className="btn btn-primary"
           >
             <Plus className="h-4 w-4 mr-2" />
-            Add Manually
+            {t("Add Manually")}
           </button>
         </div>
       </div>
 
       {/* Printers Grid */}
       {isLoading ? (
-        <div className="text-surface-500">Loading...</div>
+        <div className="text-surface-500">{t("Loading...")}</div>
       ) : printers.length === 0 ? (
         <div className="text-center py-16">
           <PrinterIcon className="h-16 w-16 mx-auto mb-4 text-surface-600" />
           <h3 className="text-xl font-semibold text-surface-300 mb-2">
-            No printers configured
+            {t("No printers configured")}
           </h3>
           <p className="text-surface-500 mb-4">
-            Add your first printer to start managing your farm
+            {t("Add your first printer to start managing your farm")}
           </p>
-          <button 
+          <button
             onClick={() => { setCreateError(''); setShowAdd(true) }}
             className="btn btn-primary"
           >
             <Plus className="h-4 w-4 mr-2" />
-            Add Printer
+            {t("Add Printer")}
           </button>
         </div>
       ) : (
@@ -378,14 +381,14 @@ export default function Printers() {
                     <div className="min-w-0">
                       <h3 className="font-semibold text-surface-100 flex items-center gap-2 flex-wrap">
                         {printer.name}
-                        {defaultPrinter?.id === printer.id && <span className="badge bg-accent-500/20 text-accent-300 border-accent-500/30">Default</span>}
+                        {defaultPrinter?.id === printer.id && <span className="badge bg-accent-500/20 text-accent-300 border-accent-500/30">{t("Default")}</span>}
                       </h3>
                       <p className="text-sm text-surface-500">
-                        {printer.model || printer.manufacturer || 'Unknown model'}
+                        {printer.model || printer.manufacturer || t("Unknown model")}
                       </p>
                       {printer.maintenance_mode && (
                         <span className="inline-flex mt-1 text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400">
-                          Maintenance
+                          {t("Maintenance")}
                         </span>
                       )}
                     </div>
@@ -398,7 +401,7 @@ export default function Printers() {
                           className="inline-flex cursor-pointer items-center rounded-lg border border-blue-500/50 bg-blue-500/20 px-2.5 py-1 text-xs font-semibold text-blue-300 hover:bg-blue-500/30 disabled:cursor-not-allowed disabled:opacity-60"
                         >
                           <RefreshCw className={cn('h-3.5 w-3.5 mr-1', reconnectingPrinter === printer.id && 'animate-spin')} />
-                          Reconectar
+                          {t("Reconnect")}
                         </button>
                       )}
                       <button
@@ -409,10 +412,10 @@ export default function Printers() {
                        )}
                      >
                        <AlertTriangle className="h-3.5 w-3.5 mr-1" />
-                       {printer.maintenance_mode ? 'Sair' : 'Manutenção'}
+                       {printer.maintenance_mode ? t("Exit maintenance") : t("Maintenance")}
                      </button>
                       <button onClick={() => setEmergencyTarget({ id: printer.id, name: printer.name })} className="inline-flex cursor-pointer items-center rounded-lg border border-red-500/60 bg-red-500/20 px-2.5 py-1 text-xs font-semibold text-red-300 hover:bg-red-500/30">
-                        <XCircle className="h-3.5 w-3.5 mr-1" /> Emergência
+                        <XCircle className="h-3.5 w-3.5 mr-1" /> {t("Emergency")}
                       </button>
                       {printer.fluidd_url && (
                         <a href={printer.fluidd_url} onClick={externalLinkClick} target="_blank" rel="noreferrer" className="inline-flex cursor-pointer items-center rounded-lg border border-blue-500/50 bg-blue-500/20 px-2.5 py-1 text-xs font-semibold text-blue-300 hover:bg-blue-500/30">
@@ -421,7 +424,7 @@ export default function Printers() {
                       )}
                       {defaultPrinter?.id !== printer.id && (
                        <button onClick={() => setDefaultPrinter.mutate(printer.id)} className="cursor-pointer text-xs rounded px-2 py-0.5 bg-accent-500/20 text-accent-300 hover:bg-accent-500/30">
-                         Set default
+                         {t("Set default")}
                        </button>
                      )}
                    </div>
@@ -439,17 +442,18 @@ export default function Printers() {
                         onClick={() => setConfirmDelete(null)}
                         className="text-xs text-surface-500 hover:text-surface-300 px-1.5 py-0.5"
                       >
-                        Cancel
+                        {t("Cancel")}
                       </button>
                       <button
                         onClick={() => handleDelete(printer.id)}
                         className="text-xs bg-red-500/20 text-red-400 hover:bg-red-500/30 rounded px-2 py-0.5"
                       >
-                        Delete
+                        {t("Delete")}
                       </button>
                     </div>
                   ) : (
                     <button
+                      aria-label={t("Delete printer")}
                       onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleDelete(printer.id) }}
                       className="p-1.5 rounded hover:bg-surface-800 text-surface-500 hover:text-red-400 transition-colors"
                     >
@@ -461,9 +465,9 @@ export default function Printers() {
                 <div className="space-y-3">
                   {/* Status */}
                   <div className="flex items-center justify-between">
-                    <span className="text-sm text-surface-500">Status</span>
+                    <span className="text-sm text-surface-500">{t("Status")}</span>
                     <span className={cn('badge', getStatusBadge(state?.status || 'offline'))}>
-                      {state?.status || 'offline'}
+                      {t(PRINTER_STATUS_LABELS[state?.status || 'offline'] || state?.status || 'offline')}
                     </span>
                   </div>
 
@@ -471,7 +475,7 @@ export default function Printers() {
                   {state?.status === 'printing' && (
                     <div>
                       <div className="flex items-center justify-between text-sm mb-1">
-                        <span className="text-surface-500">Progress</span>
+                        <span className="text-surface-500">{t("Progress")}</span>
                         <span className="text-surface-300">{state.progress.toFixed(1)}%</span>
                       </div>
                       <div className="h-2 bg-surface-800 rounded-full overflow-hidden">
@@ -493,13 +497,13 @@ export default function Printers() {
                     <div className="flex gap-4 text-sm">
                       {state.nozzle_temp !== undefined && (
                         <div>
-                          <span className="text-surface-500">Nozzle: </span>
+                          <span className="text-surface-500">{t("Nozzle:")} </span>
                           <span className="text-surface-300">{state.nozzle_temp.toFixed(0)}°C</span>
                         </div>
                       )}
                       {state.bed_temp !== undefined && (
                         <div>
-                          <span className="text-surface-500">Bed: </span>
+                          <span className="text-surface-500">{t("Bed:")} </span>
                           <span className="text-surface-300">{state.bed_temp.toFixed(0)}°C</span>
                         </div>
                       )}
@@ -520,7 +524,7 @@ export default function Printers() {
                     )}
                     <span className="text-surface-500">
                       {printer.connection_type === 'manual'
-                        ? 'Manual'
+                        ? t("Manual")
                         : printer.connection_type.replace('_', ' ')}
                     </span>
                   </div>
@@ -544,46 +548,46 @@ export default function Printers() {
           <div className="card w-full max-w-2xl p-6">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-xl font-semibold text-surface-100">
-                Network Discovery
+                {t("Network Discovery")}
               </h2>
-              <button
+              <button aria-label={t("Close")}
                 onClick={() => setShowDiscover(false)}
                 className="text-surface-500 hover:text-surface-300"
               >
                 ✕
               </button>
             </div>
-            
+
             {discovering ? (
               <div className="text-center py-12">
                 <Loader2 className="h-12 w-12 mx-auto mb-4 text-accent-500 animate-spin" />
-                <p className="text-surface-300">Scanning your network...</p>
+                <p className="text-surface-300">{t("Scanning your network...")}</p>
                 <p className="text-surface-500 text-sm mt-1">
-                  Looking for OctoPrint, Moonraker, and Bambu printers
+                  {t("Looking for OctoPrint, Moonraker, and Bambu printers")}
                 </p>
                 <p className="text-surface-600 text-xs mt-3">
-                  This can take 15-20 seconds. Please wait...
+                  {t("This can take 15-20 seconds. Please wait...")}
                 </p>
               </div>
             ) : discovered.length === 0 ? (
               <div className="text-center py-12">
                 <Radar className="h-12 w-12 mx-auto mb-4 text-surface-600" />
-                <p className="text-surface-300">No printers found</p>
+                <p className="text-surface-300">{t("No printers found")}</p>
                 <p className="text-surface-500 text-sm mt-1">
-                  Make sure your printers are powered on and connected to the network
+                  {t("Make sure your printers are powered on and connected to the network")}
                 </p>
                 <button
                   onClick={handleDiscover}
                   className="btn btn-secondary mt-4"
                 >
                   <Radar className="h-4 w-4 mr-2" />
-                  Scan Again
+                  {t("Scan Again")}
                 </button>
               </div>
             ) : (
               <div className="space-y-3">
                 <p className="text-surface-400 text-sm mb-4">
-                  Found {discovered.length} printer{discovered.length !== 1 ? 's' : ''} on your network
+                  {t("Found {{count}} printers on your network", { count: discovered.length })}
                 </p>
                 {discovered.map((printer) => {
                   const isBambu = printer.type === 'bambu_lan'
@@ -624,7 +628,7 @@ export default function Printers() {
                         {printer.already_added ? (
                           <span className="flex items-center gap-1 text-emerald-400 text-sm">
                             <Check className="h-4 w-4" />
-                            Added
+                            {t("Added")}
                           </span>
                         ) : !isBambu ? (
                           <button
@@ -635,12 +639,12 @@ export default function Printers() {
                             {addingPrinter === printer.id ? (
                               <>
                                 <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                                Adding...
+                                {t("Adding...")}
                               </>
                             ) : (
                               <>
                                 <Plus className="h-4 w-4 mr-1" />
-                                Add
+                                {t("Add")}
                               </>
                             )}
                           </button>
@@ -655,7 +659,7 @@ export default function Printers() {
                           <div>
                             <label className="block text-sm font-medium text-surface-300 mb-1">
                               <Key className="h-3.5 w-3.5 inline mr-1" />
-                              LAN Access Code <span className="text-surface-500 font-normal">(optional)</span>
+                              {t("LAN Access Code")} <span className="text-surface-500 font-normal">{t("(optional)")}</span>
                             </label>
                             <input
                               type="text"
@@ -669,15 +673,15 @@ export default function Printers() {
                                 }
                               }}
                               className="input"
-                              placeholder="Enter 8-digit access code"
+                              placeholder={t("Enter 8-digit access code")}
                             />
                             <p className="text-xs text-surface-500 mt-1">
-                              Not all models require this. Check Bambu Handy app, Bambu Studio, or printer LCD.
+                              {t("Not all models require this. Check Bambu Handy app, Bambu Studio, or printer LCD.")}
                             </p>
                           </div>
                           <div>
                             <label className="block text-sm font-medium text-surface-300 mb-1">
-                              Serial Number
+                              {t("Serial Number")}
                             </label>
                             <input
                               type="text"
@@ -691,12 +695,12 @@ export default function Printers() {
                                 }
                               }}
                               className="input"
-                              placeholder="e.g. 01P00A000000000"
+                              placeholder={t("e.g. 01P00A000000000")}
                             />
                             <p className="text-xs text-surface-500 mt-1">
                               {printer.serial_number
-                                ? 'Auto-detected. Edit if incorrect.'
-                                : 'Find on the printer sticker, in Bambu Handy, or Bambu Studio'}
+                                ? t("Auto-detected. Edit if incorrect.")
+                                : t("Find on the printer sticker, in Bambu Handy, or Bambu Studio")}
                             </p>
                           </div>
                           <div className="flex justify-end">
@@ -711,12 +715,12 @@ export default function Printers() {
                               {addingPrinter === printer.id ? (
                                 <>
                                   <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                                  Connecting...
+                                  {t("Connecting...")}
                                 </>
                               ) : (
                                 <>
                                   <Check className="h-4 w-4 mr-1" />
-                                  Connect
+                                  {t("Connect")}
                                 </>
                               )}
                             </button>
@@ -733,13 +737,13 @@ export default function Printers() {
                     className="btn btn-ghost text-sm"
                   >
                     <Radar className="h-4 w-4 mr-2" />
-                    Scan Again
+                    {t("Scan Again")}
                   </button>
-                  <button
-                    onClick={() => setShowDiscover(false)}
+                  <button aria-label={t("Close")}
+                onClick={() => setShowDiscover(false)}
                     className="btn btn-secondary"
                   >
-                    Done
+                    {t("Done")}
                   </button>
                 </div>
               </div>
@@ -754,11 +758,11 @@ export default function Printers() {
           <div className="card w-full max-w-lg p-6">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-xl font-semibold text-surface-100">
-                {cloudStep === 'login' && 'Connect Bambu Cloud'}
-                {cloudStep === 'verify' && 'Enter Verification Code'}
-                {cloudStep === 'devices' && 'Your Bambu Printers'}
+                {cloudStep === 'login' && t("Connect Bambu Cloud")}
+                {cloudStep === 'verify' && t("Enter Verification Code")}
+                {cloudStep === 'devices' && t("Your Bambu Printers")}
               </h2>
-              <button
+              <button aria-label={t("Close")}
                 onClick={resetCloudFlow}
                 className="text-surface-500 hover:text-surface-300"
               >
@@ -775,12 +779,11 @@ export default function Printers() {
             {cloudStep === 'login' && (
               <div className="space-y-4">
                 <p className="text-sm text-surface-400">
-                  Sign in with your Bambu Lab account to connect printers via cloud MQTT.
-                  This works even when printers are not in LAN-only mode.
+                  {t("Sign in with your Bambu Lab account to connect printers via cloud MQTT. This works even when printers are not in LAN-only mode.")}
                 </p>
                 <div>
                   <label className="block text-sm font-medium text-surface-300 mb-1">
-                    Email
+                    {t("Email")}
                   </label>
                   <input
                     type="email"
@@ -793,20 +796,21 @@ export default function Printers() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-surface-300 mb-1">
-                    Password
+                    {t("Password")}
                   </label>
                   <input
                     type="password"
                     value={cloudPassword}
                     onChange={e => setCloudPassword(e.target.value)}
                     className="input"
-                    placeholder="Password"
+                    placeholder={t("Password")}
                     onKeyDown={e => e.key === 'Enter' && cloudEmail && cloudPassword && handleCloudLogin()}
                   />
                 </div>
                 <div className="flex justify-end gap-3">
-                  <button onClick={resetCloudFlow} className="btn btn-ghost">
-                    Cancel
+                  <button aria-label={t("Close")}
+                onClick={resetCloudFlow} className="btn btn-ghost">
+                    {t("Cancel")}
                   </button>
                   <button
                     onClick={handleCloudLogin}
@@ -816,10 +820,10 @@ export default function Printers() {
                     {cloudLoading ? (
                       <>
                         <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        Signing in...
+                        {t("Signing in...")}
                       </>
                     ) : (
-                      'Sign In'
+                      t("Sign In")
                     )}
                   </button>
                 </div>
@@ -829,12 +833,11 @@ export default function Printers() {
             {cloudStep === 'verify' && (
               <div className="space-y-4">
                 <p className="text-sm text-surface-400">
-                  A verification code has been sent to <strong className="text-surface-200">{cloudEmail}</strong>.
-                  Enter the 6-digit code below.
+                  {t("A verification code has been sent to {{email}}. Enter the 6-digit code below.", { email: cloudEmail })}
                 </p>
                 <div>
                   <label className="block text-sm font-medium text-surface-300 mb-1">
-                    Verification Code
+                    {t("Verification Code")}
                   </label>
                   <input
                     type="text"
@@ -849,7 +852,7 @@ export default function Printers() {
                 </div>
                 <div className="flex justify-end gap-3">
                   <button onClick={() => setCloudStep('login')} className="btn btn-ghost">
-                    Back
+                    {t("Back")}
                   </button>
                   <button
                     onClick={handleCloudVerify}
@@ -859,10 +862,10 @@ export default function Printers() {
                     {cloudLoading ? (
                       <>
                         <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        Verifying...
+                        {t("Verifying...")}
                       </>
                     ) : (
-                      'Verify'
+                      t("Verify")
                     )}
                   </button>
                 </div>
@@ -873,13 +876,12 @@ export default function Printers() {
               <div className="space-y-3">
                 {cloudDevices.length === 0 ? (
                   <p className="text-surface-400 text-center py-8">
-                    No printers found on your Bambu account.
+                    {t("No printers found on your Bambu account.")}
                   </p>
                 ) : (
                   <>
                     <p className="text-sm text-surface-400">
-                      Found {cloudDevices.length} printer{cloudDevices.length !== 1 ? 's' : ''} on your account.
-                      Click Add to connect via cloud MQTT.
+                      {t("Found {{count}} printers on your account. Click Add to connect via cloud MQTT.", { count: cloudDevices.length })}
                     </p>
                     {cloudDevices.map(device => (
                       <div
@@ -903,9 +905,9 @@ export default function Printers() {
                             <div className="text-sm text-surface-500">
                               {device.dev_product_name || device.dev_model_name}
                               {device.online ? (
-                                <span className="text-emerald-400 ml-2">Online</span>
+                                <span className="text-emerald-400 ml-2">{t("Online")}</span>
                               ) : (
-                                <span className="text-surface-600 ml-2">Offline</span>
+                                <span className="text-surface-600 ml-2">{t("Offline")}</span>
                               )}
                             </div>
                           </div>
@@ -913,7 +915,7 @@ export default function Printers() {
                         {addedCloudDevices.has(device.dev_id) ? (
                           <span className="flex items-center gap-1 text-emerald-400 text-sm">
                             <Check className="h-4 w-4" />
-                            Added
+                            {t("Added")}
                           </span>
                         ) : (
                           <button
@@ -924,12 +926,12 @@ export default function Printers() {
                             {addingCloudDevice === device.dev_id ? (
                               <>
                                 <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                                Adding...
+                                {t("Adding...")}
                               </>
                             ) : (
                               <>
                                 <Plus className="h-4 w-4 mr-1" />
-                                Add
+                                {t("Add")}
                               </>
                             )}
                           </button>
@@ -939,8 +941,9 @@ export default function Printers() {
                   </>
                 )}
                 <div className="flex justify-end pt-4 border-t border-surface-800">
-                  <button onClick={resetCloudFlow} className="btn btn-secondary">
-                    Done
+                  <button aria-label={t("Close")}
+                onClick={resetCloudFlow} className="btn btn-secondary">
+                    {t("Done")}
                   </button>
                 </div>
               </div>
@@ -954,14 +957,14 @@ export default function Printers() {
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
           <div className="card w-full max-w-lg p-6">
             <h2 className="text-xl font-semibold text-surface-100 mb-4">
-              Add Printer
+              {t("Add Printer")}
             </h2>
             <form onSubmit={handleCreate}>
               <div className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-surface-300 mb-1">
-                      Name *
+                      {t("Name *")}
                     </label>
                     <input
                       type="text"
@@ -974,7 +977,7 @@ export default function Printers() {
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-surface-300 mb-1">
-                      Model
+                      {t("Model")}
                     </label>
                     <input
                       type="text"
@@ -987,7 +990,7 @@ export default function Printers() {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-surface-300 mb-1">
-                      Manufacturer
+                      {t("Manufacturer")}
                     </label>
                     <input
                       type="text"
@@ -998,19 +1001,19 @@ export default function Printers() {
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-surface-300 mb-1">
-                      Location
+                      {t("Location")}
                     </label>
                     <input
                       type="text"
                       name="location"
                       className="input"
-                      placeholder="Workshop, Desk 3"
+                      placeholder={t("Workshop, Desk 3")}
                     />
                   </div>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-surface-300 mb-1">
-                    Cost per Hour ({symbol})
+                    {t("Cost per hour ({{symbol}})", { symbol })}
                   </label>
                   <input
                     type="number"
@@ -1021,23 +1024,22 @@ export default function Printers() {
                     defaultValue="0.50"
                   />
                   <p className="text-xs text-surface-500 mt-1">
-                    Suggested: A1 {formatAmount(0.50)} / P1S {formatAmount(0.75)} / X1 {formatAmount(1)} — covers electricity, depreciation, maintenance, and utilization.
-                    You can adjust this later from the printer detail page.
+                    {t("Suggested: A1 {{a1}} / P1S {{p1s}} / X1 {{x1}} — covers electricity, depreciation, maintenance, and utilization. You can adjust this later from the printer detail page.", { a1: formatAmount(0.50), p1s: formatAmount(0.75), x1: formatAmount(1) })}
                   </p>
                 </div>
                  <label className="flex items-start gap-3 rounded-lg border border-surface-800 bg-surface-900/50 p-3">
                    <input type="checkbox" name="restrict_gcode_model" defaultChecked className="mt-1" />
                    <span>
-                     <span className="block text-sm font-medium text-surface-200">Permitir apenas G-code específico deste modelo</span>
-                     <span className="text-xs text-surface-500">Bloqueia impressão quando printer_model do G-code não corresponde ao modelo desta impressora.</span>
+                     <span className="block text-sm font-medium text-surface-200">{t("Only allow G-code for this printer model")}</span>
+                     <span className="text-xs text-surface-500">{t("Block printing when the G-code printer_model does not match this printer model.")}</span>
                    </span>
                  </label>
                  <div>
                    <label className="block text-sm font-medium text-surface-300 mb-1">
-                     Connection Type
+                     {t("Connection Type")}
                   </label>
                   <select name="connection_type" value={addConnectionType} onChange={e => setAddConnectionType(e.target.value as ConnectionType)} className="input">
-                    <option value="manual">Manual (No Integration)</option>
+                    <option value="manual">{t("Manual (No Integration)")}</option>
                     <option value="octoprint">OctoPrint</option>
                     <option value="bambu_lan">Bambu Lab (LAN)</option>
                     <option value="moonraker">Moonraker (Klipper)</option>
@@ -1045,7 +1047,7 @@ export default function Printers() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-surface-300 mb-1">
-                    Connection URL
+                    {t("Connection URL")}
                   </label>
                   <input
                     type="text"
@@ -1054,12 +1056,12 @@ export default function Printers() {
                     placeholder="http://192.168.1.100:7125"
                   />
                   <p className="text-xs text-surface-500 mt-1">
-                    Leave empty for manual printers
+                    {t("Leave empty for manual printers")}
                   </p>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-surface-300 mb-1">
-                    Fluidd URL
+                    {t("Fluidd URL")}
                   </label>
                   <input
                     type="text"
@@ -1068,13 +1070,13 @@ export default function Printers() {
                     placeholder="http://192.168.1.100"
                   />
                   <p className="text-xs text-surface-500 mt-1">
-                    Optional. Moonraker defaults to the same host on port 80.
+                    {t("Optional. Moonraker defaults to the same host on port 80.")}
                   </p>
                 </div>
                 {(addConnectionType === 'moonraker' || addConnectionType === 'octoprint') && (
                   <div>
                     <label className="block text-sm font-medium text-surface-300 mb-1">
-                      Pasta padrão para arquivos de impressão
+                      {t("Default print folder")}
                     </label>
                     <input
                       type="text"
@@ -1083,7 +1085,7 @@ export default function Printers() {
                       placeholder="/sda1"
                     />
                     <p className="text-xs text-surface-500 mt-1">
-                      Deixe vazio para usar a pasta raiz da impressora.
+                      {t("Leave empty to use the printer root folder.")}
                     </p>
                   </div>
                 )}
@@ -1095,14 +1097,14 @@ export default function Printers() {
                   onClick={() => setShowAdd(false)}
                   className="btn btn-ghost"
                 >
-                  Cancel
+                  {t("Cancel")}
                 </button>
                 <button
                   type="submit"
                   disabled={createPrinter.isPending}
                   className="btn btn-primary"
                 >
-                  {createPrinter.isPending ? 'Adding...' : 'Add Printer'}
+                  {createPrinter.isPending ? t("Adding...") : t("Add Printer")}
                 </button>
               </div>
             </form>
