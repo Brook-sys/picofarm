@@ -235,7 +235,7 @@ and malicious upstream content, not remote network exposure.
 - **Token handling.** The backend token is generated per local run or
   configured per remote server, lives only in the host process, and is injected
   server-side (`Authorization: Bearer`, plus `?token=` for `/ws`). Browser
-  cookies, `Authorization`, `X-API-Key`, and forwarding headers are stripped
+  cookies, `Authorization`, `X-API-Token`, `X-API-Key`, and forwarding headers are stripped
   before proxying; upstream `Set-Cookie` is removed from responses. The frontend
   bridge never sees a token, and a stored browser `API_TOKEN` is ignored.
 - **Remote content isolation.** Only the bundled frontend can execute: any

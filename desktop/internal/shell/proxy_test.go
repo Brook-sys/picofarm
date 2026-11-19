@@ -159,6 +159,81 @@ func TestProxyRedirectPolicy(t *testing.T) {
 		t.Fatalf("header injection survived: %q %q", res.Header.Get("X-Injected"), res.Header.Get("Location"))
 	}
 }
+func TestSameOriginLocation(t *testing.T) {
+	const origin = "http://127.0.0.1:43210"
+	for _, tc := range []struct {
+		name, location, want string
+	}{
+		{"root", "/", "/"},
+		{"callback", "/settings?etsy=connected#done", "/settings?etsy=connected#done"},
+		{"absolute callback", origin + "/settings?etsy=connected#done", "/settings?etsy=connected#done"},
+		{"absolute root", origin, "/"},
+		{"escaped path", origin + "/a%2Fb?x=%20#two%20words", "/a%2Fb?x=%20#two%20words"},
+		{"empty query", origin + "/settings?", "/settings?"},
+		{"backslash authority", `/\evil.example`, ""},
+		{"absolute double slash", origin + "//evil.example", ""},
+		{"absolute backslash", origin + `/\evil.example`, ""},
+		{"protocol relative", "//evil.example", ""},
+		{"foreign", "https://evil.example/settings", ""},
+		{"userinfo", "http://user@127.0.0.1:43210/settings", ""},
+		{"different port", "http://127.0.0.1:43211/settings", ""},
+		{"different scheme", "https://127.0.0.1:43210/settings", ""},
+		{"relative", "settings", ""},
+		{"query only", "?etsy=connected", ""},
+		{"fragment only", "#done", ""},
+		{"empty", "", ""},
+		{"space", "/settings x", ""},
+		{"tab", "/\tevil.example", ""},
+		{"newline", "/settings\r\nX-Injected: 1", ""},
+		{"control", "/settings\x7f", ""},
+		{"unicode whitespace", "/settings\u00a0", ""},
+		{"invalid escape", "/%zz", ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := sameOriginLocation(tc.location, origin)
+			if tc.want == "" {
+				if err == nil || got != "" {
+					t.Fatalf("accepted %q: %q, %v", tc.location, got, err)
+				}
+			} else if err != nil || got != tc.want {
+				t.Fatalf("got %q, %v; want %q", got, err, tc.want)
+			}
+		})
+	}
+}
+
+func TestProxyScrubsClientAPIToken(t *testing.T) {
+	seen := make(chan http.Header, 1)
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seen <- r.Header.Clone()
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer upstream.Close()
+	h, s := testHost(t)
+	h.Target, _ = url.Parse(upstream.URL)
+	h.Token = "configured-token"
+	r, err := http.NewRequest(http.MethodGet, s.URL+"/api/test", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.AddCookie(&http.Cookie{Name: "pf_desktop", Value: "session-secret"})
+	r.Header.Set("Authorization", "Bearer client-token")
+	r.Header.Set("X-API-Key", "client-key")
+	r.Header.Set("X-API-Token", "client-priority-token")
+	res, err := s.Client().Do(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusNoContent {
+		t.Fatalf("status: %d", res.StatusCode)
+	}
+	headers := <-seen
+	if headers.Get("Authorization") != "Bearer configured-token" || headers.Get("X-API-Token") != "" || headers.Get("X-API-Key") != "" || headers.Get("Cookie") != "" {
+		t.Fatalf("unexpected upstream credentials: %v", headers)
+	}
+}
+
 func TestRemoteValidation(t *testing.T) {
 	for _, raw := range []string{"http://example.com", "https://user:secret@example.com", "https://example.com/path", "https://example.com?token=x", "https://example.com/#x", "javascript:alert(1)", "http://localhost:8084"} {
 		if _, err := ValidateRemote(raw, true); err == nil {
@@ -174,6 +249,16 @@ func TestRemoteValidation(t *testing.T) {
 		}
 	}
 }
+func TestRemoteConfigAllowsUnauthenticatedServer(t *testing.T) {
+	c := DefaultConfig()
+	c.Mode = "remote"
+	c.RemoteURL = "https://example.com"
+	c.RemoteToken = ""
+	if err := c.Validate(); err != nil {
+		t.Fatalf("blank token rejected for unauthenticated server: %v", err)
+	}
+}
+
 func TestPrivatePersistence(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "private")
 	c := DefaultConfig()

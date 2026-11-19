@@ -56,6 +56,8 @@ func (c Config) Validate() error {
 		if _, err := ValidateRemote(c.RemoteURL, c.AllowInsecureLoopback); err != nil {
 			return err
 		}
+		// An empty token remains valid for servers that intentionally disable
+		// authentication; the desktop gateway cannot enforce remote server auth.
 		if strings.ContainsAny(c.RemoteToken, "\r\n") {
 			return errors.New("invalid token")
 		}

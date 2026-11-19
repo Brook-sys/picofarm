@@ -12,6 +12,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 )
 
 type Notification struct {
@@ -110,6 +111,7 @@ func (h *Host) serve(w http.ResponseWriter, r *http.Request) {
 			req.Header.Del("Cookie")
 			req.Header.Del("Authorization")
 			req.Header.Del("X-API-Key")
+			req.Header.Del("X-API-Token")
 			req.Header.Del("Origin")
 			req.Header.Del("Referer")
 			req.Header.Del("Forwarded")
@@ -191,31 +193,47 @@ func (h *Host) serve(w http.ResponseWriter, r *http.Request) {
 }
 func equal(a, b string) bool { return subtle.ConstantTimeCompare([]byte(a), []byte(b)) == 1 }
 
-// sameOriginLocation permits only redirects that resolve inside the gateway
-// origin. A relative app path passes through unchanged; an absolute URL that
-// points at the gateway itself collapses to its path so the webview is never
-// shown a foreign host. Protocol-relative and absolute foreign targets are
-// refused, which keeps an upstream redirect from exfiltrating the shell
-// session to another origin.
+// sameOriginLocation allows root-relative callbacks or exact same-origin URLs.
+// Validate the emitted path too: collapsing an absolute URL with a // path
+// would otherwise turn it into a foreign, protocol-relative browser redirect.
 func sameOriginLocation(location, origin string) (string, error) {
-	if strings.ContainsAny(location, "\r\n") {
-		return "", fmt.Errorf("upstream redirects are not allowed")
+	rejected := fmt.Errorf("upstream redirects are not allowed")
+	unsafe := func(s string) bool {
+		return strings.ContainsRune(s, '\\') || strings.ContainsFunc(s, func(r rune) bool {
+			return unicode.IsControl(r) || unicode.IsSpace(r)
+		})
+	}
+	rootRelative := func(s string) bool {
+		return strings.HasPrefix(s, "/") && !strings.HasPrefix(s, "//") && !unsafe(s)
+	}
+	if unsafe(location) {
+		return "", rejected
 	}
 	u, err := url.Parse(location)
 	if err != nil {
-		return "", fmt.Errorf("upstream redirects are not allowed")
+		return "", rejected
 	}
-	if u.Scheme == "" && u.Host == "" && !strings.HasPrefix(location, "//") {
+	if u.Scheme == "" && u.Host == "" && rootRelative(location) {
 		return location, nil
 	}
 	want, err := url.Parse(origin)
-	if err != nil {
-		return "", fmt.Errorf("upstream redirects are not allowed")
+	if err != nil || u.Scheme == "" || u.Scheme != want.Scheme || u.Host != want.Host || u.User != nil || u.Opaque != "" {
+		return "", rejected
 	}
-	if u.Scheme == want.Scheme && u.Host == want.Host && u.User == nil {
-		return u.RequestURI(), nil
+	path := u.EscapedPath()
+	if path == "" {
+		path = "/"
 	}
-	return "", fmt.Errorf("upstream redirects are not allowed")
+	if u.ForceQuery || u.RawQuery != "" {
+		path += "?" + u.RawQuery
+	}
+	if u.Fragment != "" {
+		path += "#" + u.EscapedFragment()
+	}
+	if !rootRelative(path) {
+		return "", rejected
+	}
+	return path, nil
 }
 func (h *Host) desktop(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "POST" && !(r.Method == "GET" && r.URL.Path == "/desktop/config") {
