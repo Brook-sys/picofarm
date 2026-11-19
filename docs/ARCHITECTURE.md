@@ -90,6 +90,7 @@ Mode, remote target, tray behavior, notification preferences and autostart are d
 
 - The default database path is `~/.picofarm/picofarm.db`.
 - The schema lives in `internal/database/schema.sql`, embedded in the binary (`//go:embed`) and applied on startup by `RunMigrations`.
+- Repository `scanRow` adapts SQLite dates and `json.RawMessage` destinations. JSON columns accept SQL NULL (preserved as nil), TEXT and BLOB; byte buffers are copied to avoid retaining driver-owned memory. The scanner preserves stored bytes without validating JSON.
 - `internal/database/sqlite.go` opens the database, configures SQLite behavior, and applies schema/migration logic at startup.
 - There is historical compatibility logic in the database bootstrap path that performs idempotent `ALTER TABLE`/`CREATE` work. Treat this area carefully: do not change it without tests for both a fresh database and an upgrade/partial-upgrade database.
 - The old numbered SQL files under `migrations/` were removed: no code ever read them, and the schema file is the single source of truth. If you need that history, read it from git (`git log --diff-filter=D --name-only -- migrations/`).

@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -11,9 +12,9 @@ type scannable interface {
 	Scan(dest ...interface{}) error
 }
 
-// scanRow wraps Scan to automatically handle SQLite TEXT → time.Time conversion.
-// Any *time.Time or **time.Time destination is wrapped with a scanner that parses
-// the stored string value into a time.Time.
+// scanRow wraps Scan to handle SQLite time and JSON values.
+// Time destinations parse stored strings; JSON destinations accept TEXT, BLOB,
+// and NULL while owning their bytes independently of the driver's buffers.
 func scanRow(s scannable, dest ...interface{}) error {
 	wrapped := make([]interface{}, len(dest))
 	for i, d := range dest {
@@ -22,11 +23,39 @@ func scanRow(s scannable, dest ...interface{}) error {
 			wrapped[i] = &sqliteTime{dest: v}
 		case **time.Time:
 			wrapped[i] = &sqliteNullTime{dest: v}
+		case *json.RawMessage:
+			wrapped[i] = &sqliteJSON{dest: v}
 		default:
 			wrapped[i] = d
 		}
 	}
 	return s.Scan(wrapped...)
+}
+
+// sqliteJSON scans SQLite TEXT, BLOB, or NULL without validating the JSON.
+// Driver-owned byte slices must be copied before the next Scan.
+type sqliteJSON struct {
+	dest *json.RawMessage
+}
+
+func (s *sqliteJSON) Scan(src interface{}) error {
+	switch v := src.(type) {
+	case nil:
+		*s.dest = nil
+	case string:
+		*s.dest = json.RawMessage(v)
+	case []byte:
+		if v == nil {
+			*s.dest = nil
+		} else {
+			data := make(json.RawMessage, len(v))
+			copy(data, v)
+			*s.dest = data
+		}
+	default:
+		return fmt.Errorf("cannot scan %T into json.RawMessage", src)
+	}
+	return nil
 }
 
 // sqliteTime scans a SQLite TEXT value into a time.Time.
