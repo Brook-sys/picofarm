@@ -27,7 +27,7 @@ A **project** describes a product. An **order item** can generate a **task**, an
 
 ## Quick start from source
 
-Requirements: Git, Make, Go **1.26.11 or newer**, and a Vite-compatible Node.js version (**20.19+ on Node 20, or 22.12+**) with npm. Use a maintained Node.js release.
+Requirements: Git, Make, Go **1.26.11 or newer**, and Node.js **22.12 or newer** with npm. Use a maintained Node.js release.
 
 ```sh
 git clone https://github.com/Brook-sys/picofarm.git

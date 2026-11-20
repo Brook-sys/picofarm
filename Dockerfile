@@ -1,12 +1,13 @@
 # syntax=docker/dockerfile:1.7
 
-ARG NODE_VERSION=20
+ARG NODE_VERSION=22
 # Go 1.26.11+ é obrigatório: corrige GO-2026-6859 (net/http MaxBytesReader race)
 # e GO-2026-6809 (crypto/x509) na stdlib. Não baixar sem checar advisories.
 ARG GO_VERSION=1.26.11
 ARG ALPINE_VERSION=3.20
 
-FROM node:${NODE_VERSION}-alpine AS frontend
+# Static browser assets are shared by all target architectures; avoid Node under QEMU.
+FROM --platform=$BUILDPLATFORM node:${NODE_VERSION}-alpine AS frontend
 WORKDIR /src/web
 COPY web/package*.json ./
 RUN npm ci

@@ -21,7 +21,9 @@ This document defines the current operational baseline for PicoFarm. Use it befo
 | Interface languages | `i18next` + `react-i18next`, bundled JSON catalogs for `en` and `pt-BR`; per-browser/device preference, see `docs/I18N.md` |
 | Realtime | WebSocket hub in `internal/realtime`; browser hook in `web/src/hooks/useWebSocket.ts` |
 | Integrations | Etsy, Squarespace, Bambu Lab, OctoPrint, Moonraker/Klipper |
-| Build | `Makefile`, `web/package.json`, `Dockerfile` |
+| Build | `Makefile`, `web/package.json`, `Dockerfile`; Node.js 22.12+ (Docker/CI use Node 22) |
+
+The Docker publication job has a 30-minute timeout. Its frontend stage runs on `BUILDPLATFORM`, generating shared static assets without running Node under target-architecture emulation. Backend and runtime stages still use the target platform; ARM64 publication still requires QEMU. This configuration must be validated by a multi-platform build, not just a local frontend build.
 
 ## Runtime defaults
 

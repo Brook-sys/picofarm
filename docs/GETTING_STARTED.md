@@ -18,7 +18,7 @@ For a source build, install:
 
 - Git and Make.
 - Go **1.26.11 or newer**, as required by `go.mod`. An older Go installation may download the required toolchain when `GOTOOLCHAIN=auto` is enabled and network access is available.
-- Node.js compatible with Vite 7: **20.19+ on Node 20, or 22.12+**, with npm. Prefer a maintained Node.js release.
+- Node.js **22.12 or newer**, with npm. Docker and CI use Node 22; use a maintained Node.js release.
 
 ```sh
 git clone https://github.com/Brook-sys/picofarm.git
