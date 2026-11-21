@@ -2,7 +2,7 @@
 
 This document records PicoFarm's current security assumptions and the hardening work needed before broader self-hosted exposure.
 
-Slicer snapshots, queue isolation and validation limits: [SLICER_REFINEMENTS.md](SLICER_REFINEMENTS.md).
+Slicer snapshots, queue isolation and validation limits: [SLICER_REFINEMENTS.md](SLICER_REFINEMENTS.md). Proposed security/resource gates for future slicing multiplication and browser toolpath preview: [SLICING_FEASIBILITY.md](SLICING_FEASIBILITY.md#8-security-and-operational-gates); these gates are not implemented controls.
 
 Printer connection attempts are resource-bounded with configurable cadence and concurrency; see [PRINTER_RECONNECTION.md](PRINTER_RECONNECTION.md). Recovery is communication-only, not authorization to replay physical commands or proof that a power-interrupted print completed.
 

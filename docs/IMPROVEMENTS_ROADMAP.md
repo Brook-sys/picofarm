@@ -1,7 +1,12 @@
 # Plano de melhorias e correções — PicoFarm e Orca Slicer API
 
 **Status:** planejamento com incrementos locais implementados; não implica deploy.
-**Última consolidação:** 2026-11-15.
+**Última consolidação:** 2026-11-20.
+
+## Decisões posteriores registradas
+
+- [Orçamento e custeio](QUOTING.md): decisões de produto aprovadas para FDM, múltiplos projetos/peças/componentes, preço dinâmico por último campo editado, proposta inicial em PDF e condições comerciais simples. Isso é escopo planejado, não funcionalidade entregue.
+- **Nova prioridade aprovada para investigação:** duplicação e arranjo de instâncias do mesmo STL na mesa, espaçamento, reorientação e visualização de camadas/trajetórias do G-code. A [análise de viabilidade](SLICING_FEASIBILITY.md) separa o preview de G-code já armazenado, a multiplicação pelo CLI Orca e o preview anterior ao fatiamento, com gates mensuráveis. Nenhum renderer ou contrato novo foi implementado ou selecionado.
 
 ## Incremento do fatiador implementado nesta rodada
 

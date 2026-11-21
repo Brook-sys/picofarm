@@ -3,6 +3,8 @@
 This document records the current HTTP/JSON contract conventions between the Go backend and the React/TypeScript frontend. It is based on the current router in `internal/api/router.go`, Go models in `internal/model/`, and browser client/types in `web/src/api/client.ts` and `web/src/types/index.ts`.
 
 Slicer editor/history and background-job contracts: [SLICER_REFINEMENTS.md](SLICER_REFINEMENTS.md), [SLICER_JOBS.md](SLICER_JOBS.md).
+Slicing multiplication and toolpath-preview investigation, including proposed non-implemented data contracts: [SLICING_FEASIBILITY.md](SLICING_FEASIBILITY.md).
+Approved quotation/costing product decisions and non-implemented gates: [QUOTING.md](QUOTING.md).
 
 ## Contract sources of truth
 

@@ -1,6 +1,6 @@
 # Slicer refinements and validation boundaries
 
-These are implemented local changes, not evidence of deployment or physical printing.
+These are implemented local changes, not evidence of deployment or physical printing. Future multiplication, arrangement and G-code toolpath-preview proposals are tracked separately in [SLICING_FEASIBILITY.md](SLICING_FEASIBILITY.md); that investigation does not change the contracts below.
 
 ## API contracts
 

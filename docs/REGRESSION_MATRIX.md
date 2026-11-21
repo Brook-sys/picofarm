@@ -2,7 +2,9 @@
 
 Use this matrix to decide what to manually verify or automate when changing PicoFarm. Prefer turning high-risk manual checks into Go API tests, TypeScript tests, or small integration tests over time.
 
-Slicer refinement gates and known validation gaps: [SLICER_REFINEMENTS.md](SLICER_REFINEMENTS.md#regression-gates).
+Slicer refinement gates and known validation gaps: [SLICER_REFINEMENTS.md](SLICER_REFINEMENTS.md#regression-gates). Proposed acceptance gates for future STL multiplication and G-code toolpath preview: [SLICING_FEASIBILITY.md](SLICING_FEASIBILITY.md#5-poc-a--bounded-preview-of-an-existing-g-code); these are not current coverage.
+
+Future quotation/costing acceptance gates: [QUOTING.md](QUOTING.md#11-testing-gates). They are implementation criteria, not evidence that the planned pricing engine or proposal workflow already has this coverage.
 
 ## Validation levels
 
