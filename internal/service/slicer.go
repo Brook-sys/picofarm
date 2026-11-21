@@ -123,6 +123,10 @@ type SlicerSliceRequest struct {
 	Printer               string                    `json:"printer"`
 	Preset                string                    `json:"preset"`
 	Filament              string                    `json:"filament"`
+	Quantity              int                       `json:"quantity"`
+	Rotate                *float64                  `json:"rotate,omitempty"`
+	RotateX               *float64                  `json:"rotate_x,omitempty"`
+	RotateY               *float64                  `json:"rotate_y,omitempty"`
 	Arrange               bool                      `json:"arrange"`
 	Orient                bool                      `json:"orient"`
 	EnableSupport         bool                      `json:"enable_support"`
@@ -148,6 +152,10 @@ type SlicerPreviewRequest struct {
 	Printer               string                    `json:"printer"`
 	Preset                string                    `json:"preset"`
 	Filament              string                    `json:"filament"`
+	Quantity              int                       `json:"quantity"`
+	Rotate                *float64                  `json:"rotate,omitempty"`
+	RotateX               *float64                  `json:"rotate_x,omitempty"`
+	RotateY               *float64                  `json:"rotate_y,omitempty"`
 	Arrange               bool                      `json:"arrange"`
 	Orient                bool                      `json:"orient"`
 	EnableSupport         bool                      `json:"enable_support"`
@@ -158,11 +166,13 @@ type SlicerPreviewRequest struct {
 }
 
 type SlicerPreviewResult struct {
-	UsesSupport    bool    `json:"usesSupport"`
-	PrintTime      float64 `json:"printTime"`
-	FilamentUsedG  float64 `json:"filamentUsedG"`
-	FilamentUsedMm float64 `json:"filamentUsedMm"`
-	Thumbnail      string  `json:"thumbnail"`
+	UsesSupport    bool                   `json:"usesSupport"`
+	PrintTime      float64                `json:"printTime"`
+	FilamentUsedG  float64                `json:"filamentUsedG"`
+	FilamentUsedMm float64                `json:"filamentUsedMm"`
+	Thumbnail      string                 `json:"thumbnail"`
+	Quantity       int                    `json:"quantity"`
+	Toolpaths      *SlicerToolpathPreview `json:"toolpaths"`
 }
 
 var slicerProfileNameInvalidChars = regexp.MustCompile(`[^a-zA-Z0-9_-]+`)
@@ -592,6 +602,10 @@ func (s *SlicerService) SliceSTL(ctx context.Context, req SlicerSliceRequest) (*
 	if req.ExportType != "" && req.ExportType != "gcode" {
 		return nil, fmt.Errorf("PicoFarm STL slicing only imports gcode output")
 	}
+	quantity, err := normalizeSlicerGeometry(req.Quantity, req.Arrange, req.Orient, req.Rotate, req.RotateX, req.RotateY)
+	if err != nil {
+		return nil, err
+	}
 	stl, err := s.stls.GetByID(ctx, req.STLFileID)
 	if err != nil || stl == nil {
 		return nil, fmt.Errorf("stl file not found")
@@ -629,6 +643,7 @@ func (s *SlicerService) SliceSTL(ctx context.Context, req SlicerSliceRequest) (*
 	addFormField(writer, "resolveProfiles", "true")
 	addFormField(writer, "sanitizeProfiles", "true")
 	writeSlicerOptions(writer, req.Arrange, req.Orient, req.EnableSupport, req.BrimType, req.PrintSequenceByObject, req.MulticolorOnePlate)
+	writeSlicerGeometry(writer, quantity, req.Rotate, req.RotateX, req.RotateY)
 	if len(req.Overrides) > 0 {
 		overrides, err := json.Marshal(req.Overrides)
 		if err != nil {
@@ -650,7 +665,7 @@ func (s *SlicerService) SliceSTL(ctx context.Context, req SlicerSliceRequest) (*
 	defer resp.Body.Close()
 	if resp.StatusCode >= 400 {
 		errBody, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("slicer error: %d %s", resp.StatusCode, strings.TrimSpace(string(errBody)))
+		return nil, &SlicerUpstreamError{StatusCode: resp.StatusCode, Message: strings.TrimSpace(string(errBody))}
 	}
 	if strings.Contains(resp.Header.Get("Content-Type"), "zip") {
 		return nil, fmt.Errorf("slicer returned multiple files as zip; choose a single plate or export gcode")
@@ -674,6 +689,10 @@ func (s *SlicerService) SliceSTL(ctx context.Context, req SlicerSliceRequest) (*
 }
 
 func (s *SlicerService) PreviewSTL(ctx context.Context, req SlicerPreviewRequest) (*SlicerPreviewResult, error) {
+	quantity, err := normalizeSlicerGeometry(req.Quantity, req.Arrange, req.Orient, req.Rotate, req.RotateX, req.RotateY)
+	if err != nil {
+		return nil, err
+	}
 	stl, err := s.stls.GetByID(ctx, req.STLFileID)
 	if err != nil || stl == nil {
 		return nil, fmt.Errorf("stl file not found")
@@ -707,9 +726,11 @@ func (s *SlicerService) PreviewSTL(ctx context.Context, req SlicerPreviewRequest
 	addFormField(writer, "printer", req.Printer)
 	addFormField(writer, "preset", req.Preset)
 	addFormField(writer, "filament", req.Filament)
+	addFormField(writer, "exportType", "gcode")
 	addFormField(writer, "resolveProfiles", "true")
 	addFormField(writer, "sanitizeProfiles", "true")
 	writeSlicerOptions(writer, req.Arrange, req.Orient, req.EnableSupport, req.BrimType, req.PrintSequenceByObject, req.MulticolorOnePlate)
+	writeSlicerGeometry(writer, quantity, req.Rotate, req.RotateX, req.RotateY)
 	if len(req.Overrides) > 0 {
 		overrides, err := json.Marshal(req.Overrides)
 		if err != nil {
@@ -731,7 +752,7 @@ func (s *SlicerService) PreviewSTL(ctx context.Context, req SlicerPreviewRequest
 	defer resp.Body.Close()
 	if resp.StatusCode >= 400 {
 		errBody, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("slicer error: %d %s", resp.StatusCode, strings.TrimSpace(string(errBody)))
+		return nil, &SlicerUpstreamError{StatusCode: resp.StatusCode, Message: strings.TrimSpace(string(errBody))}
 	}
 	var result SlicerPreviewResult
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {

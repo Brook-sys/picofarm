@@ -384,7 +384,7 @@ export const slicerApi = {
   importProfiles: (data: { profiles: Array<{ category: string; name: string; json: string }>; overwrite?: boolean }) => fetchApi<SlicerImportResult>('/slicer/profiles/import', { method: 'POST', body: JSON.stringify(data) }),
   updateProfile: (category: string, name: string) => fetchApi<Record<string, unknown>>(`/slicer/profiles/${category}/${encodeURIComponent(name)}/update-from-source`, { method: 'POST' }),
   resolveProfiles: (data: Record<string, unknown>) => fetchApi<Record<string, unknown>>('/slicer/resolve-profiles', { method: 'POST', body: JSON.stringify(data) }),
-  preview: (data: Record<string, unknown>) => fetchApi<{ usesSupport: boolean; printTime: number; filamentUsedG: number; filamentUsedMm: number; thumbnail: string }>('/slicer/preview', { method: 'POST', body: JSON.stringify(data) }),
+  preview: (data: Record<string, unknown>) => fetchApi<{ usesSupport: boolean; printTime: number; filamentUsedG: number; filamentUsedMm: number; thumbnail: string; quantity?: number; toolpaths?: import('../lib/slicerToolpaths').ToolpathPreview }>('/slicer/preview', { method: 'POST', body: JSON.stringify(data) }),
   sliceSTL: (data: Record<string, unknown>) => fetchApi<Record<string, unknown>>('/slicer/slice-stl', { method: 'POST', body: JSON.stringify(data) }),
 }
 

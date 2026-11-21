@@ -1,8 +1,8 @@
 # STL multiplication, arrangement and G-code preview feasibility
 
-**Status:** sourced investigation and proposed proof-of-concept (POC) gates. No slicer multiplication, spacing control, placement editor, toolpath viewer, API extension or renderer integration is implemented or approved for deployment by this document.
+**Current status (2026-11-21):** strict single-plate quantity (`1`–`512`), mandatory arrangement for multiple instances, optional finite rotations and upstream-derived SVG 2D layer toolpath preview are **being integrated in PicoFarm**. Current integration contract and pending acceptance gates: [API_CONTRACTS.md](API_CONTRACTS.md#strict-geometry-and-toolpath-preview--integration-in-progress) and [SLICER_REFINEMENTS.md](SLICER_REFINEMENTS.md#strict-integration-acceptance-gates). Thumbnail and advanced positioning remain separate collapsed UI sections. This status does not claim passing tests, browser verification, deployment or physical printing. Live upstream slicer validation is a separate evidence track, not proof of PicoFarm proxy/UI behavior. No hardware commands are part of this work.
 
-Last update: 2026-11-20.
+**Historical investigation boundary:** the sections below preserve the sourced investigation last updated **2026-11-20**, its pinned source snapshots and proposed POC gates. Phrases such as “current code”, “today”, “not implemented” and “no renderer selected” below refer to that investigation snapshot, not the in-progress integration. Historical findings have not been re-executed or newly verified by this documentation update. The original no-deployment-approval boundary remains; spacing, maximum-fit, placement editing, multi-plate splitting and a full 3D toolpath renderer are not implied by the current integration.
 
 ## 1. Conclusions and boundaries
 

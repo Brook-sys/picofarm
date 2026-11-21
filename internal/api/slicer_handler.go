@@ -3,6 +3,7 @@ package api
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 
@@ -195,6 +196,15 @@ func (h *SlicerHandler) ResolveProfiles(w http.ResponseWriter, r *http.Request) 
 	respondJSON(w, http.StatusOK, result)
 }
 
+func respondSlicerOperationError(w http.ResponseWriter, err error) {
+	status := http.StatusBadRequest
+	var upstream *service.SlicerUpstreamError
+	if errors.As(err, &upstream) && upstream.StatusCode >= 400 && upstream.StatusCode <= 599 {
+		status = upstream.StatusCode
+	}
+	respondError(w, status, err.Error())
+}
+
 func (h *SlicerHandler) PreviewSTL(w http.ResponseWriter, r *http.Request) {
 	var req service.SlicerPreviewRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -203,7 +213,7 @@ func (h *SlicerHandler) PreviewSTL(w http.ResponseWriter, r *http.Request) {
 	}
 	result, err := h.service.PreviewSTL(r.Context(), req)
 	if err != nil {
-		respondError(w, http.StatusBadRequest, err.Error())
+		respondSlicerOperationError(w, err)
 		return
 	}
 	respondJSON(w, http.StatusOK, result)
@@ -217,7 +227,7 @@ func (h *SlicerHandler) SliceSTL(w http.ResponseWriter, r *http.Request) {
 	}
 	result, err := h.service.SliceSTL(r.Context(), req)
 	if err != nil {
-		respondError(w, http.StatusBadRequest, err.Error())
+		respondSlicerOperationError(w, err)
 		return
 	}
 	respondJSON(w, http.StatusOK, result)

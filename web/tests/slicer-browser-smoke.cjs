@@ -15,7 +15,7 @@ const stl = { id: 'stl', file_id: 'model', display_name: 'Synthetic STL', file_n
 const model = `solid smoke\nfacet normal 0 0 1\nouter loop\nvertex 0 0 0\nvertex 10 0 0\nvertex 0 20 0\nendloop\nendfacet\nfacet normal 1 0 0\nouter loop\nvertex 0 0 0\nvertex 0 20 0\nvertex 0 0 30\nendloop\nendfacet\nendsolid smoke`;
 (async () => {
   const browser = await chromium.launch({ headless: true, ...(process.env.CHROMIUM_EXECUTABLE ? { executablePath: process.env.CHROMIUM_EXECUTABLE } : {}), args: ['--no-sandbox', '--enable-unsafe-swiftshader', '--use-gl=angle', '--use-angle=swiftshader'] });
-  const context = await browser.newContext({ serviceWorkers: 'block', viewport: { width: 1440, height: 1000 } });
+  const context = await browser.newContext({ locale: 'en-US', serviceWorkers: 'block', viewport: { width: 1440, height: 1000 } });
   const page = await context.newPage();
   page.setDefaultTimeout(12000);
   const errors = [], calls = [], unexpected = [];
@@ -47,7 +47,7 @@ const model = `solid smoke\nfacet normal 0 0 1\nouter loop\nvertex 0 0 0\nvertex
       current = data.json; hash = 'hash-2'; revisions = [...revisions, { id: 2, hash, json: current, created_at: stamp }];
       return json({ current_json: current, current_hash: hash, revisions });
     }
-    if (p === '/api/slicer/preview') return json({ usesSupport: false, printTime: 3660, filamentUsedG: 12.5, filamentUsedMm: 4200, thumbnail: png });
+    if (p === '/api/slicer/preview') return json({ usesSupport: true, printTime: 3660, filamentUsedG: 12.5, filamentUsedMm: 4200, thumbnail: png, quantity: req.postDataJSON().quantity, toolpaths: { version: 1, positionUnit: 'mm', coordinateSystem: 'gcode', sourceComplete: true, truncated: true, omittedSegments: 10, warnings: ['Synthetic parser warning'], layers: [0, 1].map(index => ({ index, z: 0.2 + index * 0.2, segments: [{ from: [10, 10, 0.2], to: [20, 20, 0.2], extrusion: 1, feature: index ? 'Support' : 'Brim', tool: 0 }] })) } });
     if (p === '/api/slicer/jobs' && method === 'GET') return json(jobs);
     if (p.endsWith('/cancel') && method === 'POST') { jobs[0].status = 'cancelled'; return json(jobs[0]); }
     if (p === '/api/slicer/jobs/job-3' && method === 'DELETE') { jobs = jobs.filter(j => j.id !== 'job-3'); return json({}); }
@@ -59,10 +59,10 @@ const model = `solid smoke\nfacet normal 0 0 1\nouter loop\nvertex 0 0 0\nvertex
   try {
     await page.goto(`${base}/files`);
     await page.getByRole('button', { name: 'Details', exact: true }).first().click();
-    const comparison = page.getByRole('region', { name: 'Comparação de variantes existentes' });
-    await text(comparison, 'Variant 0 (padrão)'); await text(comparison, 'PETG'); await text(comparison, '0.2 mm'); await text(comparison, '0.3 mm');
+    const comparison = page.getByRole('region', { name: 'Existing variant comparison' });
+    await text(comparison, 'Variant 0(default)'); await text(comparison, 'PETG'); await text(comparison, '0.2 mm'); await text(comparison, '0.3 mm');
     await comparison.getByRole('checkbox', { name: 'Variant 1' }).uncheck();
-    await text(comparison, 'Selecione ao menos duas variantes.');
+    await text(comparison, 'Select at least two variants.');
     await comparison.getByRole('checkbox', { name: 'Variant 1' }).check();
     await visible(comparison.getByRole('table'));
     console.log('PASS comparison selection and metadata for two linked variants');
@@ -77,23 +77,50 @@ const model = `solid smoke\nfacet normal 0 0 1\nouter loop\nvertex 0 0 0\nvertex
       console.log('PASS real WebGL STL dimensions and camera controls');
     }
     await page.getByRole('button', { name: 'Close', exact: true }).click();
-    await page.getByRole('button', { name: 'Fatiar', exact: true }).first().click();
-    await page.getByRole('button', { name: 'Gerar Preview', exact: true }).click();
-    await visible(page.getByText('Preview gerado para os parâmetros enviados.', { exact: true }));
-    await visible(page.getByText('Filamento: 12.5 g / 4200 mm', { exact: true }));
+    await page.getByRole('button', { name: 'Slice', exact: true }).first().click();
+    const dialog = page.getByRole('dialog');
+    await dialog.getByRole('spinbutton', { name: 'Pieces on one plate' }).fill('513');
+    assert.equal(await dialog.getByRole('button', { name: 'Generate preview', exact: true }).isDisabled(), true);
+    await dialog.getByRole('spinbutton', { name: 'Pieces on one plate' }).fill('3');
+    assert.equal(await dialog.getByRole('checkbox', { name: 'Auto-arrange', exact: true }).isDisabled(), true);
+    await dialog.getByRole('spinbutton', { name: 'Pieces on one plate' }).fill('1');
+    await dialog.getByText('Advanced positioning', { exact: true }).click();
+    await dialog.getByRole('spinbutton', { name: 'Z (°)', exact: true }).fill('0');
+    assert.equal(await dialog.getByRole('checkbox', { name: 'Auto-orient', exact: true }).isChecked(), false);
+    assert.equal(await dialog.getByRole('checkbox', { name: 'Auto-orient', exact: true }).isDisabled(), true);
+    await page.getByRole('button', { name: 'Generate preview', exact: true }).click();
+    await visible(page.getByText('Preview generated for the submitted parameters.', { exact: true }));
+    await visible(page.getByText('Filament: 12.5 g /4200 mm', { exact: true }));
+    await visible(dialog.getByText('Verified pieces: 1 · Plate 1', { exact: true }));
+    await visible(dialog.getByText(/Partial preview:/));
+    assert.equal(await dialog.locator('svg[role="img"]').count(), 1);
+    const slider = dialog.getByRole('slider');
+    await slider.focus(); await page.keyboard.press('ArrowRight');
+    assert.equal(await slider.inputValue(), '1');
+    assert.equal(await dialog.locator('svg path').count(), 1);
+    const sent = JSON.parse(calls.find(c => c.path === '/api/slicer/preview').body);
+    assert.equal(sent.quantity, 1); assert.equal(sent.rotate, 0); assert.equal(sent.orient, false);
+    console.log('PASS bounded layer preview, partial warning, quantity constraints and explicit zero rotation');
     await page.getByText('Auto-arrange', { exact: true }).click();
-    await visible(page.getByRole('status').filter({ hasText: 'Preview desatualizado' }));
+    await visible(page.getByRole('status').filter({ hasText: 'Preview out of date' }));
     assert.equal(calls.filter(c => c.path === '/api/slicer/preview').length, 1);
-    await page.getByRole('button', { name: 'Gerar Preview', exact: true }).click();
-    await visible(page.getByText('Preview gerado para os parâmetros enviados.', { exact: true }));
-    assert.equal(await page.getByRole('status').filter({ hasText: 'Preview desatualizado' }).count(), 0);
-    await page.getByRole('button', { name: 'Close', exact: true }).click();
-    console.log('PASS preview stale warning after option change, refreshed preview clears warning');
-    const panel = page.getByRole('region', { name: 'Fatiamentos em segundo plano' });
-    for (const label of ['Na fila', 'Fatiando e importando', 'Concluído', 'Falhou', 'Interrompido']) await text(panel, label);
-    await panel.getByRole('button', { name: 'Cancelar na fila', exact: true }).click();
-    await visible(panel.getByText('Cancelado antes de iniciar', { exact: true }));
-    await panel.locator('li').filter({ hasText: 'Smoke failed' }).getByRole('button', { name: 'Remover do histórico' }).click();
+    await page.getByRole('button', { name: 'Generate preview', exact: true }).click();
+    await visible(page.getByText('Preview generated for the submitted parameters.', { exact: true }));
+    assert.equal(await page.getByRole('status').filter({ hasText: 'Preview out of date' }).count(), 0);
+    await page.setViewportSize({ width: 390, height: 844 });
+    assert.equal(await dialog.evaluate(element => element.scrollWidth <= element.clientWidth + 1), true, 'mobile dialog has no horizontal overflow');
+    await dialog.getByRole('button', { name: 'Close', exact: true }).focus();
+    await page.keyboard.press('Shift+Tab');
+    assert.equal(await dialog.evaluate(element => element.contains(document.activeElement)), true, 'focus remains in dialog');
+    await page.keyboard.press('Escape');
+    await dialog.waitFor({ state: 'detached' });
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    console.log('PASS preview staleness, mobile dialog width, keyboard focus and Escape close');
+    const panel = page.getByRole('region', { name: 'Background slicing jobs' });
+    for (const label of ['Queued', 'Slicing and importing', 'Completed', 'Failed', 'Interrupted']) await text(panel, label);
+    await panel.getByRole('button', { name: 'Cancel queued job', exact: true }).click();
+    await visible(panel.getByText('Cancelled before starting', { exact: true }));
+    await panel.locator('li').filter({ hasText: 'Smoke failed' }).getByRole('button', { name: 'Remove from history' }).click();
     await panel.locator('li').filter({ hasText: 'Smoke failed' }).waitFor({ state: 'detached' });
     console.log('PASS jobs status labels, queued cancellation and explicit terminal-history removal');
     await page.goto(`${base}/slicer`);

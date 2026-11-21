@@ -91,7 +91,7 @@ func TestSlicerPreviewAndSliceForwardSameOptions(t *testing.T) {
 		}
 		if r.URL.Path == "/slice/preview" {
 			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte(`{"usesSupport":false,"printTime":120,"filamentUsedG":2,"filamentUsedMm":700,"thumbnail":""}`))
+			_, _ = w.Write([]byte(`{"usesSupport":false,"printTime":120,"filamentUsedG":2,"filamentUsedMm":700,"thumbnail":"","quantity":3,"toolpaths":{"version":1,"sourceComplete":true,"warnings":["bounded"],"limits":{"segments":20000},"bounds":{"min":[0,1,2],"max":[3,4,5]},"layers":[{"index":0,"z":0.2,"segments":[{"from":[0,0,0.2],"to":[1,2,0.2],"extrusion":0.3,"feedrateMmSec":20,"feature":"support","object":"copy 1","tool":2}]}]}}`))
 		} else {
 			// Stop before importing an artifact: this test exercises the outbound contract.
 			http.Error(w, "synthetic rejection", http.StatusUnprocessableEntity)
@@ -100,19 +100,30 @@ func TestSlicerPreviewAndSliceForwardSameOptions(t *testing.T) {
 	defer server.Close()
 	t.Setenv(SlicerConnectionURLEnv, server.URL)
 	overrides := map[string]map[string]any{"preset": {"layer_height": "0.24"}}
-	preview, err := s.PreviewSTL(ctx, SlicerPreviewRequest{STLFileID: stl.ID, Printer: "machine", Preset: "process", Filament: "filament", BrimType: true, PrintSequenceByObject: true, Overrides: overrides})
+	zero, angle := 0.0, -45.5
+	preview, err := s.PreviewSTL(ctx, SlicerPreviewRequest{Quantity: 3, Arrange: true, Rotate: &angle, RotateX: &zero, STLFileID: stl.ID, Printer: "machine", Preset: "process", Filament: "filament", BrimType: true, PrintSequenceByObject: true, Overrides: overrides})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if preview.PrintTime != 120 {
 		t.Fatalf("preview = %+v", preview)
 	}
-	_, err = s.SliceSTL(ctx, SlicerSliceRequest{STLFileID: stl.ID, Printer: "machine", Preset: "process", Filament: "filament", BrimType: true, PrintSequenceByObject: true, Overrides: overrides})
+	if preview.Quantity != 3 || preview.Toolpaths == nil || preview.Toolpaths.Layers[0].Segments[0].Object != "copy 1" || preview.Toolpaths.Bounds.Max[2] != 5 {
+		t.Fatalf("preview geometry lost: %+v", preview)
+	}
+	_, err = s.SliceSTL(ctx, SlicerSliceRequest{Quantity: 3, Arrange: true, Rotate: &angle, RotateX: &zero, STLFileID: stl.ID, Printer: "machine", Preset: "process", Filament: "filament", BrimType: true, PrintSequenceByObject: true, Overrides: overrides})
 	if err == nil || !strings.Contains(err.Error(), "422") {
 		t.Fatalf("expected synthetic rejection, got %v", err)
 	}
 	sliceForm := forms["/slice"]
-	delete(sliceForm, "exportType")
+	for key, want := range map[string]string{"quantity": "3", "rotate": "-45.5", "rotateX": "0"} {
+		if sliceForm[key][0] != want {
+			t.Errorf("%s = %v, want %s", key, sliceForm[key], want)
+		}
+	}
+	if _, exists := sliceForm["rotateY"]; exists {
+		t.Error("absent rotation must stay absent")
+	}
 	if !reflect.DeepEqual(forms["/slice/preview"], sliceForm) {
 		t.Errorf("preview/slice differ: %v / %v", forms["/slice/preview"], sliceForm)
 	}

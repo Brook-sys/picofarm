@@ -1,6 +1,20 @@
 # Slicer refinements and validation boundaries
 
-These are implemented local changes, not evidence of deployment or physical printing. Future multiplication, arrangement and G-code toolpath-preview proposals are tracked separately in [SLICING_FEASIBILITY.md](SLICING_FEASIBILITY.md); that investigation does not change the contracts below.
+The refinements below describe local implementation, not deployment or physical printing. Strict quantity/rotation and upstream toolpath-preview integration is implemented locally in PicoFarm; see [API_CONTRACTS.md](API_CONTRACTS.md#strict-geometry-and-toolpath-preview--integration-in-progress). [SLICING_FEASIBILITY.md](SLICING_FEASIBILITY.md) preserves the earlier investigation; its snapshot findings are not newly verified current behavior.
+
+Local validation: Go tests (`go test ./...`), targeted service/API race tests, 64 frontend tests and production frontend build passed. Lint reports zero errors and the existing 29 warnings. Chromium smoke with mocked APIs passed quantity constraints, explicit-zero rotation, SVG layer navigation, partial warnings, stale previews, 390px dialog width, keyboard focus/Escape and existing job/editor flows (34 intercepted requests, no page errors). WebGL2 was unavailable: only the source-STL viewer error fallback was checked. Real end-to-end PicoFarm→Orca slicing, browser peak memory, screen-reader use and sustained load were not validated. The main frontend chunk remains large (~1126 kB minified / 261 kB gzip).
+
+## Strict integration acceptance gates
+
+These are required checks, not recorded passing results. Upstream live validation and PicoFarm proxy/UI validation must be reported separately.
+
+- Quantity defaults to one; accept only integers `1`–`512`. Cover omitted/explicit one, `512`, zero, negative, fractional and oversized values. Multiple instances require arrangement and remain on one plate; surface no-fit failure without silent quantity reduction or plate splitting.
+- Preserve optional finite `rotate`, `rotate_x`, `rotate_y`, including explicit zero, through preview, synchronous slice and queued slice. Any supplied angle disables UI auto-orient; reject contradictory `orient: true`. Verify upstream `rotateX`/`rotateY` names and omit unset values.
+- Keep preview/slice geometry and overrides identical. Changing quantity, positioning, model or profiles invalidates stale preview results; an older response must not replace the active configuration's preview.
+- Render upstream layer segments as SVG 2D, not inferred STL placements. Exercise layer navigation, empty/null geometry, warnings, `sourceComplete: false`, `truncated: true` and omitted-segment counts. Partial results must remain labeled partial; thumbnail is not a substitute for unavailable toolpaths.
+- Keep thumbnail and advanced positioning separately collapsed by default; expanding/collapsing must not change settings or silently trigger slicing. Check labels, keyboard use and narrow-screen overflow in both supported languages.
+- Test typed proxy response preservation, explicit-zero forwarding, upstream failure feedback and queue persistence with controlled HTTP fixtures. Measure large bounded previews and UI responsiveness separately; no resource/load benchmark is established here.
+- Use isolated compute/import fixtures only. Preview must not create jobs, consume inventory or send hardware commands; slicing imports only and must not start printing.
 
 ## API contracts
 

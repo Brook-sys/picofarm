@@ -40,6 +40,6 @@ export function createRequestGate() {
   }
 }
 
-export function slicePreviewKey(stlId: string, form: { printer: string; preset: string; filament: string; arrange: boolean; orient: boolean; enable_support: boolean; brim_type: boolean; print_sequence_by_object: boolean }) {
-  return JSON.stringify([stlId, form.printer, form.preset, form.filament, form.arrange, form.orient, form.enable_support, form.brim_type, form.print_sequence_by_object])
+export function slicePreviewKey(stlId: string, form: { printer: string; preset: string; filament: string; arrange: boolean; orient: boolean; enable_support: boolean; brim_type: boolean; print_sequence_by_object: boolean; quantity?: number; rotate?: string; rotate_x?: string; rotate_y?: string }) {
+  return JSON.stringify([stlId, form.printer, form.preset, form.filament, form.arrange, form.orient, form.enable_support, form.brim_type, form.print_sequence_by_object, form.quantity ?? 1, form.rotate ?? '', form.rotate_x ?? '', form.rotate_y ?? ''])
 }

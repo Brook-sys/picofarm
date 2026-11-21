@@ -48,6 +48,8 @@ test('preview fingerprint covers every slicing parameter but ignores output name
     assert.notEqual(key, slicePreviewKey('stl', { ...form, [field]: typeof form[field] === 'boolean' ? !form[field] : 'other' }), field)
   }
   assert.notEqual(key, slicePreviewKey('other-stl', form))
+  assert.notEqual(key, slicePreviewKey('stl', { ...form, quantity: 2 }))
+  for (const axis of ['rotate', 'rotate_x', 'rotate_y']) assert.notEqual(key, slicePreviewKey('stl', { ...form, [axis]: '0' }))
 })
 
 test('request gate rejects replaced responses and every pending response after close/unmount', async () => {

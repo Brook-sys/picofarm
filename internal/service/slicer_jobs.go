@@ -120,7 +120,12 @@ func (s *SlicerJobsService) Submit(req SlicerSliceRequest, key string) (SlicerJo
 	if req.STLFileID == uuid.Nil || len(key) < 1 || len(key) > 128 || (req.ExportType != "" && req.ExportType != "gcode") {
 		return SlicerJob{}, ErrSlicerJobInvalid
 	}
-	// Bound persisted overrides and detach caller-owned maps.
+	quantity, err := normalizeSlicerGeometry(req.Quantity, req.Arrange, req.Orient, req.Rotate, req.RotateX, req.RotateY)
+	if err != nil {
+		return SlicerJob{}, fmt.Errorf("%w: %s", ErrSlicerJobInvalid, err)
+	}
+	req.Quantity = quantity
+	// Bound persisted overrides and detach caller-owned maps and rotation pointers.
 	payload, err := json.Marshal(req)
 	if err != nil || len(payload) > 64<<10 {
 		return SlicerJob{}, ErrSlicerJobInvalid
