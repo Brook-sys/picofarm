@@ -6,7 +6,7 @@ import ts from 'typescript'
 const source = readFileSync(new URL('../src/lib/pricingCalculator.ts', import.meta.url), 'utf8')
 const context = { exports: {} }
 vm.runInNewContext(ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText, context)
-const { syncPricingTargets, pricingCurrencyMatches, legacyPrinterDraft, formatPricingMoney, normalizePricingDecimal: decimal, pricingCount, catalogCentsToDecimal, catalogSecondsToHours, fullBatchRemainder } = context.exports
+const { syncPricingTargets, pricingCurrencyMatches, legacyPrinterDraft, formatPricingMoney, formatPricingDecimal, normalizePricingDecimal: decimal, normalizePricingDuration, pricingCount, catalogCentsToDecimal, catalogSecondsToHours, catalogSecondsToDuration, fullBatchRemainder } = context.exports
 
 test('decimal editing is normalized only at submission without float conversion', () => {
   assert.equal(decimal(' 001,230000001 '), '1.230000001')
@@ -22,6 +22,17 @@ test('signed targets are opt-in and response money never loses precision', () =>
   assert.equal(formatPricingMoney('900719925474099312345.67', 'USD', 'en-US'), '900,719,925,474,099,312,345.67 USD')
   assert.equal(formatPricingMoney('1234', 'JPY', 'en-US'), '1,234 JPY')
   assert.equal(formatPricingMoney('-0.50', 'BRL', 'pt-BR'), '−0,50 BRL')
+})
+test('human durations accept decimal hours or hh:mm:ss without float conversion', () => {
+  assert.equal(normalizePricingDuration('1:30'), '1.500000000')
+  assert.equal(normalizePricingDuration('0:00:01'), '0.000277778')
+  assert.equal(normalizePricingDuration('2:05:09'), '2.085833333')
+  assert.equal(normalizePricingDuration('1,5'), '1.5')
+  assert.equal(normalizePricingDuration(''), '')
+  assert.equal(catalogSecondsToDuration(3661), '1:01:01')
+  assert.equal(catalogSecondsToDuration(3600), '1:00')
+  for (const value of ['1:60', '1:02:60', '-1:00', '1:2:3:4', 'abc']) assert.throws(() => normalizePricingDuration(value))
+  assert.equal(formatPricingDecimal('1234.500000', 'pt-BR'), '1.234,500000')
 })
 test('counts and plate remainder are bounded integers', () => {
   assert.equal(pricingCount('1000000'), 1000000)
@@ -62,12 +73,9 @@ test('legacy printer replacement clears every ancillary printer cost', () => {
   assert.equal(next.material, '80')
   for (const key of ['purchase', 'residual', 'lifetime', 'maintenance', 'watts', 'tariff']) assert.equal(next[key], '')
 })
-test('screen keeps hidden costs, invalidates responses and does not store drafts', () => {
+test('calculator does not add browser draft persistence or float money parsing', () => {
+  // Workflow behavior is exercised in the isolated Chromium suite. This guard
+  // covers only the explicit memory-only draft and exact-decimal boundaries.
   const page = readFileSync(new URL('../src/pages/PricingCalculator.tsx', import.meta.url), 'utf8')
-  assert.match(page, /hidden=\{!full\}/)
-  assert.match(page, /generation\.current !== version/)
-  assert.match(page, /controller\.current\?\.abort\(\)/)
-  assert.match(page, /min_charge: d\('minimum'\)/)
-  assert.match(page, /discount_percent: d\('discount'\)/)
-  assert.doesNotMatch(page, /localStorage|sessionStorage|useBlocker|parseFloat/)
+  assert.doesNotMatch(page, /localStorage|sessionStorage|parseFloat/)
 })

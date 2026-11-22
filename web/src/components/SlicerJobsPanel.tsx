@@ -25,6 +25,9 @@ interface Props {
   api: SlicerJobsTransport
   stlFileId?: string
   onOpenResult?: (gcodeId: string) => void
+  /** Keeps embedded workflows focused without hiding job failures or results. */
+  compact?: boolean
+  resultLabel?: string
 }
 
 const labels: Record<SlicerJobView['status'], string> = {
@@ -38,7 +41,7 @@ function formatJobDate(dateString: string, dateLocale: string): string {
   return date.toLocaleString(dateLocale)
 }
 
-export default function SlicerJobsPanel({ api, stlFileId, onOpenResult }: Props) {
+export default function SlicerJobsPanel({ api, stlFileId, onOpenResult, compact = false, resultLabel }: Props) {
   const { t, i18n } = useTranslation('components')
   const dateLocale = i18n.resolvedLanguage === 'pt-BR' ? 'pt-BR' : 'en-US'
   const [jobs, setJobs] = useState<SlicerJobView[]>([])
@@ -95,12 +98,14 @@ export default function SlicerJobsPanel({ api, stlFileId, onOpenResult }: Props)
 
   const visible = stlFileId ? jobs.filter(job => job.request.stl_file_id === stlFileId) : jobs
   return <section className="space-y-3" aria-label={t("Background slicing jobs")}>
-    <h3 className="font-semibold">{t("Background slicing jobs")}</h3>
-    <p className="text-sm text-gray-500">{t("You can navigate while PicoFarm is running. Restarts interrupt jobs; there is no automatic recovery. Only queued jobs can be cancelled.")}</p>
-    <p className="text-xs text-gray-500">{t("History: {{count}}/100. When the limit is reached, explicitly remove finished jobs to free space. Removing history keeps the G-code but loses that job's deduplication.", { count: jobs.length })}</p>
-    {error && <div role="alert" className="text-sm text-red-600">{error} <button type="button" onClick={() => setRefresh(value => value + 1)}>{t("Refresh")}</button></div>}
-    {visible.length === 0 && <p className="text-sm text-gray-500">{t("No slicing jobs recorded.")}</p>}
-    <ul className="space-y-2">{visible.map(job => <li key={job.id} className="rounded border p-3 text-sm">
+    <h3 className="font-semibold text-surface-200">{t("Background slicing jobs")}</h3>
+    {!compact && <>
+      <p className="text-sm text-surface-400">{t("You can navigate while PicoFarm is running. Restarts interrupt jobs; there is no automatic recovery. Only queued jobs can be cancelled.")}</p>
+      <p className="text-xs text-surface-500">{t("History: {{count}}/100. When the limit is reached, explicitly remove finished jobs to free space. Removing history keeps the G-code but loses that job's deduplication.", { count: jobs.length })}</p>
+    </>}
+    {error && <div role="alert" className="rounded-md border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300">{error} <button className="ml-2 underline" type="button" onClick={() => setRefresh(value => value + 1)}>{t("Refresh")}</button></div>}
+    {visible.length === 0 && <p className="text-sm text-surface-400">{t("No slicing jobs recorded.")}</p>}
+    <ul className="space-y-2">{visible.map(job => <li key={job.id} className="rounded-lg border border-surface-700 bg-surface-950/40 p-3 text-sm">
       <div className="flex items-center justify-between gap-2">
         <span>{job.request.display_name || job.request.stl_file_id}</span>
         <span>{t(labels[job.status] || job.status)}</span>
@@ -108,11 +113,12 @@ export default function SlicerJobsPanel({ api, stlFileId, onOpenResult }: Props)
       <div className="text-xs text-gray-500">{formatJobDate(job.created_at, dateLocale)}</div>
       {job.error && <p>{job.error}</p>}
       {job.persistence_error && <p role="alert" className="text-red-600">{t("Could not save state. Check the library before retrying; new jobs are blocked.")}</p>}
-      {job.status === 'queued' && <button type="button" disabled={busy !== null} onClick={() => void cancel(job.id)}>{busy === job.id ? t("Cancelling…") : t("Cancel queued job")}</button>}
-      {job.status !== 'queued' && job.status !== 'running' && <button type="button" disabled={busy !== null} onClick={() => void remove(job)}>{t("Remove from history")}</button>}
-      {job.result?.gcode && <div>{t("Imported G-code:")}{' '}{job.result.gcode.display_name || job.result.gcode.id}
-        {onOpenResult && <button type="button" onClick={() => onOpenResult(job.result!.gcode.id)}>{t("Open result")}</button>}
-      </div>}
+      <div className="mt-2 flex flex-wrap gap-2">
+        {job.status === 'queued' && <button className="btn btn-secondary px-3 py-1.5 text-xs" type="button" disabled={busy !== null} onClick={() => void cancel(job.id)}>{busy === job.id ? t("Cancelling…") : t("Cancel queued job")}</button>}
+        {job.status !== 'queued' && job.status !== 'running' && <button className="btn btn-ghost px-3 py-1.5 text-xs" type="button" disabled={busy !== null} onClick={() => void remove(job)}>{t("Remove from history")}</button>}
+        {job.result?.gcode && onOpenResult && <button className="btn btn-primary px-3 py-1.5 text-xs" type="button" onClick={() => onOpenResult(job.result!.gcode.id)}>{resultLabel || t("Open result")}</button>}
+      </div>
+      {job.result?.gcode && <p className="mt-2 text-xs text-surface-400">{t("Imported G-code:")}{' '}{job.result.gcode.display_name || job.result.gcode.id}</p>}
     </li>)}</ul>
   </section>
 }

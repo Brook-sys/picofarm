@@ -1,6 +1,6 @@
 # Local background slicer jobs
 
-Implementation: `internal/service/slicer_jobs.go`, `internal/api/slicer_jobs_handler.go`, and `web/src/components/SlicerJobsPanel.tsx`. Lifecycle/router wiring is in server startup and the authenticated slicer route group; the component takes an injected authenticated transport rather than maintaining credentials.
+Implementation: `internal/service/slicer_jobs.go`, `internal/api/slicer_jobs_handler.go`, `web/src/components/SliceSTLModal.tsx`, and `web/src/components/SlicerJobsPanel.tsx`. The slicing modal is shared by the Files library and other explicit STL-to-G-code workflows. Lifecycle/router wiring is in server startup and the authenticated slicer route group; the jobs component takes an injected authenticated transport rather than maintaining credentials.
 
 ## Contract
 
@@ -35,7 +35,7 @@ Register all five routes under the normal authenticated `/api/slicer` group, wit
 
 Treat `slicer_jobs_v1` as service-owned state: generic settings GET/SET/DELETE return `403` and generic listing excludes it. The worker accesses it through the service layer; direct database modifications remain outside this isolation boundary. Do not put credentials in profile names, display names, or override values. The worker does not store connection URLs or raw upstream error messages.
 
-The Files modal submits a background job with one stable idempotency key per payload, retained in module memory across modal/library remounts for ambiguous network retries. Changing parameters selects a different key; returning to previous parameters reuses their old key. Explicit successful history removal forgets its matching key. Full page reload loses this browser-memory mapping: check the server-side panel before resubmitting after a reload; cross-reload deduplication is not guaranteed by this UI. `SlicerJobsPanel` appears at the top of the Files library and resolves result opening against a freshly fetched library; removed results report an error. Its injected `list/cancel` transport must use the existing shared authenticated client. A button can submit in the background and close the modal after `202`; polling remounts recover server-side state. Do not regenerate keys silently on a retry.
+The shared slicing modal submits a background job with one stable idempotency key per payload, retained in module memory across modal/library remounts for ambiguous network retries. Changing parameters selects a different key; returning to previous parameters reuses their old key. Explicit successful history removal forgets its matching key. Full page reload loses this browser-memory mapping: check the server-side panel before resubmitting after a reload; cross-reload deduplication is not guaranteed by this UI. `SlicerJobsPanel` appears at the top of the Files library and resolves result opening against a freshly fetched library; removed results report an error. Its injected `list/cancel` transport must use the existing shared authenticated client. A button can submit in the background and close the modal after `202`; polling remounts recover server-side state. Do not regenerate keys silently on a retry.
 
 ## Regression coverage
 

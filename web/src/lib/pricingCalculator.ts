@@ -82,6 +82,36 @@ export function pricingCount(raw: string): number {
   if (!/^[0-9]{1,7}$/.test(raw) || BigInt(raw) < 1n || BigInt(raw) > 1000000n) throw new Error('Enter a whole quantity from 1 to 1000000.')
   return Number(raw)
 }
+
+/** Accept human durations without introducing floating-point API values. */
+export function normalizePricingDuration(raw: string, required = false): string {
+  const value = raw.trim()
+  if (!value.includes(':')) return normalizePricingDecimal(value, required)
+  const match = /^(\d{1,7}):([0-5]?\d)(?::([0-5]?\d))?$/.exec(value)
+  if (!match) throw new Error('Enter a duration as decimal hours or hh:mm:ss.')
+  const seconds = BigInt(match[1]) * 3600n + BigInt(match[2]) * 60n + BigInt(match[3] || '0')
+  const scaled = (seconds * 1000000000n + 1800n) / 3600n
+  if (scaled > 1000000000000000000n) throw new Error('The maximum value is 1000000000.')
+  return `${scaled / 1000000000n}.${String(scaled % 1000000000n).padStart(9, '0')}`
+}
+
+export function catalogSecondsToDuration(seconds: number): string {
+  if (!Number.isSafeInteger(seconds) || seconds < 0) return ''
+  const hours = Math.floor(seconds / 3600)
+  const minutes = Math.floor((seconds % 3600) / 60)
+  const remainder = seconds % 60
+  return `${hours}:${String(minutes).padStart(2, '0')}${remainder ? `:${String(remainder).padStart(2, '0')}` : ''}`
+}
+
+/** Locale-aware display for exact non-monetary decimal strings. */
+export function formatPricingDecimal(value: string, locale: string): string {
+  if (!/^-?\d+(\.\d+)?$/.test(value)) return value
+  const negative = value.startsWith('-')
+  const [whole, fraction] = value.replace(/^-/, '').split('.')
+  const formatter = new Intl.NumberFormat(locale, { useGrouping: true, maximumFractionDigits: 0 })
+  const separator = new Intl.NumberFormat(locale).formatToParts(1.1).find(part => part.type === 'decimal')?.value ?? '.'
+  return `${negative ? '−' : ''}${formatter.format(BigInt(whole))}${fraction === undefined ? '' : separator + fraction}`
+}
 /** Exact unit conversion of an existing numeric catalog value, not pricing math. */
 export function catalogCentsToDecimal(cents: number): string {
   if (!Number.isSafeInteger(cents) || cents < 0) return ''

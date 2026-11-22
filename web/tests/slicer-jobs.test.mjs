@@ -26,12 +26,14 @@ test('ambiguous submission retries retain key; changes do not destroy previous d
 
 test('UI keeps preview/comparison and uses background submission with stable transport', () => {
   const page = readFileSync(new URL('../src/pages/GCodeFiles.tsx', import.meta.url), 'utf8')
-  assert.match(page, /slicerApi\.submitJob\(payload, slicerSubmissionKey\(payload\)\)/)
-  assert.doesNotMatch(page, /await slicerApi\.sliceSTL/)
+  const modal = readFileSync(new URL('../src/components/SliceSTLModal.tsx', import.meta.url), 'utf8')
+  assert.match(modal, /slicerApi\.submitJob\(payload, slicerSubmissionKey\(payload\)\)/)
+  assert.doesNotMatch(modal, /await slicerApi\.sliceSTL/)
+  assert.match(page, /<SliceSTLModal/)
   assert.match(page, /<SlicerJobsPanel api=\{slicerJobsTransport\}/)
-  assert.match(page, /slicerApi\.preview\(/)
+  assert.match(modal, /slicerApi\.preview\(/)
   assert.match(page, /<GCodeVariantComparison/)
-  assert.match(page, /previewIsStale/)
+  assert.match(modal, /previewIsStale/)
   const panel = readFileSync(new URL('../src/components/SlicerJobsPanel.tsx', import.meta.url), 'utf8')
   assert.match(panel, /window\.confirm/)
   assert.match(panel, /await api\.delete\(job\.id\)/)

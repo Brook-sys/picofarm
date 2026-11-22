@@ -24,6 +24,8 @@ Treat remote exposure as a separate hardening project. Do not assume that a LAN 
 
 Calculator inputs may disclose internal prices, margins and production assumptions. Keep them under the existing API authorization boundary; do not add them to request logs, public quote projections or automatic browser draft storage. Calculation is stateless and must not trigger printer actions, stock movements or quote/order creation. Limit body size, decimal precision and line counts before arithmetic. Currency confirmation for legacy records prevents accidental denomination assumptions; it is not exchange-rate conversion or a certification of financial correctness. See [calculator scope and gates](PRICING_CALCULATOR.md).
 
+The calculator's visual model picker is read-only until an explicit slicer preview/submission action. Reusing the shared slicing modal does not weaken slicer authorization: submission can send stored STL data to the configured slicer and import a library G-code under the existing sensitive-endpoint policy. Merely choosing a model/G-code or calculating must never submit a slicing job or dispatch printing. Do not confuse stopping browser polling with cancellation of accepted server work.
+
 ## Secrets and credentials
 
 Never commit or print real credentials. Examples include:

@@ -31,7 +31,9 @@ const stamp = '2026-01-01T00:00:00Z';
 const printers = [{ id: 'legacy', name: 'Legacy fixture', cost_per_hour_cents: 250, status: 'offline', created_at: stamp, updated_at: stamp }];
 printers.push({ ...printers[0], id: 'configured', name: 'Configured fixture', pricing_config: { currency: 'BRL', rate_mode: 'direct', direct_rate_per_hour: '7.50', purchase_price: '1000', residual_value: '100', productive_lifetime_hours: '300', maintenance_per_hour: '0.50', average_power_watts: '200', energy_tariff: '0.30', includes_energy: true, includes_maintenance: true } });
 const materials = [{ id: 'pla', name: 'PLA fixture', type: 'filament', material_type: 'PLA', cost_per_kg: 10, color: '#ffffff' }];
-const gcode = { id: 'plate', file_id: 'plate-file', display_name: 'Two-piece fixture', file_name: 'fixture.gcode', filament_grams: 100, estimated_seconds: 3600, created_at: stamp, updated_at: stamp };
+const gcode = { id: 'plate', file_id: 'plate-file', display_name: 'Two-piece fixture', file_name: 'fixture.gcode', filament_grams: 100, estimated_seconds: 3600, parent_stl_id: 'model', default_for_stl: true, thumbnail_file_id: 'gcode-thumbnail', created_at: stamp, updated_at: stamp };
+const stl = { id: 'model', file_id: 'model-file', display_name: 'Fixture model', file_name: 'fixture.stl', size_bytes: 1024, thumbnail_file_id: 'stl-thumbnail', gcodes: [gcode], created_at: stamp, updated_at: stamp };
+const pixel = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=', 'base64');
 const report = { passed: [], calls: [], unexpected: [], errors: [], externalBlocked: [], viewports: [] };
 let browser;
 (async () => {
@@ -54,6 +56,9 @@ let browser;
     page.on('pageerror', error => report.errors.push(`${language}: ${error.message}`));
     page.on('dialog', dialog => dialog.accept());
     let hold = null;
+    let sliced = false;
+    const slicedGcode = { ...gcode, id: 'new-plate', file_id: 'new-plate-file', display_name: 'New sliced fixture', filament_grams: 80, estimated_seconds: 1800 };
+    const slicingJob = () => ({ id: 'job-1', status: sliced ? 'succeeded' : 'queued', request: { stl_file_id: stl.id, display_name: slicedGcode.display_name }, result: sliced ? { gcode: { id: slicedGcode.id, display_name: slicedGcode.display_name } } : undefined, idempotency_key: 'fixture-key', created_at: stamp, updated_at: stamp });
     await context.route('**/*', async route => {
       const request = route.request(), url = new URL(request.url()), p = url.pathname, method = request.method();
       if (url.origin !== base) { report.externalBlocked.push(`${method} ${url.origin}${p}`); return route.abort(); }
@@ -80,10 +85,25 @@ let browser;
         }
         return;
       }
+      if (method === 'POST' && p === '/api/slicer/jobs') {
+        const body = request.postDataJSON();
+        assert.equal(body.stl_file_id, stl.id);
+        sliced = true;
+        report.slicingCalls = (report.slicingCalls || 0) + 1;
+        return route.fulfill({ status: 202, json: { ...slicingJob(), status: 'queued', result: undefined } });
+      }
       if (method !== 'GET') { report.unexpected.push(`${method} ${p}`); return route.abort(); }
       if (p === '/api/printers') return route.fulfill({ json: printers });
       if (p === '/api/materials') return route.fulfill({ json: materials });
+      if (p === '/api/file-library') return route.fulfill({ json: { stl_files: [{ ...stl, gcodes: sliced ? [gcode, slicedGcode] : [gcode] }], root_gcode_files: [] } });
+      if (p === '/api/slicer/jobs') return route.fulfill({ json: sliced ? [slicingJob()] : [] });
+      if (p === '/api/slicer/config') return route.fulfill({ json: { connection_url: '', default_profiles: { printers: 'Printer fixture', presets: 'Process fixture', filaments: 'Filament fixture' } } });
+      if (p === '/api/slicer/profiles/printers') return route.fulfill({ json: [{ name: 'Printer fixture', default: true }] });
+      if (p === '/api/slicer/profiles/presets') return route.fulfill({ json: [{ name: 'Process fixture', default: true }] });
+      if (p === '/api/slicer/profiles/filaments') return route.fulfill({ json: [{ name: 'Filament fixture', default: true }] });
       if (p === '/api/gcode-library') return route.fulfill({ json: { items: [gcode], total: 1, page: 1, page_size: 25 } });
+      if (p === '/api/stl-library') return route.fulfill({ json: { items: [{ ...stl, gcodes: undefined }], total: 1, page: 1, page_size: 25 } });
+      if (p === '/api/files/stl-thumbnail' || p === '/api/files/gcode-thumbnail') return route.fulfill({ contentType: 'image/png', body: pixel });
       if (p.startsWith('/api/settings/')) return route.fulfill({ json: { value: p.endsWith('/currency_code') ? 'BRL' : '' } });
       // Layout reads are deliberately inert, never forwarded to backend/hardware.
       return route.fulfill({ json: [] });
@@ -93,6 +113,12 @@ let browser;
       ? page.getByLabel(new RegExp(`^${t(key).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`))
       : page.getByLabel(t(key), { exact: true });
     const fill = (key, value) => label(key).fill(value);
+    const target = async (key, value) => {
+      await button(key === 'Goods price target' ? 'Price' : key === 'Gain target' ? 'Gain' : 'Margin').click();
+      assert.equal(await page.locator('#pricing-price, #pricing-gain, #pricing-margin').count(), 1, 'Exactly one target input');
+      await fill(key, value);
+    };
+    const confirmCatalog = () => page.locator('label').filter({ hasText: t('I confirm loaded amounts use {{currency}}. Legacy currency is unknown; no conversion.').replace('{{currency}}', 'BRL') }).getByRole('checkbox').check();
     const button = key => page.getByRole('button', { name: t(key), exact: true });
     const summary = key => page.locator('summary').filter({ hasText: t(key) }).click();
     const check = async (name, action) => { await action(); report.passed.push(`${language}: ${name}`); console.log(`PASS ${language}: ${name}`); };
@@ -116,51 +142,68 @@ let browser;
     try {
       await page.goto(`${base}/pricing`);
       await page.getByRole('heading', { name: t('Pricing calculator'), exact: true }).waitFor();
-      await page.waitForFunction(name => [...document.querySelectorAll('select')].find(select => select.getAttribute('aria-label') === name)?.value === 'BRL', t('Currency'));
+      await page.waitForFunction(() => document.querySelector('#pricing-currency')?.value === 'BRL');
       assert.equal(await label('Currency').inputValue(), 'BRL');
-      await label('Full mode').check();
-      for (const [key, value] of Object.entries({ 'Requested units': '3', 'Grams per unit': '100', 'Hours per unit': '1', 'Material cost per kg': '10', 'Machine rate per hour': '0', 'Labor minutes per requested unit': '0', 'Labor rate per hour': '0', 'Fixed order reserve': '0', 'Shipping cost': '5', 'Shipping charged': '4' })) await fill(key, value);
+      await check('missing machine and material costs are prominent before calculation', async () => {
+        for (const key of ['Machine hourly rate is missing.', 'Material rate is missing.']) assert.ok(await page.getByText(t(key), { exact: true }).isVisible());
+      });
+      await button('Full mode').click();
+      for (const [key, value] of Object.entries({ 'Requested units': '3', 'Grams per unit': '100', 'Duration per unit': '1:00', 'Material cost per kg': '10', 'Machine rate per hour': '0', 'Labor minutes per requested unit': '0', 'Labor rate per hour': '0', 'Fixed order reserve': '0', 'Shipping cost': '5', 'Shipping charged': '4' })) await fill(key, value);
+      await check('unit/plate reinterpretation requires explicit keep or clear', async () => {
+        await label('Production model').selectOption('batches');
+        const count = report.calls.length;
+        await button('Calculate estimate').click(); await page.getByRole('alert').waitFor();
+        assert.equal(report.calls.length, count);
+        await button('Keep and reinterpret values').click();
+        assert.equal(await label('Grams per full plate').inputValue(), '100');
+        assert.equal(await label('Duration per full plate').inputValue(), '1:00');
+        await label('Production model').selectOption('proportional');
+        await button('Clear mass and time').click();
+        assert.equal(await label('Grams per unit').inputValue(), '');
+        assert.equal(await label('Duration per unit').inputValue(), '');
+        await fill('Grams per unit', '100'); await fill('Duration per unit', '1:00');
+      });
       await label('Hourly rate already includes energy').check();
       await label('Hourly rate already includes maintenance').check();
-      await summary('Sales fees');
       await button('Add fee').click();
       await fill('Fee percent', '10'); await fill('Fixed fee', '1');
       await label('Fee base').selectOption('total'); await label('Fixed fee occurrence').selectOption('unit');
       await check('exact totals, shipping fee base and all three last-edited anchors', async () => {
         for (const [key, value, anchor] of [['Goods price target', '20', 'price'], ['Gain target', '10,6', 'gain'], ['Margin target percent', '53', 'margin']]) {
           // Active-anchor text is nested inside its label; use prefix matching.
-          await page.getByLabel(new RegExp(`^${t(key)}`)).fill(value);
+          await target(key, value);
           const last = await calculate();
           assert.equal(last.body.target.anchor, anchor);
           assert.equal(last.result.base.price, '20.00'); assert.equal(last.result.base.gain, '10.60');
           assert.equal(last.result.base.fees, '5.40'); assert.equal(last.result.minimum_sale_price, '8.23');
           await amount(scenario('Base scenario'), 'Goods total', '20.00');
-          await amount(scenario('Base scenario'), 'Estimated gain', '10.60');
+          await amount(scenario('Base scenario'), 'Estimated order gain', '10.60');
         }
       });
       await check('signed gain target is accepted without making costs negative', async () => {
-        await page.getByLabel(new RegExp(`^${t('Gain target')}`)).fill('-1');
+        await target('Gain target', '-1');
         const last = await calculate();
         assert.equal(last.body.target.anchor, 'gain'); assert.equal(last.body.target.value, '-1');
         assert.equal(last.result.base.price, '7.11'); assert.equal(last.result.base.gain, '-1.00');
-        await amount(scenario('Base scenario'), 'Estimated gain', '-1.00');
-        await page.getByLabel(new RegExp(`^${t('Margin target percent')}`)).fill('53');
+        await amount(scenario('Base scenario'), 'Estimated order gain', '-1.00');
+        await target('Margin target percent', '53');
         await calculate();
       });
       await check('quick/full retains hidden costs and fees', async () => {
-        await label('Full mode').uncheck();
+        await button('Quick mode').click();
         const last = await calculate();
         assert.equal(last.body.shipping.cost, '5'); assert.equal(last.body.fees.length, 1);
         assert.equal(last.result.base.gain, '10.60');
-        await label('Full mode').check(); assert.equal(await label('Shipping cost').inputValue(), '5');
+        await button('Full mode').click(); assert.equal(await label('Shipping cost').inputValue(), '5');
       });
       await check('active anchor retains original precision across recalculations', async () => {
-        const anchor = page.getByLabel(new RegExp(`^${t('Goods price target')}`));
+        await button('Price').click();
+        const anchor = label('Goods price target');
         await anchor.fill('20.004'); await calculate();
         assert.equal(await anchor.inputValue(), '20.004');
         const last = await calculate(); assert.equal(last.body.target.value, '20.004');
         assert.equal(last.result.base.price, '20.00');
-        await page.getByLabel(new RegExp(`^${t('Margin target percent')}`)).fill('53'); await calculate();
+        await target('Margin target percent', '53'); await calculate();
       });
       await check('configured printer currency cannot silently change after loading', async () => {
         await label('Load printer rates').selectOption('configured');
@@ -170,6 +213,10 @@ let browser;
         await button('Calculate estimate').click(); await page.getByRole('alert').waitFor();
         assert.equal(report.calls.length, count, 'Mismatched configured currency must not reach backend');
         await label('Currency').selectOption('BRL');
+        const pendingCount = report.calls.length;
+        await button('Calculate estimate').click(); await page.getByRole('alert').waitFor();
+        assert.equal(report.calls.length, pendingCount, 'Currency change needs explicit confirmation');
+        await button('Confirm this currency').click();
       });
       await check('configured to legacy clears ancillary fields and included-cost flags', async () => {
         await label('Load printer rates').selectOption('legacy');
@@ -182,10 +229,10 @@ let browser;
         await label('Hourly rate already includes maintenance').check();
       });
       await check('conditional discount makes a visible loss', async () => {
-        await summary('Conditional discount, for example Pix'); await fill('Conditional discount percent', '90');
+        await fill('Conditional discount percent', '90');
         const last = await calculate();
         assert.equal(last.result.discounted.price, '2.00'); assert.equal(last.result.discounted.gain, '-5.60');
-        await amount(scenario('Conditional discount scenario'), 'Estimated gain', '-5.60');
+        await amount(scenario('Conditional discount scenario'), 'Estimated order gain', '-5.60');
       });
       await check('legacy source requires currency acknowledgment and remains editable', async () => {
         const count = report.calls.length;
@@ -195,20 +242,57 @@ let browser;
         assert.equal(report.calls.length, count, 'Unconfirmed legacy currency must not calculate');
         await page.locator('label').filter({ hasText: t('I confirm loaded amounts use {{currency}}. Legacy currency is unknown; no conversion.').replace('{{currency}}', 'BRL') }).getByRole('checkbox').check();
         await fill('Machine rate per hour', '0');
+        await label('Load material rate').selectOption('pla');
+        await confirmCatalog();
         await calculate();
+        for (const mode of ['Quick mode', 'Full mode']) {
+          await button(mode).click(); await calculate();
+          assert.equal(await label('Load printer rates').inputValue(), 'legacy');
+          assert.equal(await label('Load material rate').inputValue(), 'pla');
+        }
       });
       await check('G-code copy count guard, conservative plate remainder and manual edits', async () => {
-        await summary('Load G-code estimates'); await label('Choose G-code').selectOption('plate');
+        await button('From an STL or G-code').click();
+        const model = page.getByRole('button').filter({ hasText: 'Fixture model' });
+        await model.waitFor(); assert.equal(await model.locator('img').count(), 1);
+        await model.click();
+        const card = page.getByRole('button').filter({ hasText: 'Two-piece fixture' });
+        assert.equal(await card.locator('img').count(), 1); await card.click();
         assert.equal(await label('Grams per full plate').inputValue(), '100');
-        assert.equal(Number(await label('Hours per full plate').inputValue()), 1);
+        assert.equal(await label('Duration per full plate').inputValue(), '1:00');
         const count = report.calls.length;
         await button('Calculate estimate').click(); await page.getByRole('alert').waitFor();
         assert.equal(report.calls.length, count);
         await fill('Units per full plate', '2'); await fill('Requested units', '5');
-        await label('I verified the mass, time and units per plate, or changed them to per-unit values.').check();
         await fill('Grams per full plate', '200');
+        await label('I verified the mass, time and units per plate, or changed them to per-unit values.').check();
         const last = await calculate(); assert.equal(last.result.effective_plates, '3'); assert.equal(last.result.total_grams, '600.000000');
         assert.ok(last.result.warnings.includes('full_batch_remainder'));
+      });
+      await check('slicing opens without submitting; explicit mocked job result loads estimates', async () => {
+        const library = JSON.parse(fs.readFileSync(path.resolve(__dirname, `../src/i18n/locales/${language}/library.json`), 'utf8'));
+        const before = report.slicingCalls || 0;
+        const calculationsBefore = report.calls.length;
+        await button('Slice a new G-code').click();
+        const dialog = page.getByRole('dialog'); await dialog.waitFor();
+        assert.equal(report.slicingCalls || 0, before, 'Opening slicer must not submit');
+        await dialog.getByRole('button', { name: library.Close, exact: true }).click();
+        await dialog.waitFor({ state: 'hidden' });
+        // Let a mistakenly submitted parent form reach the routed request handler.
+        await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+        assert.equal(report.calls.length, calculationsBefore, 'Closing the read-only slicer must not calculate');
+        assert.equal(report.slicingCalls || 0, before, 'Closing the slicer must not submit a job');
+        await button('Slice a new G-code').click(); await dialog.waitFor();
+        await dialog.getByRole('button', { name: library['Generate in background'], exact: true }).click();
+        await dialog.waitFor({ state: 'hidden' });
+        assert.equal(report.slicingCalls, before + 1);
+        await button('Use in estimate').click();
+        assert.equal(await label('Grams per full plate').inputValue(), '80');
+        assert.equal(await label('Duration per full plate').inputValue(), '0:30');
+        assert.equal(await label('Units per full plate').inputValue(), '', 'Job copy count is never assumed');
+        await fill('Units per full plate', '2');
+        await label('I verified the mass, time and units per plate, or changed them to per-unit values.').check();
+        assert.equal((await calculate()).body.production.hours, '0.500000000');
       });
       await check('editing invalidates a response already in flight', async () => {
         let started, release;
@@ -233,15 +317,29 @@ let browser;
             await page.waitForFunction(() => document.querySelector('main')?.getBoundingClientRect().width >= 320 && document.querySelector('aside')?.getBoundingClientRect().width <= 64.1, null, { timeout: 10000 });
             assert.ok(await page.locator('main').evaluate(el => el.getBoundingClientRect().width >= 320), 'Mobile calculator content must have at least 320px after collapsing navigation');
           }
+          const duplicateIds = await page.locator('main [id]').evaluateAll(elements => {
+            const seen = new Set();
+            return elements.map(element => element.id).filter(id => seen.has(id) || !seen.add(id));
+          });
+          assert.deepEqual(duplicateIds, [], 'All IDs in main must be unique');
           const dimensions = await page.locator('main').evaluate(el => ({ mainWidth: el.getBoundingClientRect().width, calculatorWidth: el.querySelector('h1')?.closest('header')?.parentElement?.getBoundingClientRect().width }));
           report.viewports.push({ language, viewportWidth: width, ...dimensions });
           console.log(`LAYOUT ${language} ${width}px: main=${dimensions.mainWidth}px calculator=${dimensions.calculatorWidth}px`);
           assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), true, `Horizontal overflow at ${width}px`);
+          const clippedLabels = await page.locator('main label, main summary, main button').evaluateAll(elements => elements.filter(element => {
+            if (!element.getClientRects().length) return false;
+            const style = getComputedStyle(element);
+            return style.textOverflow === 'ellipsis' || (element.clientWidth > 0 && element.scrollWidth > element.clientWidth + 1 && ['hidden', 'clip'].includes(style.overflowX));
+          }).map(element => element.textContent.trim()));
+          assert.deepEqual(clippedLabels, [], `Labels must remain complete at ${width}px`);
+          assert.equal(await label('Load printer rates').inputValue(), 'legacy');
+          assert.equal(await label('Load material rate').inputValue(), 'pla');
           await page.screenshot({ path: path.join(artifacts, `${language}-${width}.png`), fullPage: true });
         }
         // Reveal translated warnings/breakdown too; collapsed details hide raw keys.
-        await summary('Cost breakdown and assumptions');
-        const warnings = page.locator('summary').filter({ hasText: t('Missing costs and estimate warnings') });
+        const breakdown = page.locator('summary').filter({ hasText: t('Cost breakdown and assumptions') });
+        if (await breakdown.count()) await breakdown.click();
+        const warnings = page.locator('summary').filter({ hasText: t('Estimate assumptions and warnings') });
         if (await warnings.count()) {
           // The page reserves bottom clearance for the floating feedback action.
           await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
