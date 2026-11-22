@@ -25,7 +25,9 @@ export default function PricingCalculator() {
   const currency = currencyOverride ?? currencyCode
   const [draft, setDraft] = useState<Draft>(initial)
   const [full, setFull] = useState(false)
-  const [sourceMode, setSourceMode] = useState<'manual' | 'library'>('manual')
+  const [sourceMode, setSourceMode] = useState<'manual' | 'library'>('library')
+  const [pickerOpen, setPickerOpen] = useState(true)
+  const [piecePricing, setPiecePricing] = useState(false)
   const [production, setProduction] = useState<'proportional' | 'batches'>('proportional')
   const [pendingBasis, setPendingBasis] = useState<typeof production | null>(null)
   const [machineMode, setMachineMode] = useState<'direct' | 'derived'>('direct')
@@ -50,6 +52,7 @@ export default function PricingCalculator() {
   const [gcode, setGcode] = useState<GCodeLibraryFile | null>(null)
   const [gcodeConfirmed, setGcodeConfirmed] = useState(false)
   const [costsOpen, setCostsOpen] = useState(false)
+  const scopeDrafts = useRef<Partial<Record<'file' | 'unit', { quantity: string; units: string; grams: string; hours: string; production: 'proportional' | 'batches' }>>>({})
   const generation = useRef(0)
   const rowId = useRef(0)
   const controller = useRef<AbortController | null>(null)
@@ -63,7 +66,17 @@ export default function PricingCalculator() {
   const money = (value: string, code: string) => formatPricingMoney(value, code, i18n.language)
   const needsCatalogConfirmation = legacyPrinter || !!materialId
   const currencyMismatch = !pricingCurrencyMatches(printerCurrency, currency)
-  const activeCosts = [draft.maintenance, draft.watts, draft.tariff, draft.minutes, draft.labor, draft.reserve, draft.shippingCost, draft.shippingCharged].filter(value => value.trim()).length + extras.length + fees.length
+  const activePrinterFields: (keyof Draft)[] = [
+    ...(machineMode === 'direct' ? ['rate'] as const : ['purchase', 'residual', 'lifetime'] as const),
+    ...(machineMode !== 'direct' || !includesMaintenance ? ['maintenance'] as const : []),
+    ...(machineMode !== 'direct' || !includesEnergy ? ['watts', 'tariff'] as const : []),
+  ]
+  const printerCosts = activePrinterFields.filter(key => draft[key].trim()).length
+  const otherCosts = [draft.minutes, draft.labor, draft.reserve, draft.shippingCost, draft.shippingCharged].filter(value => value.trim()).length + extras.length + fees.length
+  const hourlyCosts = machineMode === 'derived' || activePrinterFields.some(key => /[1-9]/.test(draft[key]))
+  const essentialsMissing = !draft.grams.trim() || !draft.material.trim() || (hourlyCosts && !draft.hours.trim())
+  const pieceCountsMissing = piecePricing && (!draft.quantity.trim() || (production === 'batches' && !draft.units.trim()))
+  const ready = !essentialsMissing && !pieceCountsMissing && (!piecePricing || !gcode || gcodeConfirmed) && !pendingBasis && !currencyPending && !currencyMismatch && (!needsCatalogConfirmation || catalogConfirmed)
 
   function invalidate() {
     generation.current++
@@ -139,8 +152,23 @@ export default function PricingCalculator() {
     if (material) setDraft(previous => ({ ...previous, material: String(material.cost_per_kg) }))
   }
   function loadGCode(file: GCodeLibraryFile) {
-    invalidate(); setGcode(file); setGcodeConfirmed(false); setProduction('batches'); setPendingBasis(null)
-    setDraft(previous => ({ ...previous, units: '', grams: file.filament_grams == null ? '' : String(file.filament_grams), hours: file.estimated_seconds == null ? '' : catalogSecondsToDuration(file.estimated_seconds) }))
+    if (piecePricing && !window.confirm(t('Load this whole-file estimate? Your requested quantity is kept, but units per plate must be entered and verified again.'))) return
+    invalidate(); setGcode(file); setGcodeConfirmed(false); setProduction('batches'); setPendingBasis(null); setPickerOpen(false)
+    // A different source invalidates saved mass/time bases, not optional costs.
+    scopeDrafts.current = {}
+    setDraft(previous => ({ ...previous, quantity: piecePricing ? previous.quantity : '1', units: piecePricing ? '' : '1', grams: file.filament_grams == null ? '' : String(file.filament_grams), hours: file.estimated_seconds == null ? '' : catalogSecondsToDuration(file.estimated_seconds) }))
+    focusControl('pricing-material')
+  }
+  function changeScope(pieces: boolean) {
+    const scopedCosts = !!draft.minutes.trim() || extras.some(row => row.scope === 'unit' && row.amount.trim()) || fees.some(row => row.scope === 'unit' && (row.fixed.trim() || row.percent.trim()))
+    if (scopedCosts) {
+      if (!window.confirm(t(pieces ? 'Labor minutes, per-unit extras and per-unit fixed fees will now apply to EACH requested piece, not the whole print. Their values are kept and may multiply your costs. Continue and review them?' : 'Labor minutes, per-unit extras and per-unit fixed fees will now apply ONCE to the whole print, not each physical piece. Their values are kept. Continue and review them?'))) return
+    } else if (!pieces && !window.confirm(t('Price one whole print run instead? Mass and time must describe the entire run. Other costs are kept.'))) return
+    scopeDrafts.current[piecePricing ? 'unit' : 'file'] = { quantity: draft.quantity, units: draft.units, grams: draft.grams, hours: draft.hours, production }
+    const saved = scopeDrafts.current[pieces ? 'unit' : 'file']
+    invalidate(); setPiecePricing(pieces); setPendingBasis(null); setGcodeConfirmed(false)
+    setProduction(saved?.production ?? 'batches')
+    setDraft(previous => ({ ...previous, quantity: saved?.quantity ?? (pieces ? '' : '1'), units: saved?.units ?? (pieces ? '' : '1'), grams: saved?.grams ?? previous.grams, hours: saved?.hours ?? previous.hours }))
   }
   function chooseBasis(value: typeof production) {
     if (value === production) return
@@ -183,12 +211,12 @@ export default function PricingCalculator() {
       if (currencyMismatch) throw new Error('Printer currency differs. Choose its currency before loading; no conversion is performed.')
       if (currencyPending) throw new Error('Confirm the new currency. Existing amounts are not converted.')
       if (needsCatalogConfirmation && !catalogConfirmed) throw new Error('Confirm catalog amounts are in the selected currency. No conversion is performed.')
-      if (gcode && !gcodeConfirmed) throw new Error('Confirm what the G-code quantities represent before calculating.')
+      if (piecePricing && gcode && !gcodeConfirmed) throw new Error('Confirm what the G-code quantities represent before calculating.')
       const direct = machineMode === 'direct'
       const request: PricingRequest = {
-        currency, quantity: count('quantity'),
-        production: { mode: production, ...(production === 'batches' ? { units_per_batch: count('units') } : {}), grams: d('grams'), hours: d('hours') },
-        material_cost_per_kg: d('material'),
+        currency, quantity: piecePricing ? count('quantity') : 1,
+        production: { mode: piecePricing ? production : 'batches', ...(!piecePricing || production === 'batches' ? { units_per_batch: piecePricing ? count('units') : 1 } : {}), grams: d('grams', true), hours: d('hours', hourlyCosts) },
+        material_cost_per_kg: d('material', true),
         machine: { mode: machineMode, ...(direct ? { hourly_rate: d('rate'), includes_energy: includesEnergy, includes_maintenance: includesMaintenance } : { acquisition: d('purchase', true), residual: d('residual', true), lifetime_hours: d('lifetime', true) }), ...(!direct || !includesMaintenance ? { maintenance_hourly: d('maintenance') } : {}) },
         ...(!direct || !includesEnergy ? { energy: { power_watts: d('watts'), tariff_per_kwh: d('tariff') } } : {}),
         labor: { minutes: d('minutes'), hourly_rate: d('labor') }, reserve: d('reserve'), shipping: { cost: d('shippingCost'), charged: d('shippingCharged') },
@@ -220,7 +248,7 @@ export default function PricingCalculator() {
         <div>
           <div className="mb-1 flex items-center gap-2 text-xs font-medium uppercase tracking-widest text-accent-400"><Calculator className="h-4 w-4" />{t('Estimate before you produce')}</div>
           <h1 className="text-2xl font-semibold tracking-tight">{t('Pricing calculator')}</h1>
-          <p className="mt-1 max-w-xl text-sm text-surface-400">{t('Choose how to estimate production, review your costs and set your selling target.')}</p>
+          <p className="mt-1 max-w-xl text-sm text-surface-400">{t('Choose a G-code and enter your filament price. Add other costs only when you need them.')}</p>
         </div>
         <div className="grid w-full gap-3 sm:w-auto sm:grid-cols-[minmax(180px,1fr)_110px]">
           <PricingSegments label={t('Calculator mode')} value={full ? 'full' : 'quick'} options={[{ value: 'quick', label: t('Quick mode') }, { value: 'full', label: t('Full mode') }]} onChange={value => setFull(value === 'full')} compact />
@@ -229,45 +257,92 @@ export default function PricingCalculator() {
       </header>
       {currencyPending && <PricingNotice tone="amber"><p>{t('Existing amounts will be interpreted in {{currency}}. No conversion is performed.', { currency })}</p><button type="button" className="btn btn-secondary mt-2 min-h-11" onClick={() => { invalidate(); setCurrencyPending(false) }}>{t('Confirm this currency')}</button></PricingNotice>}
       <form onSubmit={event => { event.preventDefault(); void calculate() }} noValidate className="grid min-w-0 items-start gap-5 xl:grid-cols-[minmax(0,1fr)_370px]">
-        <div className="min-w-0 space-y-5">
+        <div className="min-w-0 space-y-5 xl:col-start-1 xl:row-start-1">
           <CalculatorSection id="production" step="1" title={t('Production')}>
             <div className="space-y-5">
-              <PricingSegments label={t('Production estimate method')} value={sourceMode} options={[{ value: 'manual', label: t('Enter manually'), icon: <Pencil className="h-4 w-4 shrink-0" /> }, { value: 'library', label: t('From an STL or G-code'), icon: <FileCode className="h-4 w-4 shrink-0" /> }]} onChange={value => { setSourceMode(value); if (value === 'manual') { invalidate(); setGcode(null); setGcodeConfirmed(false) } }} />
-              {sourceMode === 'library' && <PricingModelPicker selectedGCodeId={gcode?.id} onSelectGCode={loadGCode} />}
-              {gcode && <PricingNotice tone="neutral"><p className="font-medium break-words">{t('G-code source: {{name}}. Copy count is unknown.', { name: gcode.display_name || gcode.file_name })}</p><label className={checkboxClass}><input type="checkbox" checked={gcodeConfirmed} onChange={event => { invalidate(); setGcodeConfirmed(event.target.checked) }} />{t('I verified the mass, time and units per plate, or changed them to per-unit values.')}</label></PricingNotice>}
-              <div className="grid gap-4 sm:grid-cols-2">
-                {field('quantity', 'Requested units')}
-                <PricingSelect id="pricing-basis" label={t('Production model')} value={production} options={[{ value: 'proportional', label: t('Proportional per unit') }, { value: 'batches', label: t('Full plate batches') }]} onChange={event => chooseBasis(event.target.value as typeof production)} />
-              </div>
-              {pendingBasis && <PricingNotice tone="amber" role="status"><p>{t('Changing the basis changes what mass and time mean. Keep the numbers only if they already describe the new basis.')}</p><div className="mt-2 flex flex-wrap gap-2"><button type="button" className="btn btn-primary min-h-11" onClick={() => applyBasis(false)}>{t('Clear mass and time')}</button><button type="button" className="btn btn-secondary min-h-11" onClick={() => applyBasis(true)}>{t('Keep and reinterpret values')}</button><button type="button" className="btn btn-ghost min-h-11" onClick={() => setPendingBasis(null)}>{t('Cancel change')}</button></div></PricingNotice>}
-              <div className="grid gap-4 sm:grid-cols-2">
+              {(!gcode || pickerOpen) && <>
+                <PricingSegments label={t('Production estimate method')} value={sourceMode} options={[{ value: 'library', label: t('From an STL or G-code'), icon: <FileCode className="h-4 w-4 shrink-0" /> }, { value: 'manual', label: t('Enter manually'), icon: <Pencil className="h-4 w-4 shrink-0" /> }]} onChange={value => { setSourceMode(value); if (value === 'manual' && gcode) { invalidate(); setGcode(null); setGcodeConfirmed(false); setPickerOpen(true) } }} />
+                {sourceMode === 'library' && <PricingModelPicker key={piecePricing ? 'pieces' : 'whole-print'} selectedGCodeId={gcode?.id} onSelectGCode={loadGCode} />}
+                {gcode && <button type="button" className="btn btn-ghost min-h-11" onClick={() => setPickerOpen(false)}>{t('Keep selected file')}</button>}
+              </>}
+              {gcode && <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-surface-700 p-3"><div className="min-w-0"><p className="break-words text-sm font-medium">{gcode.display_name || gcode.file_name}</p><p className="mt-1 text-xs text-surface-400">{t('{{grams}} g · {{duration}}', { grams: draft.grams || '—', duration: draft.hours ? t('{{duration}} h', { duration: draft.hours }) : '—' })}</p></div><button type="button" className="btn btn-secondary min-h-11" onClick={() => { setSourceMode('library'); setPickerOpen(true) }}>{t('Change file')}</button></div>}
+              {gcode && !pickerOpen && <button type="button" className="min-h-11 text-sm text-surface-400 underline" onClick={() => { invalidate(); setGcode(null); setGcodeConfirmed(false); setSourceMode('manual'); setPickerOpen(true); focusControl('pricing-grams') }}>{t('Use manual estimates')}</button>}
+              {!piecePricing && <p className="text-sm text-surface-400">{t(gcode ? 'Estimate for the entire G-code. It may contain several pieces.' : 'Estimate for one whole print run, not one physical piece.')}</p>}
+              {piecePricing && <>
+                <PricingNotice tone="amber">{t('Enter the actual piece counts. File estimates describe the whole plate; do not treat them as per-piece values without adjusting them.')}</PricingNotice>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  {field('quantity', 'Requested units')}
+                  <PricingSelect id="pricing-basis" label={t('Production model')} value={production} options={[{ value: 'proportional', label: t('Proportional per unit') }, { value: 'batches', label: t('Full plate batches') }]} onChange={event => chooseBasis(event.target.value as typeof production)} />
+                </div>
                 {production === 'batches' && field('units', 'Units per full plate')}
-                {field('grams', production === 'batches' ? 'Grams per full plate' : 'Grams per unit', 'g')}
-                {field('hours', production === 'batches' ? 'Duration per full plate' : 'Duration per unit', undefined, 'Use 1:30 for one hour and thirty minutes, or decimal hours such as 1.5.')}
-              </div>
-              {production === 'batches' && fullBatchRemainder(draft.quantity, draft.units) && <PricingNotice tone="amber">{t('Remainder charged as a full plate, including its full mass and time.')}</PricingNotice>}
+                {gcode && <label className={checkboxClass}><input type="checkbox" checked={gcodeConfirmed} onChange={event => { invalidate(); setGcodeConfirmed(event.target.checked) }} />{t('I verified the mass, time and units per plate, or changed them to per-unit values.')}</label>}
+              </>}
+              {pendingBasis && <PricingNotice tone="amber" role="status"><p>{t('Changing the basis changes what mass and time mean. Keep the numbers only if they already describe the new basis.')}</p><div className="mt-2 flex flex-wrap gap-2"><button type="button" className="btn btn-primary min-h-11" onClick={() => applyBasis(false)}>{t('Clear mass and time')}</button><button type="button" className="btn btn-secondary min-h-11" onClick={() => applyBasis(true)}>{t('Keep and reinterpret values')}</button><button type="button" className="btn btn-ghost min-h-11" onClick={() => setPendingBasis(null)}>{t('Cancel change')}</button></div></PricingNotice>}
+              <details open={!gcode || piecePricing || full || !draft.grams.trim() || (hourlyCosts && !draft.hours.trim()) || undefined}>
+                <summary className="cursor-pointer text-sm text-surface-300">{t(gcode ? 'Edit file estimates' : 'Print mass and duration')}</summary>
+                <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                  {field('grams', !piecePricing ? 'Grams for the whole print' : production === 'batches' ? 'Grams per full plate' : 'Grams per unit', 'g')}
+                  {(!gcode || draft.grams.trim() || hourlyCosts || piecePricing) && field('hours', !piecePricing ? 'Duration for the whole print' : production === 'batches' ? 'Duration per full plate' : 'Duration per unit', undefined, hourlyCosts ? 'Duration is required for hourly costs.' : 'Optional until hourly costs are added. Use 1:30 or decimal hours such as 1.5.')}
+                </div>
+              </details>
+              <button type="button" className="min-h-11 text-sm text-accent-400 underline underline-offset-4" onClick={() => changeScope(!piecePricing)}>{t(piecePricing ? 'Price one whole print run instead' : 'Price individual pieces or batches')}</button>
+              {piecePricing && production === 'batches' && fullBatchRemainder(draft.quantity, draft.units) && <PricingNotice tone="amber">{t('Remainder charged as a full plate, including its full mass and time.')}</PricingNotice>}
             </div>
           </CalculatorSection>
 
-          <CalculatorSection id="machine" step="2" title={t('Printer and material')}>
-            <div className="grid gap-5 md:grid-cols-2">
-              <div className="space-y-3">
+          <CalculatorSection id="material" step="2" title={t('Material')}>
+            {field('material', 'Material cost per kg', `${currency}/kg`)}
+            <details className="mt-3" open={full || undefined}>
+              <summary className="cursor-pointer text-sm text-surface-400">{t('Load material rate')}</summary>
+              <div className="mt-3 space-y-3">
+                <PricingSelect id="pricing-material-source" label={t('Load material rate')} value={materialId} options={[{ value: '', label: t('Manual material cost') }, ...(materials.data ?? []).filter(material => material.type !== 'supply').map(material => ({ value: material.id, label: material.name }))]} disabled={materials.isPending} onChange={event => loadMaterial(event.target.value)} />
+                {materials.isError && <p className="text-sm text-surface-400">{t('Materials could not load. Enter the rate manually or retry.')} <button type="button" className="underline" onClick={() => void materials.refetch()}>{t('Try again')}</button></p>}
+                {selectedMaterial && <PricingChip tone={materialEdited ? 'amber' : 'accent'}>{t(materialEdited ? 'Modified for this estimate' : 'Loaded from material')}</PricingChip>}
+              </div>
+            </details>
+            {needsCatalogConfirmation && <label className={`${checkboxClass} mt-3`}><input type="checkbox" checked={catalogConfirmed} onChange={event => { invalidate(); setCatalogConfirmed(event.target.checked) }} />{t('I confirm loaded amounts use {{currency}}. Legacy currency is unknown; no conversion.', { currency })}</label>}
+          </CalculatorSection>
+        </div>
+        <aside className="min-w-0 space-y-5 xl:col-start-2 xl:row-span-2 xl:row-start-1 xl:sticky xl:top-5" aria-label={t('Selling target and estimate')}>
+          <CalculatorSection title={t('Selling target')} icon={<Calculator className="h-5 w-5" />}>
+            <div className="space-y-4">
+              {field(anchor, anchor === 'price' ? 'Goods price target' : anchor === 'gain' ? 'Gain target' : 'Margin target percent', anchor === 'margin' ? '%' : currency)}
+              {anchor === 'margin' && <p className="text-xs text-surface-400">{t('The starting margin is 30%. Change it to your target; it is not markup or net profit.')}</p>}
+              <details open={full || undefined} className="rounded-xl border border-surface-700 p-3">
+                <summary className="cursor-pointer text-sm text-surface-300">{t('Customize selling target')} · {t('{{count}} entered adjustments', { count: [draft.minimum, draft.discount].filter(value => value.trim()).length })}</summary>
+                <div className="mt-4 space-y-4">
+                  <PricingSegments label={t('Active anchor')} value={anchor} options={[{ value: 'margin', label: t('Margin') }, { value: 'price', label: t('Price') }, { value: 'gain', label: t('Gain') }]} onChange={value => { invalidate(); setAnchor(value) }} compact />
+                  <p className="text-xs text-surface-400">{t('Price and gain targets apply to the whole order. Margin is not markup or accounting net profit.')}</p>
+                  {field('minimum', 'Minimum service charge for goods', currency)}{field('discount', 'Conditional discount percent', '%')}
+                  <p className="text-xs text-surface-400">{t('Same costs and fees, lower goods price. This is a scenario, not a guaranteed payment-method saving.')}</p>
+                </div>
+              </details>
+              {error && <div ref={errorRef} tabIndex={-1}><PricingNotice tone="red" role="alert">{t(error)}</PricingNotice></div>}
+              <p role="status" className="text-sm text-surface-400">{t(essentialsMissing ? 'Enter mass and material cost per kg. Add duration if using hourly costs.' : !ready ? 'Complete the piece counts and any pending source or currency confirmations.' : 'Ready to calculate. Optional costs can be added below.')}</p>
+              <button type="submit" disabled={busy || currencyLoading || !ready} className="btn btn-primary min-h-12 w-full gap-2">{busy ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Calculator className="h-4 w-4" />}{busy ? t('Calculating…') : t('Calculate estimate')}</button>
+            </div>
+          </CalculatorSection>
+          {result ? <PricingResults result={result} full={full} basic={!full} scope={piecePricing ? 'unit' : 'file'} money={money} /> : <div role="status" className="rounded-2xl border border-dashed border-surface-700 p-5 text-sm leading-6 text-surface-400">{t('Your estimate will appear here.')}</div>}
+        </aside>
+        <details className="min-w-0 rounded-2xl border border-surface-700 p-4 xl:col-start-1 xl:row-start-2" open={full || undefined}>
+          <summary className="cursor-pointer text-sm font-medium text-surface-300">{t('Refine with optional costs')} · {t('{{count}} entered cost inputs', { count: printerCosts + otherCosts })}</summary>
+          <p className="mt-2 text-xs text-surface-400">{t('Entered costs remain included when collapsed.')}</p>
+          <div className="mt-4 space-y-4">
+          <CalculatorSection id="machine" title={t('Printer and energy')}>
+            <p className="mb-3 text-xs text-surface-400">{t('Entered costs always apply, even when this section is collapsed. Empty is unknown; zero means intentionally free.')}</p>
+            <details open={full || undefined}>
+              <summary className="cursor-pointer text-sm font-medium text-surface-300">{t('Printer and energy')} · {t('{{count}} entered cost inputs', { count: printerCosts })}</summary>
+              <div className="mt-4 space-y-3">
                 <PricingSelect id="pricing-printer" label={t('Load printer rates')} value={printerId} options={[{ value: '', label: t('Manual printer costs') }, ...(printers.data ?? []).map(printer => ({ value: printer.id, label: printer.name }))]} disabled={printers.isPending} onChange={event => loadPrinter(event.target.value)} />
                 {printers.isError && <PricingNotice tone="amber"><p>{t('Printer rates could not load. Enter costs manually or retry.')}</p><button type="button" className="underline" onClick={() => void printers.refetch()}>{t('Try again')}</button></PricingNotice>}
                 {selectedPrinter && <PricingChip tone={printerEdited ? 'amber' : 'accent'}><Printer className="h-3.5 w-3.5" />{t(printerEdited ? 'Modified for this estimate' : 'Loaded from printer')}</PricingChip>}
                 {machineMode === 'direct' ? field('rate', 'Machine rate per hour', `${currency}/h`) : <PricingNotice>{t('The hourly machine cost is derived from acquisition, residual value and productive lifetime below.')}</PricingNotice>}
-                {!draft.rate && machineMode === 'direct' && <p className="text-xs text-amber-300">{t('Machine hourly rate is missing.')}</p>}
+                <div className="grid gap-4 sm:grid-cols-2">
+                  {(machineMode !== 'direct' || !includesMaintenance) && field('maintenance', 'Maintenance per hour', `${currency}/h`)}
+                  {(machineMode !== 'direct' || !includesEnergy) && <>{field('watts', 'Average power watts', 'W')}{field('tariff', 'Energy tariff per kWh', currency)}</>}
+                </div>
               </div>
-              <div className="space-y-3">
-                <PricingSelect id="pricing-material-source" label={t('Load material rate')} value={materialId} options={[{ value: '', label: t('Manual material cost') }, ...(materials.data ?? []).filter(material => material.type !== 'supply').map(material => ({ value: material.id, label: material.name }))]} disabled={materials.isPending} onChange={event => loadMaterial(event.target.value)} />
-                {materials.isError && <PricingNotice tone="amber"><p>{t('Materials could not load. Enter the rate manually or retry.')}</p><button type="button" className="underline" onClick={() => void materials.refetch()}>{t('Try again')}</button></PricingNotice>}
-                {selectedMaterial && <PricingChip tone={materialEdited ? 'amber' : 'accent'}>{t(materialEdited ? 'Modified for this estimate' : 'Loaded from material')}</PricingChip>}
-                {field('material', 'Material cost per kg', `${currency}/kg`)}
-                {!draft.material && <p className="text-xs text-amber-300">{t('Material rate is missing.')}</p>}
-              </div>
-            </div>
             {currencyMismatch && <div className="mt-4"><PricingNotice tone="red">{t('This printer uses {{currency}}. Match the calculator currency or choose manual printer costs; no conversion is performed.', { currency: printerCurrency })}</PricingNotice></div>}
-            {needsCatalogConfirmation && <label className={`${checkboxClass} mt-4 rounded-xl border border-amber-600/40 bg-amber-500/5 p-3`}><input type="checkbox" checked={catalogConfirmed} onChange={event => { invalidate(); setCatalogConfirmed(event.target.checked) }} />{t('I confirm loaded amounts use {{currency}}. Legacy currency is unknown; no conversion.', { currency })}</label>}
             <details className="mt-5 rounded-xl border border-surface-700 p-3" open={full || undefined}>
               <summary className="cursor-pointer text-sm font-medium text-surface-300">{t('Machine cost settings')} · {t(machineMode === 'direct' ? 'Direct hourly rate' : 'Derived depreciation')}</summary>
               <div className="mt-4 space-y-4">
@@ -277,20 +352,19 @@ export default function PricingCalculator() {
                 <p className="text-xs text-surface-400">{t('Changes here apply only to this estimate, not to the printer or material catalog.')}</p>
               </div>
             </details>
+            </details>
           </CalculatorSection>
 
-          <CalculatorSection id="additional-costs" step="3" title={t('Additional costs')} action={<PricingChip tone={activeCosts ? 'accent' : 'amber'}>{t('{{count}} entered cost inputs', { count: activeCosts })}</PricingChip>}>
+          <CalculatorSection id="additional-costs" title={t('Labor, shipping and sales fees')} action={<PricingChip tone="accent">{t('{{count}} entered cost inputs', { count: otherCosts })}</PricingChip>}>
             <details open={full || costsOpen} onToggle={event => { if (!full) setCostsOpen(event.currentTarget.open) }}>
               <summary className="cursor-pointer text-sm text-surface-300">{t('Review energy, labor, shipping and sales fees')}</summary>
               <p className="mt-2 text-xs text-surface-400">{t('Entered costs always apply, even when this section is collapsed. Empty is unknown; zero means intentionally free.')}</p>
               <div className="mt-4 space-y-5">
                 <div className="grid gap-4 sm:grid-cols-2">
-                  {(machineMode !== 'direct' || !includesMaintenance) && field('maintenance', 'Maintenance per hour', `${currency}/h`)}
-                  {(machineMode !== 'direct' || !includesEnergy) && <>{field('watts', 'Average power watts', 'W')}{field('tariff', 'Energy tariff per kWh', currency)}</>}
-                  {field('minutes', 'Labor minutes per requested unit', 'min')}{field('labor', 'Labor rate per hour', `${currency}/h`)}
+                  {field('minutes', piecePricing ? 'Labor minutes per requested unit' : 'Labor minutes for the whole print', 'min')}{field('labor', 'Labor rate per hour', `${currency}/h`)}
                   {field('reserve', 'Fixed order reserve', currency)}{field('shippingCost', 'Shipping cost', currency)}{field('shippingCharged', 'Shipping charged', currency)}
                 </div>
-                <PricingAdvancedCosts currency={currency} extras={extras} fees={fees} errors={fieldErrors}
+                <PricingAdvancedCosts scope={piecePricing ? 'unit' : 'file'} currency={currency} extras={extras} fees={fees} errors={fieldErrors}
                   onExtraChange={(index, patch) => { invalidate(); setExtras(rows => rows.map((row, i) => i === index ? { ...row, ...patch } : row)) }}
                   onExtraAdd={() => { invalidate(); const id = String(++rowId.current); setExtras(rows => [...rows, { id, label: '', amount: '', scope: 'order' }]); focusControl(`extra-${id}-label`) }}
                   onExtraRemove={index => { invalidate(); setExtras(rows => rows.filter((_, i) => i !== index)); focusControl('add-extra-cost') }}
@@ -300,24 +374,8 @@ export default function PricingCalculator() {
               </div>
             </details>
           </CalculatorSection>
-        </div>
-
-        <aside className="min-w-0 space-y-5 xl:sticky xl:top-5" aria-label={t('Selling target and estimate')}>
-          <CalculatorSection title={t('Selling target')} icon={<Calculator className="h-5 w-5" />}>
-            <div className="space-y-4">
-              <PricingSegments label={t('Active anchor')} value={anchor} options={[{ value: 'margin', label: t('Margin') }, { value: 'price', label: t('Price') }, { value: 'gain', label: t('Gain') }]} onChange={value => { invalidate(); setAnchor(value) }} compact />
-              {field(anchor, anchor === 'price' ? 'Goods price target' : anchor === 'gain' ? 'Gain target' : 'Margin target percent', anchor === 'margin' ? '%' : currency)}
-              <p className="text-xs leading-5 text-surface-400">{t('Price and gain targets apply to the whole order. Margin is not markup or accounting net profit.')}</p>
-              <details open={full || undefined} className="rounded-xl border border-surface-700 p-3">
-                <summary className="cursor-pointer text-sm text-surface-300">{t('Minimum charge and discount')}{draft.minimum || draft.discount ? ' •' : ''}</summary>
-                <div className="mt-4 space-y-4">{field('minimum', 'Minimum service charge for goods', currency)}{field('discount', 'Conditional discount percent', '%')}<p className="text-xs text-surface-400">{t('Same costs and fees, lower goods price. This is a scenario, not a guaranteed payment-method saving.')}</p></div>
-              </details>
-              {error && <div ref={errorRef} tabIndex={-1}><PricingNotice tone="red" role="alert">{t(error)}</PricingNotice></div>}
-              <button type="submit" disabled={busy || currencyLoading} className="btn btn-primary min-h-12 w-full gap-2">{busy ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Calculator className="h-4 w-4" />}{busy ? t('Calculating…') : t('Calculate estimate')}</button>
-            </div>
-          </CalculatorSection>
-          {result ? <PricingResults result={result} full={full} money={money} /> : <div role="status" className="rounded-2xl border border-dashed border-surface-700 p-5 text-sm leading-6 text-surface-400">{t('No current result. Calculate after editing to refresh the estimate.')}</div>}
-        </aside>
+          </div>
+        </details>
       </form>
       <details className="text-xs text-surface-400"><summary className="cursor-pointer">{t('How this estimate works')}</summary><p className="mt-2 max-w-3xl leading-6">{t('Quick and full modes use the same engine and retain all entered costs. Price and gain targets are order goods totals. Margin is gain divided by goods revenue. Shipping charged is separate. Empty costs produce warnings; enter zero only when intentionally free. Drafts stay in memory only.')}</p></details>
     </div>

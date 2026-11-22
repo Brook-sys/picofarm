@@ -56,7 +56,7 @@ function GCodeCard({ file, stl, selected, onSelect }: {
           {file.default_for_stl && <Star className="h-4 w-4 shrink-0 fill-accent-400 text-accent-400" aria-label={t('Default G-code')} />}
         </span>
         <span className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-surface-400">
-          <span className="inline-flex items-center gap-1"><Clock className="h-3.5 w-3.5" />{file.estimated_seconds == null ? t('Time unavailable') : catalogSecondsToDuration(file.estimated_seconds)}</span>
+          <span className="inline-flex items-center gap-1"><Clock className="h-3.5 w-3.5" />{file.estimated_seconds == null ? t('Time unavailable') : t('{{duration}} h', { duration: catalogSecondsToDuration(file.estimated_seconds) })}</span>
           <span>{file.filament_grams == null ? t('Mass unavailable') : t('{{grams}} g', { grams: new Intl.NumberFormat(i18n.language).format(file.filament_grams) })}</span>
         </span>
         {(file.metadata?.printer_model || file.metadata?.printer_settings_id) && <span className="mt-1 block break-words text-xs text-surface-500">{file.metadata.printer_model || file.metadata.printer_settings_id}</span>}
@@ -70,7 +70,7 @@ function GCodeCard({ file, stl, selected, onSelect }: {
 
 export default function PricingModelPicker({ selectedGCodeId = '', onSelectGCode }: Props) {
   const { t } = useTranslation('pricing')
-  const [tab, setTab] = useState<'stl' | 'gcode'>('stl')
+  const [tab, setTab] = useState<'stl' | 'gcode'>('gcode')
   const [query, setQuery] = useState('')
   const [selectedSTLId, setSelectedSTLId] = useState('')
   const [slicing, setSlicing] = useState<STLLibraryFile | null>(null)
@@ -97,9 +97,19 @@ export default function PricingModelPicker({ selectedGCodeId = '', onSelectGCode
   const stls = useMemo(() => (library.data?.stl_files ?? []).filter(file =>
     !normalizedQuery || `${file.display_name} ${file.file_name}`.toLocaleLowerCase().includes(normalizedQuery),
   ), [library.data, normalizedQuery])
-  const rootGCodes = useMemo(() => (library.data?.root_gcode_files ?? []).filter(file =>
-    !normalizedQuery || `${file.display_name} ${file.file_name}`.toLocaleLowerCase().includes(normalizedQuery),
-  ), [library.data, normalizedQuery])
+  const availableGCodes = useMemo(() => {
+    const entries = [
+      ...(library.data?.root_gcode_files ?? []).map(file => ({ file, stl: undefined as STLLibraryFile | undefined })),
+      ...(library.data?.stl_files ?? []).flatMap(stl => (stl.gcodes ?? []).map(file => ({ file, stl }))),
+    ]
+    const seen = new Set<string>()
+    return entries.filter(({ file, stl }) => {
+      if (seen.has(file.id)) return false
+      seen.add(file.id)
+      return !normalizedQuery || `${file.display_name} ${file.file_name} ${stl?.display_name ?? ''}`.toLocaleLowerCase().includes(normalizedQuery)
+    })
+  }, [library.data, normalizedQuery])
+  const [visibleLimit, setVisibleLimit] = useState(12)
   const selectedSTL = (library.data?.stl_files ?? []).find(file => file.id === selectedSTLId)
 
   async function selectJobResult(gcodeId: string) {
@@ -141,10 +151,10 @@ export default function PricingModelPicker({ selectedGCodeId = '', onSelectGCode
       <PricingSegments
         label={t('Estimate source')}
         value={tab}
-        onChange={value => { selectionGeneration.current++; setTab(value) }}
+        onChange={value => { selectionGeneration.current++; setTab(value); setVisibleLimit(12) }}
         options={[
+          { value: 'gcode', label: t('Ready G-codes'), icon: <FileCode className="h-4 w-4 shrink-0" /> },
           { value: 'stl', label: t('STL models'), icon: <Box className="h-4 w-4 shrink-0" /> },
-          { value: 'gcode', label: t('Standalone G-code'), icon: <FileCode className="h-4 w-4 shrink-0" /> },
         ]}
       />
       <div className="relative">
@@ -152,9 +162,9 @@ export default function PricingModelPicker({ selectedGCodeId = '', onSelectGCode
         <input
           className={`${pricingInputClass} pl-9`}
           value={query}
-          onChange={event => setQuery(event.target.value)}
-          placeholder={t(tab === 'stl' ? 'Search STL models' : 'Search standalone G-code')}
-          aria-label={t(tab === 'stl' ? 'Search STL models' : 'Search standalone G-code')}
+          onChange={event => { setQuery(event.target.value); setVisibleLimit(12) }}
+          placeholder={t(tab === 'stl' ? 'Search STL models' : 'Search all G-codes')}
+          aria-label={t(tab === 'stl' ? 'Search STL models' : 'Search all G-codes')}
         />
       </div>
 
@@ -225,11 +235,14 @@ export default function PricingModelPicker({ selectedGCodeId = '', onSelectGCode
       )}
 
       {library.isSuccess && tab === 'gcode' && (
-        rootGCodes.length ? (
-          <div className="grid gap-3 md:grid-cols-2">
-            {rootGCodes.map(file => <GCodeCard key={file.id} file={file} selected={selectedGCodeId === file.id} onSelect={selectFile} />)}
+        availableGCodes.length ? (
+          <div className="space-y-3">
+            <div className="grid gap-3 md:grid-cols-2">
+              {availableGCodes.slice(0, visibleLimit).map(({ file, stl }) => <GCodeCard key={file.id} file={file} stl={stl} selected={selectedGCodeId === file.id} onSelect={selectFile} />)}
+            </div>
+            {availableGCodes.length > visibleLimit && <button type="button" className="btn btn-secondary min-h-11 w-full" onClick={() => setVisibleLimit(limit => limit + 12)}>{t('Show more G-codes')}</button>}
           </div>
-        ) : <p className="rounded-xl border border-dashed border-surface-700 p-5 text-center text-sm text-surface-400">{t(normalizedQuery ? 'No standalone G-codes match this search.' : 'No standalone G-codes are available. Associated files can be found through their STL.')}</p>
+        ) : <p className="rounded-xl border border-dashed border-surface-700 p-5 text-center text-sm text-surface-400">{t(normalizedQuery ? 'No G-codes match this search.' : 'No ready G-codes yet. Choose an STL to slice, or enter the weight manually.')}</p>
       )}
 
       {slicing && <SliceSTLModal key={slicing.id} file={slicing} onClose={() => setSlicing(null)} onDone={file => void finishSlice(file)} />}

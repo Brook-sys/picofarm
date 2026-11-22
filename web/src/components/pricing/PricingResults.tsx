@@ -41,7 +41,7 @@ function MoneyRow({ label, value, currency, money, emphasis = false }: {
 }) {
   return (
     <div className="flex min-w-0 items-baseline justify-between gap-3 py-1.5">
-      <dt className="shrink-0 text-sm text-surface-400">{label}</dt>
+      <dt className="min-w-0 break-words text-sm text-surface-400">{label}</dt>
       <dd className={`min-w-0 break-words text-right tabular-nums ${emphasis ? 'font-semibold text-surface-100' : 'text-sm text-surface-200'}`}>
         {money(value, currency)}
       </dd>
@@ -49,18 +49,19 @@ function MoneyRow({ label, value, currency, money, emphasis = false }: {
   )
 }
 
-function Scenario({ value, currency, money, title, compact = false, incomplete = false }: {
+function Scenario({ value, currency, money, title, compact = false, basic = false, scope = 'unit' }: {
   value: PricingScenario
   currency: string
   money: Money
   title: string
   compact?: boolean
-  incomplete?: boolean
+  basic?: boolean
+  scope?: 'file' | 'unit'
 }) {
   const { t, i18n } = useTranslation('pricing')
   const loss = value.gain.startsWith('-')
-  const tone = loss || incomplete ? 'amber' : 'green'
-  const outcome = loss ? 'Loss scenario' : incomplete ? 'Incomplete estimate' : 'Estimated outcome'
+  const tone = loss ? 'amber' : 'accent'
+  const outcome = loss ? 'Loss scenario' : 'Estimate'
   return (
     <section aria-label={t(title)} className={`rounded-2xl border ${loss ? 'border-red-700/60' : 'border-surface-700'} bg-surface-950/80 p-4`}>
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
@@ -70,32 +71,33 @@ function Scenario({ value, currency, money, title, compact = false, incomplete =
           {t(outcome)}
         </PricingChip>
       </div>
+      <p className="mb-2 text-xs leading-5 text-surface-400">{t('Based on the costs entered. Printer, energy, labor and fees are included only when provided.')}</p>
       <dl className="min-w-0 border-b border-surface-800 pb-3">
-        <dt className="text-xs font-medium uppercase tracking-wide text-surface-400">{t('Goods per unit')}</dt>
+        <dt className="text-xs font-medium uppercase tracking-wide text-surface-400">{t(scope === 'file' ? 'Suggested price for this print' : 'Goods per unit')}</dt>
         <dd className={`${compact ? 'text-xl' : 'text-3xl'} mt-1 break-words font-bold tracking-tight text-accent-300 tabular-nums`}>
-          {money(value.price_per_unit, currency)}
+          {money(scope === 'file' ? value.price : value.price_per_unit, currency)}
         </dd>
-        <MoneyRow label={t('Goods total')} value={value.price} currency={currency} money={money} emphasis />
+        {scope === 'unit' && <MoneyRow label={t('Goods total')} value={value.price} currency={currency} money={money} emphasis />}
+        <MoneyRow label={t('Included costs and fees')} value={value.cost_total} currency={currency} money={money} />
       </dl>
-      <div className="my-2 grid grid-cols-1 min-[380px]:grid-cols-2 gap-2">
+      <div className={`my-2 grid grid-cols-1 gap-2 ${basic ? '' : 'min-[380px]:grid-cols-2'}`}>
         <dl className={`rounded-xl p-3 ${loss ? 'bg-red-500/10' : 'bg-emerald-500/10'}`}>
-          <dt className="text-xs text-surface-400">{t('Estimated order gain')}</dt>
+          <dt className="text-xs text-surface-400">{t('Surplus over included costs')}</dt>
           <dd className={`mt-1 break-words font-semibold tabular-nums ${loss ? 'text-red-300' : 'text-emerald-300'}`}>
             {money(value.gain, currency)}
           </dd>
         </dl>
-        <dl className="rounded-xl bg-surface-900 p-3">
+        {!basic && <dl className="rounded-xl bg-surface-900 p-3">
           <dt className="text-xs text-surface-400">{t('Margin on goods')}</dt>
           <dd className="mt-1 break-words font-semibold text-surface-100 tabular-nums">
             {value.margin_percent === null ? t('Undefined at zero goods price') : `${formatPricingDecimal(value.margin_percent, i18n.language)}%`}
           </dd>
-        </dl>
+        </dl>}
       </div>
-      {!compact && (
+      {!compact && !basic && (
         <dl className="divide-y divide-surface-800/70">
-          <MoneyRow label={t('Gain per unit')} value={value.gain_per_unit} currency={currency} money={money} />
-          <MoneyRow label={t('Included costs and fees')} value={value.cost_total} currency={currency} money={money} />
-          <MoneyRow label={t('Cost per unit')} value={value.cost_per_unit} currency={currency} money={money} />
+          {scope === 'unit' && <MoneyRow label={t('Surplus per unit over included costs')} value={value.gain_per_unit} currency={currency} money={money} />}
+          {scope === 'unit' && <MoneyRow label={t('Cost per unit')} value={value.cost_per_unit} currency={currency} money={money} />}
           <MoneyRow label={t('Fees')} value={value.fees} currency={currency} money={money} />
           <MoneyRow label={t('Revenue including shipping')} value={value.revenue_total} currency={currency} money={money} />
         </dl>
@@ -133,64 +135,78 @@ function CostGroups({ result, money }: { result: PricingResult; money: Money }) 
           </dl>
         </section>
       ))}
-      <p className="text-xs text-surface-500">{t('Selling fees are shown separately above.')}</p>
+      <dl><MoneyRow label={t('Fees')} value={result.base.fees} currency={result.currency} money={money} /></dl>
     </div>
   )
 }
 
 function missingCostTarget(warnings: string[]): string {
   if (warnings.some(code => ['missing_grams', 'missing_hours'].includes(code))) return '#production'
-  if (warnings.some(code => ['missing_machine', 'missing_machine_hourly_rate', 'missing_material_cost_per_kg'].includes(code))) return '#machine'
+  if (warnings.includes('missing_material_cost_per_kg')) return '#material'
+  if (warnings.some(code => ['missing_machine', 'missing_machine_hourly_rate'].includes(code))) return '#machine'
   return '#additional-costs'
 }
 
-export default function PricingResults({ result, full, money }: { result: PricingResult; full: boolean; money: Money }) {
+export default function PricingResults({ result, full, money, scope = 'unit', basic = !full }: {
+  result: PricingResult
+  full: boolean
+  money: Money
+  scope?: 'file' | 'unit'
+  basic?: boolean
+}) {
   const { t } = useTranslation('pricing')
   const hasLoss = result.warnings.some(code => code === 'negative_gain' || code === 'discounted_loss')
   const missing = result.warnings.filter(code => code.startsWith('missing_'))
-  const secondaryWarnings = result.warnings.filter(code => !code.startsWith('missing_'))
+  const prominentWarnings = result.warnings.filter(code => ['minimum_charge_applied', 'price_below_minimum_charge', 'negative_gain', 'discounted_loss'].includes(code))
+  const secondaryWarnings = result.warnings.filter(code => !code.startsWith('missing_') && !prominentWarnings.includes(code))
 
   return (
     <section aria-label={t('Estimate results')} className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-lg font-semibold text-surface-100">{t('Estimate results')}</h2>
-          <p className="mt-0.5 text-xs text-surface-400">{t('For {{count}} units', { count: result.quantity })}</p>
+          <p className="mt-0.5 text-xs text-surface-400">{scope === 'file' ? t('For the whole print file; no piece count assumed.') : t('For {{count}} units', { count: result.quantity })}</p>
         </div>
-        <PricingChip tone={missing.length ? 'amber' : 'accent'}>{t(missing.length ? 'Incomplete estimate' : 'Estimate')}</PricingChip>
+        <PricingChip tone="accent">{t('Estimate')}</PricingChip>
       </div>
       <p role="status" className="sr-only">
-        {t('Estimate updated: {{price}} per unit for {{count}} units.', { price: money(result.base.price_per_unit, result.currency), count: result.quantity })}
+        {scope === 'file'
+          ? t('Estimate updated: {{price}} for this print.', { price: money(result.base.price, result.currency) })
+          : t('Estimate updated: {{price}} per unit for {{count}} units.', { price: money(result.base.price_per_unit, result.currency), count: result.quantity })}
       </p>
-      {hasLoss && (
-        <PricingNotice tone="red" role="alert">{t('This estimate includes a loss scenario.')}</PricingNotice>
+      {prominentWarnings.length > 0 && (
+        <PricingNotice tone={hasLoss ? 'red' : 'amber'} role={hasLoss ? 'alert' : 'status'}>
+          <ul className="list-disc space-y-1 pl-4">{prominentWarnings.map(code => <li key={code}>{t(pricingWarningMessages[code])}</li>)}</ul>
+        </PricingNotice>
+      )}
+      <Scenario value={result.base} currency={result.currency} money={money} title="Base scenario" scope={scope} basic={basic} />
+      {result.discounted && (
+        <Scenario value={result.discounted} currency={result.currency} money={money} title="Conditional discount scenario" compact scope={scope} basic={basic} />
       )}
       {missing.length > 0 && (
-        <PricingNotice tone="amber">
-          <p className="font-medium">{t('Incomplete estimate: {{count}} cost inputs are missing.', { count: missing.length })}</p>
+        <details className="rounded-xl border border-surface-700 bg-surface-900 p-3 text-sm text-surface-300">
+          <summary className="cursor-pointer font-medium">{t('Costs not included')} ({missing.length})</summary>
           <a href={missingCostTarget(missing)} className="mt-1 inline-block underline underline-offset-2" onClick={() => {
             const section = document.querySelector(missingCostTarget(missing))
+            let parent = section?.parentElement
+            while (parent) { if (parent instanceof HTMLDetailsElement) parent.open = true; parent = parent.parentElement }
             section?.querySelectorAll('details').forEach(details => { details.open = true })
             section?.querySelector<HTMLElement>('input, select, button')?.focus()
           }}>{t('Review missing costs')}</a>
           <ul className="mt-2 list-disc space-y-1 pl-4 text-xs">{missing.map(code => <li key={code}>{t(pricingWarningMessages[code] ?? 'Review this estimate assumption.')}</li>)}</ul>
-        </PricingNotice>
-      )}
-      <Scenario value={result.base} currency={result.currency} money={money} title="Base scenario" incomplete={missing.length > 0} />
-      {result.discounted && (
-        <Scenario value={result.discounted} currency={result.currency} money={money} title="Conditional discount scenario" compact incomplete={missing.length > 0} />
+        </details>
       )}
 
-      <div className="rounded-xl border border-surface-700 bg-surface-900 p-3">
+      {!basic && <div className="rounded-xl border border-surface-700 bg-surface-900 p-3">
         <div className="flex items-center gap-2 text-sm font-medium text-surface-200">
           <Layers className="h-4 w-4 text-accent-400" />
           {t('Break-even goods price')}
         </div>
         <dl className="mt-2 divide-y divide-surface-800">
           <MoneyRow label={t('Goods total')} value={result.minimum_sale_price} currency={result.currency} money={money} emphasis />
-          <MoneyRow label={t('Goods per unit')} value={result.minimum_sale_price_per_unit} currency={result.currency} money={money} />
+          {scope === 'unit' && <MoneyRow label={t('Goods per unit')} value={result.minimum_sale_price_per_unit} currency={result.currency} money={money} />}
         </dl>
-      </div>
+      </div>}
 
       {full ? (
         <section className="rounded-xl border border-surface-700 bg-surface-900 p-3">

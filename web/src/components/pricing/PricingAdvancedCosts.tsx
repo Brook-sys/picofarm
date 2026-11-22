@@ -10,6 +10,7 @@ interface AdvancedCostsProps {
   extras: PricingExtraRow[]
   fees: PricingFeeRow[]
   currency: string
+  scope?: 'file' | 'unit'
   errors?: Record<string, string>
   invalid?: boolean
   onExtraChange: (index: number, patch: Partial<PricingExtra>) => void
@@ -24,6 +25,7 @@ export default function PricingAdvancedCosts({
   extras,
   fees,
   currency,
+  scope = 'unit',
   errors = {},
   invalid = false,
   onExtraChange,
@@ -35,7 +37,7 @@ export default function PricingAdvancedCosts({
 }: AdvancedCostsProps) {
   const { t } = useTranslation('pricing')
   const occurrenceOptions = [
-    { value: 'unit', label: t('Per requested unit') },
+    { value: 'unit', label: t(scope === 'file' ? 'For this entire print' : 'Per requested unit') },
     { value: 'batch', label: t('Per full plate') },
     { value: 'project', label: t('Once per project') },
     { value: 'order', label: t('Once per order') },
@@ -160,7 +162,7 @@ export default function PricingAdvancedCosts({
                   label={t('Fixed fee occurrence')}
                   value={fee.scope}
                   options={[
-                    { value: 'unit', label: t('Per requested unit') },
+                    { value: 'unit', label: t(scope === 'file' ? 'For this entire print' : 'Per requested unit') },
                     { value: 'order', label: t('Once per order') },
                   ]}
                   onChange={event => onFeeChange(index, { scope: event.target.value as PricingFee['scope'] })}
