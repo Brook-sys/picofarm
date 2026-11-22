@@ -209,11 +209,11 @@ func CalculatePricing(req PricingCalculationRequest) (*PricingCalculationResult,
 	hours := pMul(optional("hours", req.Production.Hours), mult)
 	material := pDiv(pMul(grams, optional("material_cost_per_kg", req.MaterialCostPerKG)), pInt(1000))
 	machine, maintenance, energy, labor, extras := pInt(0), pInt(0), pInt(0), pInt(0), pInt(0)
-	includesEnergy, includesMaintenance := false, false
+	includesEnergy := false
 	if m := req.Machine; m != nil {
 		includesEnergy = m.IncludesEnergy
-		includesMaintenance = m.IncludesMaintenance
-		rate := pInt(0)
+		includesMaintenance := m.IncludesMaintenance
+		var rate *big.Rat
 		switch m.Mode {
 		case "direct":
 			if m.Acquisition != "" || m.Residual != "" || m.LifetimeHours != "" {
@@ -344,7 +344,7 @@ func CalculatePricing(req PricingCalculationRequest) (*PricingCalculationResult,
 	if negativeTarget {
 		target = new(big.Rat).Neg(target)
 	}
-	price := pInt(0)
+	var price *big.Rat
 	switch req.Target.Anchor {
 	case "price":
 		price = target
