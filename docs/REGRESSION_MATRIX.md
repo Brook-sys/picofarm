@@ -6,6 +6,10 @@ Slicer refinement gates and known validation gaps: [SLICER_REFINEMENTS.md](SLICE
 
 Quotation/costing acceptance gates: [QUOTING.md](QUOTING.md#11-testing-gates). Calculator-first boundaries and numerical reference cases: [PRICING_CALCULATOR.md](PRICING_CALCULATOR.md). Proposal/PDF and order-conversion gates remain future work; calculator evidence must be recorded separately.
 
+## File-library filament visibility
+
+G-code cards, linked variants inside STL cards, and list rows display the slicer filament profile (`metadata.filament_settings_id`, falling back to `filament_name`) without opening details or fetching individual files. Verify long profile names wrap, missing profiles say “Not found”, and material-type badges retain configured colors. These badges identify material type, not a physical spool assignment or guaranteed filament color. Component regressions cover profile precedence, legacy fallback and missing metadata; real-browser layout remains a manual check.
+
 ## Validation levels
 
 | Level | Use when | Examples |

@@ -10,6 +10,7 @@ import { AlertTriangle, FileCode, Grid3X3, Info as InfoIcon, Link2Off, List, Plu
 import { fileLibraryApi, gcodeLibraryApi, printersApi, settingsApi, slicerApi, stlLibraryApi } from '../api/client'
 import AppToast, { type AppToastState } from '../components/AppToast'
 import { MaterialBadge } from '../components/MaterialBadge'
+import GCodeFilamentSummary from '../components/GCodeFilamentSummary'
 import { STLViewer3D } from '../components/STLViewer3D'
 import type { GCodeLibraryFile, STLLibraryFile, Tag } from '../types'
 import { cn, formatDuration, PRINTER_STATUS_LABELS } from '../lib/utils'
@@ -560,7 +561,7 @@ export default function GCodeFiles() {
           {viewMode === 'grid' ? (
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
               {visibleItems.map(item => item.type === 'stl'
-                ? <STLFileCard key={`stl-${item.file.id}`} file={item.file} busy={busy === item.file.id} confirmDelete={confirmDelete === item.file.id} onRename={(name) => renameSTLFile(item.file, name)} onDelete={() => deleteSTLFile(item.file.id)} onDropGCode={(gcodeId) => setGCodeParent(gcodeId, item.file.id)} onUploadGCode={(gcodes) => uploadFiles(gcodes, 'gcode', item.file.id)} onViewGCode={setViewingFile} onRenameGCode={renameFile} onAddGCode={addToQueue} onSendGCode={setSendingFile} onUnlinkGCode={(gcodeId) => setGCodeParent(gcodeId, null)} onMakeDefaultGCode={makeDefaultGCode} onRetryThumbnail={() => retrySTLThumbnail(item.file)} onViewSTL={() => setViewingSTL(item.file)} onSlice={() => setSlicingSTL(item.file)} isGCodeMatch={(gcode) => hasActiveGCodeFilter && gcodeMatchesFilters(gcode)} />
+                ? <STLFileCard key={`stl-${item.file.id}`} file={item.file} colors={materialColors} busy={busy === item.file.id} confirmDelete={confirmDelete === item.file.id} onRename={(name) => renameSTLFile(item.file, name)} onDelete={() => deleteSTLFile(item.file.id)} onDropGCode={(gcodeId) => setGCodeParent(gcodeId, item.file.id)} onUploadGCode={(gcodes) => uploadFiles(gcodes, 'gcode', item.file.id)} onViewGCode={setViewingFile} onRenameGCode={renameFile} onAddGCode={addToQueue} onSendGCode={setSendingFile} onUnlinkGCode={(gcodeId) => setGCodeParent(gcodeId, null)} onMakeDefaultGCode={makeDefaultGCode} onRetryThumbnail={() => retrySTLThumbnail(item.file)} onViewSTL={() => setViewingSTL(item.file)} onSlice={() => setSlicingSTL(item.file)} isGCodeMatch={(gcode) => hasActiveGCodeFilter && gcodeMatchesFilters(gcode)} />
                 : <FileCard key={`gcode-${item.file.id}`} file={item.file} colors={materialColors} busy={busy === item.file.id} confirmDelete={confirmDelete === item.file.id} onView={() => setViewingFile(item.file)} onRename={(name) => renameFile(item.file, name)} onAdd={() => addToQueue(item.file.id)} onSend={() => setSendingFile(item.file)} onDelete={() => deleteFile(item.file.id)} />)}
             </div>
           ) : (
@@ -633,7 +634,7 @@ function STLDetailsModal({ file, tags, onCreateTag, onAddTag, onRemoveTag, onClo
   )
 }
 
-function STLFileCard({ file, busy, confirmDelete, onRename, onDelete, onDropGCode, onUploadGCode, onViewGCode, onRenameGCode, onAddGCode, onSendGCode, onUnlinkGCode, onMakeDefaultGCode, onRetryThumbnail, onViewSTL, onSlice, isGCodeMatch }: { file: STLLibraryFile; busy: boolean; confirmDelete: boolean; onRename: (name: string) => void; onDelete: () => void; onDropGCode: (gcodeId: string) => void; onUploadGCode: (files?: FileList | null) => void; onViewGCode: (file: GCodeLibraryFile) => void; onRenameGCode: (file: GCodeLibraryFile, name: string) => void; onAddGCode: (id: string) => void; onSendGCode: (file: GCodeLibraryFile) => void; onUnlinkGCode: (id: string) => void; onMakeDefaultGCode: (id: string) => void; onRetryThumbnail: () => void; onViewSTL: () => void; onSlice: () => void; isGCodeMatch: (file: GCodeLibraryFile) => boolean }) {
+function STLFileCard({ file, colors, busy, confirmDelete, onRename, onDelete, onDropGCode, onUploadGCode, onViewGCode, onRenameGCode, onAddGCode, onSendGCode, onUnlinkGCode, onMakeDefaultGCode, onRetryThumbnail, onViewSTL, onSlice, isGCodeMatch }: { file: STLLibraryFile; colors: MaterialColorMap; busy: boolean; confirmDelete: boolean; onRename: (name: string) => void; onDelete: () => void; onDropGCode: (gcodeId: string) => void; onUploadGCode: (files?: FileList | null) => void; onViewGCode: (file: GCodeLibraryFile) => void; onRenameGCode: (file: GCodeLibraryFile, name: string) => void; onAddGCode: (id: string) => void; onSendGCode: (file: GCodeLibraryFile) => void; onUnlinkGCode: (id: string) => void; onMakeDefaultGCode: (id: string) => void; onRetryThumbnail: () => void; onViewSTL: () => void; onSlice: () => void; isGCodeMatch: (file: GCodeLibraryFile) => boolean }) {
   const { t } = useTranslation('library')
   const [editingName, setEditingName] = useState(false)
   const [expanded, setExpanded] = useState(false)
@@ -670,7 +671,7 @@ function STLFileCard({ file, busy, confirmDelete, onRename, onDelete, onDropGCod
             {t("Upload here")}<input type="file" accept=".gcode" multiple className="hidden" onChange={e => onUploadGCode(e.target.files)} />
           </label>
         </div>
-        {visibleChildren.length === 0 ? <div className="py-4 text-center text-xs text-surface-600">{t("Drop G-code here to link")}</div> : <div className="space-y-2">{visibleChildren.map(gcode => <LinkedGCodeRow key={gcode.id} file={gcode} matched={isGCodeMatch(gcode)} onView={() => onViewGCode(gcode)} onRename={(name) => onRenameGCode(gcode, name)} onAdd={() => onAddGCode(gcode.id)} onSend={() => onSendGCode(gcode)} onUnlink={() => onUnlinkGCode(gcode.id)} onMakeDefault={() => onMakeDefaultGCode(gcode.id)} />)}</div>}
+        {visibleChildren.length === 0 ? <div className="py-4 text-center text-xs text-surface-600">{t("Drop G-code here to link")}</div> : <div className="space-y-2">{visibleChildren.map(gcode => <LinkedGCodeRow key={gcode.id} file={gcode} colors={colors} matched={isGCodeMatch(gcode)} onView={() => onViewGCode(gcode)} onRename={(name) => onRenameGCode(gcode, name)} onAdd={() => onAddGCode(gcode.id)} onSend={() => onSendGCode(gcode)} onUnlink={() => onUnlinkGCode(gcode.id)} onMakeDefault={() => onMakeDefaultGCode(gcode.id)} />)}</div>}
         {children.length > 3 && <button onClick={() => setExpanded(v => !v)} className="mt-2 text-xs text-accent-300 hover:text-accent-200">{expanded ? t("Show less") : t("Show {{count}} more", { count: children.length - 3 })}</button>}
       </div>
       <div className="flex gap-2">
@@ -683,7 +684,7 @@ function STLFileCard({ file, busy, confirmDelete, onRename, onDelete, onDropGCod
   )
 }
 
-function LinkedGCodeRow({ file, matched, onView, onRename, onAdd, onSend, onUnlink, onMakeDefault }: { file: GCodeLibraryFile; matched: boolean; onView: () => void; onRename: (name: string) => void; onAdd: () => void; onSend: () => void; onUnlink: () => void; onMakeDefault: () => void }) {
+function LinkedGCodeRow({ file, colors, matched, onView, onRename, onAdd, onSend, onUnlink, onMakeDefault }: { file: GCodeLibraryFile; colors: MaterialColorMap; matched: boolean; onView: () => void; onRename: (name: string) => void; onAdd: () => void; onSend: () => void; onUnlink: () => void; onMakeDefault: () => void }) {
   const { t } = useTranslation('library')
   const [editingName, setEditingName] = useState(false)
   const [name, setName] = useState(file.display_name)
@@ -701,6 +702,7 @@ function LinkedGCodeRow({ file, matched, onView, onRename, onAdd, onSend, onUnli
         <span>{file.layer_height ? t("Layer: {{name}}mm", { name: file.layer_height }) : '—'}</span>
         <span>{file.estimated_seconds ? formatDuration(file.estimated_seconds) : t("No ETA")}</span>
       </div>
+      <GCodeFilamentSummary file={file} colors={colors} />
     </div>
     <div className="flex shrink-0 items-center gap-1.5">
       {!file.default_for_stl && <button onClick={onMakeDefault} className={actionClass} title={t("Set this G-code as the default for this STL")}><Star className="h-4 w-4" /></button>}
@@ -898,8 +900,7 @@ function FileCard({ file, colors, busy, confirmDelete, onView, onRename, onAdd, 
             <button type="button" onClick={() => setEditingName(true)} className="font-medium text-surface-100 truncate text-left hover:text-accent-300" title={file.display_name}>{file.display_name}</button>
           )}
           <div className="mb-1 inline-flex rounded-full border border-accent-500/30 bg-accent-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-accent-300">{t("G-code")}</div>
-          <div className="mt-1"><MaterialBadge material={file.material_type} colors={colors} /></div>
-          {file.filament_name && <div className="text-xs text-surface-400 truncate">{t("Filament:")}{' '}{file.filament_name}</div>}
+          <GCodeFilamentSummary file={file} colors={colors} />
           <div className="text-xs text-surface-500">{file.print_count} {t("successful prints")}</div>
           {!file.parent_stl_id && <TagChips tags={file.tags} />}
         </div>
@@ -979,7 +980,7 @@ function FileRow({ file, colors, busy, confirmDelete, indented = false, matched 
       <div className="text-sm text-accent-300 font-medium">{t("G-code")}</div>
       <div className="text-sm text-surface-300 truncate" title={parentName || t("Root")}>{parentName ? t("Inside {{name}}", { name: parentName }) : t("Root file")}</div>
       <div className="min-w-0 text-sm text-surface-300">
-        <MaterialBadge material={file.material_type} colors={colors} />
+        <GCodeFilamentSummary file={file} colors={colors} />
         <div className="text-xs text-surface-500 truncate mt-0.5">{file.metadata?.print_settings_id || t("No profile")}</div>
       </div>
       <div className="min-w-0 text-sm text-surface-300">
