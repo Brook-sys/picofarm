@@ -8,7 +8,7 @@ Quotation/costing acceptance gates: [QUOTING.md](QUOTING.md#11-testing-gates). C
 
 ## File-library filament visibility
 
-G-code cards, linked variants inside STL cards, and list rows display the slicer filament profile (`metadata.filament_settings_id`, falling back to `filament_name`) without opening details or fetching individual files. Verify long profile names wrap, missing profiles say “Not found”, and material-type badges retain configured colors. These badges identify material type, not a physical spool assignment or guaranteed filament color. Component regressions cover profile precedence, legacy fallback and missing metadata; real-browser layout remains a manual check.
+G-code cards, linked variants inside STL cards, and list rows display only the material-type badge without opening details or fetching individual files. Filament profile/name remains in details, not in an extra card. Verify badges retain configured material-type colors and existing unknown-material presentation. These badges do not identify a physical spool assignment or guaranteed filament color. Component regressions cover badge props, missing material and absence of profile/name; real-browser layout remains a manual check.
 
 ## Validation levels
 

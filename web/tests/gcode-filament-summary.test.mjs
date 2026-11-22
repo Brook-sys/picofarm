@@ -9,30 +9,23 @@ const { outputText } = ts.transpileModule(source, { compilerOptions: { module: t
 const jsx = (type, props) => ({ type: typeof type === 'string' ? type : 'MaterialBadge', ...props })
 const context = { exports: {}, require: name => {
   if (name === 'react/jsx-runtime') return { jsx, jsxs: jsx }
-  if (name === 'react-i18next') return { useTranslation: () => ({ t: key => key }) }
   if (name === './MaterialBadge') return { MaterialBadge: () => null }
   throw new Error(`Unexpected dependency: ${name}`)
 } }
 vm.runInNewContext(outputText, context)
-const render = file => JSON.stringify(context.exports.default({ file, colors: {} }))
+const render = (file, colors = {}) => context.exports.default({ file, colors })
 
-test('visible filament summary prefers the same slicer profile as file details', () => {
-  const output = render({ material_type: 'PLA', filament_name: 'Legacy spool', metadata: { filament_settings_id: 'Generic PLA @ printer' } })
-  assert.ok(output.includes('Generic PLA @ printer'))
-  assert.ok(output.includes('PLA'))
-  assert.ok(!output.includes('Legacy spool'))
+test('G-code summary shows only the material badge, not filament profile or name', () => {
+  const colors = { pla: '#ffffff' }
+  const result = render({ material_type: 'PLA', filament_name: 'Legacy spool', metadata: { filament_settings_id: 'Generic PLA @ printer' } }, colors)
+  assert.equal(result.children.type, 'MaterialBadge')
+  assert.equal(result.children.material, 'PLA')
+  assert.equal(result.children.colors, colors)
+  assert.ok(!JSON.stringify(result).includes('Legacy spool'))
+  assert.ok(!JSON.stringify(result).includes('Generic PLA @ printer'))
+  assert.ok(!JSON.stringify(result).includes('Filament Profile'))
 })
 
-test('legacy filament name remains visible and missing metadata is explicit', () => {
-  assert.ok(render({ filament_name: 'PETG Blue' }).includes('PETG Blue'))
-  assert.ok(render({ filament_name: 'Legacy', metadata: { filament_settings_id: '  ' } }).includes('Legacy'))
-  assert.ok(render({}).includes('Not found'))
-  assert.ok(render({ metadata: {} }).includes('Not found'))
-})
-
-test('long and untrusted profile labels are rendered as wrapping text, not HTML', () => {
-  const output = render({ metadata: { filament_settings_id: '<script>unsafe</script>' } })
-  assert.ok(output.includes('<script>unsafe</script>'))
-  assert.ok(output.includes('overflow-wrap:anywhere'))
-  assert.ok(!output.includes('dangerouslySetInnerHTML'))
+test('missing material delegates the existing unknown-material presentation to the badge', () => {
+  assert.equal(render({}).children.material, undefined)
 })
