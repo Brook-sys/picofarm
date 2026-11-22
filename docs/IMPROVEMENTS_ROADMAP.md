@@ -8,6 +8,33 @@
 - [Orçamento e custeio](QUOTING.md): decisões de produto aprovadas para FDM, múltiplos projetos/peças/componentes, preço dinâmico por último campo editado, proposta inicial em PDF e condições comerciais simples. Isso é escopo planejado, não funcionalidade entregue.
 - **Nova prioridade aprovada para investigação:** duplicação e arranjo de instâncias do mesmo STL na mesa, espaçamento, reorientação e visualização de camadas/trajetórias do G-code. A [análise de viabilidade](SLICING_FEASIBILITY.md) separa o preview de G-code já armazenado, a multiplicação pelo CLI Orca e o preview anterior ao fatiamento, com gates mensuráveis. Nenhum renderer ou contrato novo foi implementado ou selecionado.
 
+## Funcionalidade futura — mesas com múltiplos STLs
+
+**Registro:** 2026-11-22. **Status:** ideia registrada para investigação futura; sem autorização de implementação, prioridade ou prazo definidos. As alternativas abaixo não são decisões de produto aprovadas.
+
+**Objetivo:** combinar STLs diferentes, com quantidade própria por modelo, em uma única mesa e um único G-code, buscando aproveitar a mesa e reduzir intervenções. Economia de tempo não é garantida: deverá ser medida considerando deslocamentos, suportes e risco de falha compartilhado.
+
+**Compatibilidade obrigatória:** preservar a biblioteca e o fluxo atual de fatiamento de um STL com suas cópias. Não associar artificialmente um G-code misto a apenas um dos STLs nem alterar silenciosamente o contrato individual existente.
+
+**Organização a avaliar:**
+- Selecionar vários STLs na biblioteca e acionar “Criar mesa”, sem mover ou duplicar os originais.
+- Uma área de mesas salvas para combinações reutilizáveis; avaliar sua necessidade antes de adicionar navegação.
+- Uma mesa referencia modelos e quantidades; cada G-code gerado conserva um retrato imutável da composição, identidade/conteúdo dos arquivos e parâmetros efetivamente utilizados. Editar a mesa não altera o significado de resultados anteriores.
+- Distinguir quantidade por modelo de número de repetições da mesa. Distinguir peças independentes de partes alinhadas de um mesmo objeto.
+- Manter a interface enxuta: ações e estado visíveis, explicações em ajuda sob demanda, erros e riscos relevantes apresentados no contexto.
+
+**Hipótese de primeira versão, ainda não aprovada:** um material e um conjunto compartilhado de perfis, arranjo automático e uma única mesa. Posicionamento manual, multimaterial, parâmetros por objeto, impressão sequencial, otimização automática e vínculos com produtos/pedidos ficam fora dessa hipótese inicial.
+
+**Estudos e critérios antes de implementar:**
+- Comprovar no Orca CLI empacotado o carregamento de modelos distintos com quantidades diferentes e verificar a identidade e quantidade de cada modelo no resultado; contar apenas o total de objetos não basta.
+- Rejeitar peças omitidas, redução de quantidade ou divisão em mesas não solicitada. Não fundir os modelos em uma malha única como atalho sem avaliar perda de identidade e semântica.
+- Definir contrato explícito de composição, persistência/migração, comportamento ao excluir/substituir um STL e rastreabilidade das versões de G-code.
+- Incluir todos os modelos, quantidades, transformações e parâmetros nas chaves de cache/deduplicação e na invalidação da prévia; manter paridade entre preview e slice.
+- Medir tempo, memória, disco e payloads; separar capacidade de fatiamento do limite do preview 3D, sem aumentar tetos apenas para acomodar mesas maiores.
+- Validar regressões do fluxo individual e testar composição válida, quantidades distintas, falta de espaço, entrada inválida, timeout, falha e limpeza de temporários, sem comandos às impressoras.
+
+**Perguntas abertas:** uso ocasional, kits recorrentes ou produção de produtos/pedidos diferentes? Onde descobrir mesas e seus G-codes sem confundir a biblioteca atual? Como registrar produção parcial e distribuir custos caso haja integração produtiva? Essas decisões deverão ser retomadas com o usuário antes de fechar o escopo.
+
 ## Incremento do fatiador implementado nesta rodada
 
 - Contrato preview/slice alinhado, booleanos explícitos e multipart temporário em disco no PicoFarm. Não há benchmark de RSS ou disco; o orçamento global de recursos abaixo continua pendente.
