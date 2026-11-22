@@ -3,7 +3,7 @@
 This document records the current HTTP/JSON contract conventions between the Go backend and the React/TypeScript frontend. It is based on the current router in `internal/api/router.go`, Go models in `internal/model/`, and browser client/types in `web/src/api/client.ts` and `web/src/types/index.ts`.
 
 Slicer editor/history and background-job contracts: [SLICER_REFINEMENTS.md](SLICER_REFINEMENTS.md), [SLICER_JOBS.md](SLICER_JOBS.md).
-Strict quantity/rotation and upstream toolpath-preview integration is in progress; its contract is recorded below and in [SLICER_REFINEMENTS.md](SLICER_REFINEMENTS.md). [SLICING_FEASIBILITY.md](SLICING_FEASIBILITY.md) preserves the earlier investigation and proposals, not current integration evidence.
+Strict quantity/rotation and full 3D upstream toolpath preview are implemented locally; contracts and validation limits are recorded below and in [SLICER_REFINEMENTS.md](SLICER_REFINEMENTS.md). This is not deployment or physical-print validation. [SLICING_FEASIBILITY.md](SLICING_FEASIBILITY.md) preserves the earlier investigation and proposals, not current integration evidence.
 Approved quotation/costing product decisions and non-implemented gates: [QUOTING.md](QUOTING.md).
 
 ## Contract sources of truth
@@ -162,18 +162,21 @@ Most keys in `settings` are free-form key/value blobs. Two keys are validated by
   already has is skipped rather than replaced. Bundle imports do not create editor recovery
   snapshots; preserve a backup before overwriting.
 
-### Strict geometry and toolpath preview — integration in progress
+### Strict geometry and toolpath preview — local implementation
 
-This is the contract being integrated in PicoFarm, not a claim of passing tests, browser verification or deployment. Live validation of the upstream slicer is a separate evidence track and does not verify the PicoFarm proxy/UI.
+This contract is implemented locally. Live upstream slicer measurements and synthetic browser verification are separate evidence tracks; isolated browser replays of three real upstream payloads passed. No deployment or physical-print validation is implied.
 
 - `POST /api/slicer/preview`, `POST /api/slicer/slice-stl` and queued slice requests share `quantity` (integer `1`–`512`, omitted means `1`). Explicit `0`, fractions and out-of-range values are invalid. Quantity is the total requested instance count on **one plate**, not extra copies, maximum-fit or automatic multi-plate splitting. Failure to fit must surface as an error, not silent reduction.
 - For `quantity > 1`, `arrange` must be `true`; the UI must keep automatic arrangement enabled. Preview and slice must use the same geometry/settings.
 - Optional finite degree values `rotate` (Z), `rotate_x` and `rotate_y` preserve omission versus explicit `0`. Any supplied rotation, including zero, requires `orient: false`; the UI disables automatic orientation and the backend rejects contradictory requests. Upstream multipart names are `quantity`, `rotate`, `rotateX`, `rotateY`; unset rotations are omitted rather than sent as zero.
 - Preview retains `usesSupport`, `printTime`, `filamentUsedG`, `filamentUsedMm`, `thumbnail` and adds `quantity` and nullable `toolpaths`. These upstream response keys intentionally use camelCase where shown. `toolpaths` is typed upstream-derived geometry, not a thumbnail, browser STL duplication or a full G-code download.
 - Toolpaths carry `version`, units/coordinate system, `sourceComplete`, `truncated`, source/layer/segment counts, `omittedSegments`, support/brim counts, `layerSemantics`, `warnings`, `limits`, optional `{min,max}` XYZ `bounds` and `layers`. Each layer has `{index,z,segments}`; segments have XYZ `from`/`to`, `extrusion`, optional `feedrateMmSec`, `feature`, `object`, and `tool`. Limits and completeness metadata must remain visible to callers; missing/empty/partial geometry is not a complete preview.
-- The UI integration uses an SVG 2D layer toolpath view with layer selection and partial/warning feedback. Thumbnail is separate and collapsed by default; advanced positioning is also collapsed. Preview is compute-only; slicing imports G-code into the library and does not enqueue production or issue hardware commands.
+- The proxy adds upstream multipart `toolpathMode=full` to preview requests only; synchronous and queued slice requests are unchanged. Full toolpaths use `version: 2`, `mode: "full"`, `geometryComplete: true`, `sourceComplete: true`, `truncated: false` and zero omitted segments. Segment dimensions `widthMm`/`heightMm` are nullable (and absent upstream in legacy responses); the viewer then uses explicitly labeled estimates rather than claiming measured bead dimensions.
+- Full geometry is bounded to **250,000 segments and 4,096 layers** in the backend and frontend. The upstream backend returns `422` on overflow, without partial geometry. The frontend requires v2/full completeness and coherent declared/actual layer and segment counts before enabling 3D; missing, malformed, over-budget or inconsistent data must not become a seemingly complete 3D preview.
+- The 3D viewer uses instanced segment boxes (64 bytes per instance matrix, 12 triangles per segment, up to six feature groups). These are rendering costs, not total browser memory estimates. Legacy v1 is an explicitly partial SVG 2D fallback only, never a 3D substitute. The 2D view caps rendering at 20,000 segments per layer with a visible warning; that display cap does not imply full-layer visibility.
+- Source-model thumbnail and source-STL viewing remain separate from sliced toolpaths; thumbnail and advanced positioning are collapsed by default. Preview is compute-only; slicing imports G-code into the library and does not enqueue production or issue hardware commands.
 
-No spacing editor, interactive placement editor, global packing optimum, full 3D toolpath renderer or physical-print safety certification is implied. See [regression gates](SLICER_REFINEMENTS.md#strict-integration-acceptance-gates) before treating this integration as validated.
+No spacing editor, interactive placement editor, global packing optimum or physical-print safety certification is implied. JSON transport and proxy decoding are still costly and lack a response-byte bound/global concurrency guard; frontend sanitization and instance-matrix construction remain synchronous on the main thread. See [validation and resource limits](SLICER_REFINEMENTS.md) before treating this integration as validated.
 
 ## High-value domain contracts
 

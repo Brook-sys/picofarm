@@ -1,10 +1,15 @@
-// Version 1 wire schema from slicer-api/internal/slicer/toolpath.go.
+// Wire schema from slicer-api/internal/slicer/toolpath.go (v1 legacy, v2 full).
 export type ToolpathPoint = [number, number, number]
 export interface ToolpathSegment {
   from: ToolpathPoint
   to: ToolpathPoint
   extrusion: number
   feedrateMmSec?: number
+  widthMm?: number
+  heightMm?: number
+  /** Compatibility with alternate Orca producers; absent dimensions are estimated. */
+  lineWidthMm?: number
+  layerHeightMm?: number
   feature?: string
   object?: string
   tool: number
@@ -12,6 +17,8 @@ export interface ToolpathSegment {
 export interface ToolpathLayer { index: number; z: number; segments: ToolpathSegment[] }
 export interface ToolpathPreview {
   version: number
+  mode?: 'full' | 'legacy'
+  geometryComplete?: boolean
   positionUnit: string
   extrusionUnit: string
   feedrateUnit: string
@@ -39,6 +46,9 @@ export interface ToolpathPreview {
 export type ToolpathKind = 'model' | 'support' | 'brim' | 'travel'
 export const MAX_TOOLPATH_SEGMENTS = 20_000
 const MAX_LAYERS = 512
+// Aligned with slicer-api's full-mode retention budget.
+export const MAX_COMPLETE_TOOLPATH_SEGMENTS = 250_000
+const MAX_COMPLETE_LAYERS = 4096
 const record = (value: unknown): Record<string, unknown> =>
   value !== null && typeof value === 'object' ? value as Record<string, unknown> : {}
 const coordinate = (value: unknown): value is number =>
@@ -54,16 +64,18 @@ export function toolpathKind(segment: Pick<ToolpathSegment, 'extrusion' | 'featu
 }
 
 /** Bound inspection as well as output: even invalid entries consume the segment budget. */
-export function sanitizeToolpaths(value: unknown) {
+export function sanitizeToolpaths(value: unknown, complete = false) {
   const raw = record(value)
-  const supported = raw.version === 1 && raw.positionUnit === 'mm' && raw.coordinateSystem === 'gcode'
+  const segmentLimit = complete ? MAX_COMPLETE_TOOLPATH_SEGMENTS : MAX_TOOLPATH_SEGMENTS
+  const layerLimit = complete ? MAX_COMPLETE_LAYERS : MAX_LAYERS
+  const supported = (raw.version === 1 || (raw.version === 2 && raw.mode === 'full')) && raw.positionUnit === 'mm' && raw.coordinateSystem === 'gcode'
   const layers: ToolpathLayer[] = []
   let limited = false
   let inspected = 0
-  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
+  let minX = Infinity, minY = Infinity, minZ = Infinity, maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity
   if (supported && Array.isArray(raw.layers)) {
-    limited = raw.layers.length > MAX_LAYERS
-    for (let i = 0; i < Math.min(raw.layers.length, MAX_LAYERS); i++) {
+    limited = raw.layers.length > layerLimit
+    for (let i = 0; i < Math.min(raw.layers.length, layerLimit); i++) {
       const layer = record(raw.layers[i])
       if (!coordinate(layer.z) || !Number.isSafeInteger(layer.index) || (layer.index as number) < 0 || !Array.isArray(layer.segments)) {
         limited = true
@@ -71,7 +83,7 @@ export function sanitizeToolpaths(value: unknown) {
       }
       const segments: ToolpathSegment[] = []
       for (let j = 0; j < layer.segments.length; j++) {
-        if (inspected >= MAX_TOOLPATH_SEGMENTS) { limited = true; break }
+        if (inspected >= segmentLimit) { limited = true; break }
         inspected++
         const segment = record(layer.segments[j])
         if (!point(segment.from) || !point(segment.to) || typeof segment.extrusion !== 'number' || !Number.isFinite(segment.extrusion)) {
@@ -79,26 +91,44 @@ export function sanitizeToolpaths(value: unknown) {
           continue
         }
         const safe: ToolpathSegment = {
-          from: [...segment.from], to: [...segment.to], extrusion: segment.extrusion, tool: 0,
+          from: [...segment.from], to: [...segment.to], extrusion: segment.extrusion,
+          tool: Number.isSafeInteger(segment.tool) && (segment.tool as number) >= 0 ? segment.tool as number : 0,
           feature: typeof segment.feature === 'string' ? segment.feature.slice(0, 80) : undefined,
+          object: typeof segment.object === 'string' ? segment.object.slice(0, 80) : undefined,
+          feedrateMmSec: coordinate(segment.feedrateMmSec) && segment.feedrateMmSec >= 0 ? segment.feedrateMmSec : undefined,
+          widthMm: coordinate(segment.widthMm) && segment.widthMm > 0 ? segment.widthMm : undefined,
+          heightMm: coordinate(segment.heightMm) && segment.heightMm > 0 ? segment.heightMm : undefined,
         }
         segments.push(safe)
         for (const p of [safe.from, safe.to]) {
           minX = Math.min(minX, p[0]); maxX = Math.max(maxX, p[0])
           minY = Math.min(minY, p[1]); maxY = Math.max(maxY, p[1])
+          minZ = Math.min(minZ, p[2]); maxZ = Math.max(maxZ, p[2])
         }
       }
+      if (layer.index !== i) limited = true
       layers.push({ index: layer.index as number, z: layer.z, segments })
     }
   }
   const warnings = Array.isArray(raw.warnings)
     ? raw.warnings.slice(0, 20).filter((warning): warning is string => typeof warning === 'string').map(warning => warning.slice(0, 500))
     : []
+  const coherentCounts = raw.returnedSegments === raw.totalSegments && raw.returnedLayers === raw.totalLayers &&
+    raw.totalSegments === inspected && raw.totalLayers === layers.length
+  // Legacy XY-only data cannot certify complete XYZ geometry, even if counters match.
+  const partial = raw.version === 1 || limited || raw.sourceComplete !== true || raw.truncated === true ||
+    (typeof raw.omittedSegments === 'number' && raw.omittedSegments > 0) ||
+    (raw.mode === 'full' && (raw.geometryComplete !== true || raw.omittedSegments !== 0 || !coherentCounts))
+  const completeGeometry = supported && !partial && raw.version === 2 && raw.mode === 'full' &&
+    raw.geometryComplete === true && coherentCounts
   return {
-    supported, layers, warnings,
-    partial: limited || raw.sourceComplete !== true || raw.truncated === true || (typeof raw.omittedSegments === 'number' && raw.omittedSegments > 0),
-    // Derive bounds from sanitized geometry, never trust remote bounds for SVG sizing.
-    bounds: Number.isFinite(minX) ? { minX, minY, width: Math.max(maxX - minX, 1), height: Math.max(maxY - minY, 1) } : null,
+    supported, layers, warnings, completeGeometry,
+    partial,
+    // Derive bounds from sanitized geometry, never trust remote bounds for sizing.
+    bounds: Number.isFinite(minX) ? {
+      minX, minY, minZ,
+      width: Math.max(maxX - minX, 1), height: Math.max(maxY - minY, 1), depth: Math.max(maxZ - minZ, 0.01),
+    } : null,
   }
 }
 

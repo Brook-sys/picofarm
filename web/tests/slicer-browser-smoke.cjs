@@ -21,7 +21,7 @@ const model = `solid smoke\nfacet normal 0 0 1\nouter loop\nvertex 0 0 0\nvertex
   const errors = [], calls = [], unexpected = [];
   page.on('pageerror', e => errors.push(e.message));
   page.on('dialog', d => d.accept());
-  let current = JSON.stringify({ name: 'smoke', layer_height: '0.2' }), hash = 'hash-1', conflict = false;
+  let current = JSON.stringify({ name: 'smoke', layer_height: '0.2' }), hash = 'hash-1', conflict = false, completePreview = false;
   let revisions = [{ id: 1, hash: 'snapshot-hash', json: current, created_at: stamp }];
   let jobs = ['queued', 'running', 'succeeded', 'failed', 'interrupted'].map((status, i) => ({ id: `job-${i}`, status, request: { stl_file_id: 'stl', display_name: `Smoke ${status}` }, idempotency_key: `key-${i}`, created_at: stamp, updated_at: stamp, ...(status === 'succeeded' ? { result: { gcode: { id: 'g0', display_name: 'Variant 0' } } } : {}) }));
   await page.route('**/*', async route => {
@@ -47,7 +47,18 @@ const model = `solid smoke\nfacet normal 0 0 1\nouter loop\nvertex 0 0 0\nvertex
       current = data.json; hash = 'hash-2'; revisions = [...revisions, { id: 2, hash, json: current, created_at: stamp }];
       return json({ current_json: current, current_hash: hash, revisions });
     }
-    if (p === '/api/slicer/preview') return json({ usesSupport: true, printTime: 3660, filamentUsedG: 12.5, filamentUsedMm: 4200, thumbnail: png, quantity: req.postDataJSON().quantity, toolpaths: { version: 1, positionUnit: 'mm', coordinateSystem: 'gcode', sourceComplete: true, truncated: true, omittedSegments: 10, warnings: ['Synthetic parser warning'], layers: [0, 1].map(index => ({ index, z: 0.2 + index * 0.2, segments: [{ from: [10, 10, 0.2], to: [20, 20, 0.2], extrusion: 1, feature: index ? 'Support' : 'Brim', tool: 0 }] })) } });
+    if (p === '/api/slicer/preview') {
+      const layers = [0, 1].map(index => ({ index, z: 0.2 + index * 0.2, segments: [
+        { from: [10, 10 + index, 0.2 + index * 0.2], to: [20, 10 + index, 0.2 + index * 0.2], extrusion: 1, feature: 'Outer wall', widthMm: 0.45, heightMm: 0.2, tool: 0 },
+        { from: [10, 20 + index, 0.2 + index * 0.2], to: [20, 20 + index, 0.2 + index * 0.2], extrusion: 1, feature: 'Support interface', widthMm: 0.45, heightMm: 0.2, tool: 0 },
+        { from: [10, 30 + index, 0.2 + index * 0.2], to: [20, 30 + index, 0.2 + index * 0.2], extrusion: 1, feature: 'Bridge', widthMm: 0.45, heightMm: 0.2, tool: 0 },
+        { from: [10, 40 + index, 0.2 + index * 0.2], to: [20, 40 + index, 0.2 + index * 0.2], extrusion: 1, feature: 'Sparse infill', widthMm: 0.45, heightMm: 0.2, tool: 0 },
+      ] }));
+      const toolpaths = completePreview
+        ? { version: 2, mode: 'full', geometryComplete: true, positionUnit: 'mm', coordinateSystem: 'gcode', sourceComplete: true, truncated: false, totalLayers: 2, returnedLayers: 2, totalSegments: 8, returnedSegments: 8, omittedSegments: 0, warnings: [], layers }
+        : { version: 1, positionUnit: 'mm', coordinateSystem: 'gcode', sourceComplete: true, truncated: true, omittedSegments: 10, warnings: ['Synthetic parser warning'], layers: layers.map(layer => ({ ...layer, segments: layer.segments.slice(0, 1) })) };
+      return json({ usesSupport: true, printTime: 3660, filamentUsedG: 12.5, filamentUsedMm: 4200, thumbnail: png, quantity: req.postDataJSON().quantity, toolpaths });
+    }
     if (p === '/api/slicer/jobs' && method === 'GET') return json(jobs);
     if (p.endsWith('/cancel') && method === 'POST') { jobs[0].status = 'cancelled'; return json(jobs[0]); }
     if (p === '/api/slicer/jobs/job-3' && method === 'DELETE') { jobs = jobs.filter(j => j.id !== 'job-3'); return json({}); }
@@ -107,7 +118,40 @@ const model = `solid smoke\nfacet normal 0 0 1\nouter loop\nvertex 0 0 0\nvertex
     await page.getByRole('button', { name: 'Generate preview', exact: true }).click();
     await visible(page.getByText('Preview generated for the submitted parameters.', { exact: true }));
     assert.equal(await page.getByRole('status').filter({ hasText: 'Preview out of date' }).count(), 0);
+    completePreview = true;
+    await page.getByRole('button', { name: 'Generate preview', exact: true }).click();
+    await visible(page.getByText('Preview generated for the submitted parameters.', { exact: true }));
+    await visible(dialog.getByRole('region', { name: '3D sliced toolpath preview' }));
+    const canvas3d = dialog.locator('canvas[aria-label="3D sliced toolpath preview"]');
+    if (!webgl && process.env.ALLOW_NO_WEBGL === '1') {
+      await visible(dialog.getByRole('alert').filter({ hasText: '3D preview requires WebGL' }));
+      await dialog.getByRole('alert').getByRole('button', { name: 'Use 2D view', exact: true }).click();
+      await visible(dialog.locator('svg[role="img"]'));
+      console.log('PASS explicit no-WebGL toolpath fallback to 2D');
+    } else {
+    await canvas3d.waitFor({ state: 'visible' });
+    const rendered = expected => page.waitForFunction(value => document.querySelector('canvas[aria-label="3D sliced toolpath preview"]')?.getAttribute('data-rendered-segments') === value, String(expected));
+    await rendered(8);
+    await dialog.getByRole('checkbox', { name: 'Support & interface', exact: true }).uncheck();
+    await rendered(6);
+    await dialog.getByRole('checkbox', { name: 'Support & interface', exact: true }).check();
+    const layer3d = dialog.getByRole('slider', { name: 'Show layers through' });
+    await layer3d.focus(); await page.keyboard.press('Home');
+    await rendered(4);
+    await page.keyboard.press('End');
+    await rendered(8);
+    for (const name of ['Top', 'Front', 'Side', 'Reset']) await dialog.getByRole('button', { name, exact: true }).click();
+    await dialog.getByRole('button', { name: 'Use 2D view', exact: true }).click();
+    await visible(dialog.locator('svg[role="img"]'));
+    await dialog.getByRole('button', { name: 'Use 3D view', exact: true }).click();
+    await rendered(8);
+    console.log('PASS complete v2 3D toolpaths, physical dimensions, category filters, layer cut, cameras and 2D fallback');
+    }
     await page.setViewportSize({ width: 390, height: 844 });
+    await page.waitForFunction(() => {
+      const element = document.querySelector('[role="dialog"]');
+      return element && element.scrollWidth <= element.clientWidth + 1;
+    });
     assert.equal(await dialog.evaluate(element => element.scrollWidth <= element.clientWidth + 1), true, 'mobile dialog has no horizontal overflow');
     await dialog.getByRole('button', { name: 'Close', exact: true }).focus();
     await page.keyboard.press('Shift+Tab');

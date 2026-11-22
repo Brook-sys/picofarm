@@ -684,7 +684,7 @@ function SliceSTLModal({ file, onClose, onDone }: { file: STLLibraryFile; onClos
         {message && <div className="mb-4 rounded-lg border border-surface-800 bg-surface-900/70 p-3 text-sm text-surface-300">{message}</div>}
         {previewIsStale && <div role="status" className="mb-4 rounded-lg border border-amber-500/40 p-3 text-sm text-amber-300">{t("Preview out of date — parameters changed. The image and estimates below are not valid for the current configuration. Generate another preview.")}</div>}
         {busy && <p className="mb-3 text-xs text-surface-400">{t("Closing ignores the response in this window but does not cancel server work.")}</p>}
-        <div className="grid gap-5 md:grid-cols-[1fr_340px]">
+        <div className="grid min-w-0 grid-cols-1 gap-5 md:grid-cols-[minmax(0,1fr)_340px]">
           <div className="space-y-4">
             <label className="block"><span className="text-xs text-surface-500 mb-1 block">{t("Printer profile")}</span><select className="input" value={form.printer} onChange={e => setForm({ ...form, printer: e.target.value })}>{profiles.printers.map(p => <option key={String(p.name)} value={String(p.name)}>{String(p.name)}</option>)}</select></label>
             <label className="block"><span className="text-xs text-surface-500 mb-1 block">{t("Preset profile")}</span><select className="input" value={form.preset} onChange={e => setForm({ ...form, preset: e.target.value })}>{profiles.presets.map(p => <option key={String(p.name)} value={String(p.name)}>{String(p.name)}</option>)}</select></label>

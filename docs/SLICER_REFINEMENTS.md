@@ -1,8 +1,8 @@
 # Slicer refinements and validation boundaries
 
-The refinements below describe local implementation, not deployment or physical printing. Strict quantity/rotation and upstream toolpath-preview integration is implemented locally in PicoFarm; see [API_CONTRACTS.md](API_CONTRACTS.md#strict-geometry-and-toolpath-preview--integration-in-progress). [SLICING_FEASIBILITY.md](SLICING_FEASIBILITY.md) preserves the earlier investigation; its snapshot findings are not newly verified current behavior.
+The refinements below describe local implementation, not deployment or physical printing. Strict quantity/rotation and full 3D upstream toolpath preview are implemented locally in PicoFarm; see [API_CONTRACTS.md](API_CONTRACTS.md#strict-geometry-and-toolpath-preview--local-implementation). [SLICING_FEASIBILITY.md](SLICING_FEASIBILITY.md) preserves the earlier investigation; its snapshot findings are not newly verified current behavior.
 
-Local validation: Go tests (`go test ./...`), targeted service/API race tests, 64 frontend tests and production frontend build passed. Lint reports zero errors and the existing 29 warnings. Chromium smoke with mocked APIs passed quantity constraints, explicit-zero rotation, SVG layer navigation, partial warnings, stale previews, 390px dialog width, keyboard focus/Escape and existing job/editor flows (34 intercepted requests, no page errors). WebGL2 was unavailable: only the source-STL viewer error fallback was checked. Real end-to-end PicoFarm→Orca slicing, browser peak memory, screen-reader use and sustained load were not validated. The main frontend chunk remains large (~1126 kB minified / 261 kB gzip).
+Local validation: the full Go/frontend test helper, targeted Go service/API race tests, `go vet ./...`, 71 frontend tests, production frontend build and backend health check passed. Lint passed with zero errors and the existing 29 warnings. Synthetic Chromium smoke passed both WebGL2/SwiftShader rendering and the explicit no-WebGL 2D fallback, including 390px dialog width, filters, layer cuts, camera controls and existing dialog/job/editor flows. Three real upstream payloads also passed the isolated browser smoke described below. These are software-rendered observations, not physical-GPU or mobile-device validation. Browser process/GPU peak memory, screen-reader use and sustained/concurrent load remain unvalidated. The main frontend chunk remains large (about 1,140 kB minified / 266 kB gzip).
 
 ## Strict integration acceptance gates
 
@@ -11,9 +11,9 @@ These are required checks, not recorded passing results. Upstream live validatio
 - Quantity defaults to one; accept only integers `1`–`512`. Cover omitted/explicit one, `512`, zero, negative, fractional and oversized values. Multiple instances require arrangement and remain on one plate; surface no-fit failure without silent quantity reduction or plate splitting.
 - Preserve optional finite `rotate`, `rotate_x`, `rotate_y`, including explicit zero, through preview, synchronous slice and queued slice. Any supplied angle disables UI auto-orient; reject contradictory `orient: true`. Verify upstream `rotateX`/`rotateY` names and omit unset values.
 - Keep preview/slice geometry and overrides identical. Changing quantity, positioning, model or profiles invalidates stale preview results; an older response must not replace the active configuration's preview.
-- Render upstream layer segments as SVG 2D, not inferred STL placements. Exercise layer navigation, empty/null geometry, warnings, `sourceComplete: false`, `truncated: true` and omitted-segment counts. Partial results must remain labeled partial; thumbnail is not a substitute for unavailable toolpaths.
+- Render complete upstream v2/full geometry in 3D, not inferred STL placements. Require `geometryComplete: true`, complete source, no truncation/omissions and coherent actual/declared counts within 250,000 segments / 4,096 layers. Exercise rejection of malformed/over-budget/incoherent payloads and upstream `422` overflow without partial geometry. Legacy v1 remains an explicitly partial SVG fallback; test the 20,000-segment per-layer 2D display warning. Thumbnail is not a substitute for unavailable toolpaths.
 - Keep thumbnail and advanced positioning separately collapsed by default; expanding/collapsing must not change settings or silently trigger slicing. Check labels, keyboard use and narrow-screen overflow in both supported languages.
-- Test typed proxy response preservation, explicit-zero forwarding, upstream failure feedback and queue persistence with controlled HTTP fixtures. Measure large bounded previews and UI responsiveness separately; no resource/load benchmark is established here.
+- Test typed proxy response preservation, preview-only `toolpathMode=full` forwarding (slice unchanged), explicit-zero forwarding, upstream failure feedback and queue persistence with controlled HTTP fixtures. Measure large bounded previews and UI responsiveness separately; the sequential upstream measurements below are not a concurrency/load certification.
 - Use isolated compute/import fixtures only. Preview must not create jobs, consume inventory or send hardware commands; slicing imports only and must not start printing.
 
 ## API contracts
@@ -36,6 +36,34 @@ The queue can send models to the configured slicer and import files after browse
 
 Viewer budgets (32 MiB / 500,000 triangles) are preview limits, not upload hardening. STL has no unit; mm is explicitly assumed. Parsing remains synchronous; large ASCII inputs may stall the main thread. Render is on demand with cleanup and canonical views.
 
+## Full toolpath rendering and measurements
+
+The frontend and backend share a 250,000-segment / 4,096-layer ceiling. Full-mode backend overflow fails with `422`, not a sampled success. Only complete, count-coherent v2/full data enables 3D. v1 remains an explicitly partial SVG fallback, with a separate 20,000-segment per-layer display cap and warning.
+
+The renderer uses `InstancedMesh` segment boxes: 64 bytes per matrix and 12 triangles per segment, grouped into up to six feature groups. At the segment ceiling, matrices alone require 16,000,000 bytes and geometry represents 3,000,000 triangles; JSON, parsed objects, temporary matrices and GPU/driver overhead are additional. Missing width/height uses labeled estimates. The source thumbnail is separate from the sliced geometry. Sanitization and matrix construction are synchronous main-thread work, so bounded geometry can still stall the UI.
+
+Sequential fresh-process local Orca 2.5.0 HTTP measurements at the final cap:
+
+| Fixture | Segments / layers | JSON bytes | HTTP elapsed | API peak RSS (KiB) |
+| --- | --- | --- | --- | --- |
+| Single instance | 76,160 / 240 | 14,156,412 | 4.16 s | 149,728 |
+| Three instances, explicit zero rotation | 228,444 / 240 | 42,253,033 | 8.16 s | 259,572 |
+| Single instance, multi-shell support/brim | 79,718 / 240 | 14,801,567 | 4.86 s | 184,356 |
+
+All three returned v2/full complete geometry with coherent counts and no omitted segments. RSS is the **upstream Go API process VmHWM only**, not Orca CLI, whole container, PicoFarm proxy or browser peak memory. HTTP elapsed includes slicing and transport; it is not renderer latency. A synthetic 250,000-segment parser/JSON-encoder run produced 38,746,814 JSON bytes in 1.02 s, with 432,486,688 cumulative allocated bytes and 191,068 KiB process peak RSS. These single-run observations do not establish safe concurrent capacity. Earlier one-million-segment experiments used a superseded temporary ceiling and are not current supported limits.
+
+JSON transport remains costly; the PicoFarm proxy decode has no response-byte bound and there is no global preview concurrency guard. The geometry ceilings are not an end-to-end memory bound. Physical GPUs and real mobile devices are not yet proven.
+
+The isolated `web/tests/slicer-real-preview-smoke.cjs` accepts an operator-supplied `REAL_PREVIEW_FILE`; never commit private payloads. Three real responses passed in Chromium with SwiftShader: every source segment rendered, support filters removed exactly the expected counts, layer cuts restored, 2D/3D switching worked, actual WebGL context loss showed an actionable fallback, and close detached/lost all created contexts. No page errors or unexpected API writes were observed.
+
+| Real response | Time to rendered | Observed rendered JS heap |
+| --- | --- | --- |
+| Single instance, 76,160 segments | 2.83 s | 59.9 MiB |
+| Three instances, 228,444 segments | 6.78 s | 169.4 MiB |
+| Multi-shell support/brim, 79,718 segments | 2.84 s | 63.1 MiB |
+
+Time includes click, mocked response delivery/JSON parse, geometry generation/upload and two animation frames; it excludes upstream slicing. These are single-run observations, not thresholds. `performance.memory` measures JS heap, not process/GPU memory. Heap remained higher immediately after close without forced garbage collection; context cleanup passing does not establish absence of memory leaks. These browser runs replay actual upstream responses through mocked PicoFarm APIs; a live end-to-end proxy benchmark is still absent.
+
 ## Regression gates
 
 | Workflow | Automated evidence |
@@ -46,6 +74,6 @@ Viewer budgets (32 MiB / 500,000 triangles) are preview limits, not upload harde
 | Profiles | Service/repository/handler/schema tests: validation, conflict, restore, failed upload, quota, fresh/upgrade DB; `slicer-settings-editor.test.mjs`: actual handlers without DOM, no autosave and draft preservation |
 | Jobs | `TestSlicerJobs*`: queue/concurrency, idempotency, cancel refusal, restart interruption, persistence failure, redaction and terminal deletion; settings isolation and frontend retry/polling tests |
 
-`web/tests/slicer-browser-smoke.cjs` also exercises comparison, stale preview, queued cancellation/terminal removal and editor save/conflict in real Chromium with mocked APIs. Configure `PLAYWRIGHT_MODULE`, `CHROMIUM_EXECUTABLE` and `BASE_URL` for an isolated server. It requires WebGL by default; `ALLOW_NO_WEBGL=1` explicitly skips geometry/camera assertions if unavailable, checking the error fallback instead. In the local validation WebGL2 was unavailable; dimensions/cameras were not browser-validated.
+`web/tests/slicer-browser-smoke.cjs` also exercises comparison, stale preview, queued cancellation/terminal removal and editor save/conflict in real Chromium with mocked APIs. Configure `PLAYWRIGHT_MODULE`, `CHROMIUM_EXECUTABLE` and `BASE_URL` for an isolated server. It requires WebGL by default; `ALLOW_NO_WEBGL=1` explicitly skips geometry/camera assertions if unavailable, checking the error fallback instead. The latest synthetic full smoke passed with WebGL2 via SwiftShader, including the mobile-width grid correction; it does not establish real-device GPU behavior or real-payload browser performance.
 
-Tests use temporary databases, synthetic models and controlled HTTP fixtures. Real Orca compatibility, physical output, RSS/disk/load benchmarks and device-specific WebGL behavior are not established by these tests. Cache changes in the companion slicer repository were exercised with a synthetic CLI. The frontend still emits a large-chunk warning; route-level optimization remains pending.
+Tests use temporary databases, synthetic models and controlled HTTP fixtures. The separate upstream HTTP measurements above do not prove PicoFarm end-to-end compatibility, physical output, browser memory, concurrent load or device-specific WebGL behavior. The real-payload replay results above do not certify sustained load or leak-free behavior. Cache changes in the companion slicer repository were exercised with a synthetic CLI. The frontend still emits a large-chunk warning; route-level optimization remains pending.

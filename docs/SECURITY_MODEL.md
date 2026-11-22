@@ -2,7 +2,7 @@
 
 This document records PicoFarm's current security assumptions and the hardening work needed before broader self-hosted exposure.
 
-Slicer snapshots, queue isolation and validation limits: [SLICER_REFINEMENTS.md](SLICER_REFINEMENTS.md). Proposed security/resource gates for future slicing multiplication and browser toolpath preview: [SLICING_FEASIBILITY.md](SLICING_FEASIBILITY.md#8-security-and-operational-gates); these gates are not implemented controls.
+Slicer snapshots, queue isolation and current full 3D toolpath limits: [SLICER_REFINEMENTS.md](SLICER_REFINEMENTS.md). Historical proposed security/resource gates: [SLICING_FEASIBILITY.md](SLICING_FEASIBILITY.md#8-security-and-operational-gates); do not mistake historical proposals for implemented controls.
 
 Printer connection attempts are resource-bounded with configurable cadence and concurrency; see [PRINTER_RECONNECTION.md](PRINTER_RECONNECTION.md). Recovery is communication-only, not authorization to replay physical commands or proof that a power-interrupted print completed.
 
@@ -99,6 +99,16 @@ File-related changes should verify:
 - large files do not exhaust memory unexpectedly;
 - delete operations cannot remove unrelated files;
 - temp files are cleaned up.
+
+## Slicer preview resource boundary
+
+Full preview requests add `toolpathMode=full` upstream; slice requests are unchanged. The upstream backend caps full geometry at 250,000 segments / 4,096 layers and returns `422` without partial geometry on overflow. The frontend independently enforces those ceilings and enables 3D only for complete v2/full geometry with coherent counts. Legacy v1 is explicitly partial SVG only, with a 20,000-segment per-layer display cap/warning. These are geometry/display controls, **not an end-to-end memory or denial-of-service bound**.
+
+- JSON transport is expensive and PicoFarm's proxy decode currently has no response-byte limit. A malicious or incompatible upstream can consume memory before frontend validation. There is no global preview concurrency guard; the queued slice worker does not serialize synchronous preview callers.
+- Instanced rendering needs 64 bytes per segment matrix, 12 triangles per segment and up to six feature groups. At the ceiling, matrix storage alone is 16 MB, excluding JSON, object copies and GPU/driver overhead. Sanitization and matrix construction run synchronously on the browser main thread and can cause stalls.
+- Missing bead dimensions are displayed as estimates; a complete toolpath is not a physical safety certification. The source thumbnail is separate and must not substitute for missing sliced geometry.
+- Sequential upstream API peak-RSS measurements exclude Orca CLI/container, PicoFarm and browser memory. Synthetic Chromium WebGL2/SwiftShader smoke passed; three real-payload browser replays passed, but mobile/physical GPU operation and concurrent capacity remain unproven.
+- Preview remains compute-only; slice imports G-code only. Neither authorizes job creation, inventory use or hardware commands. Keep the upstream service private and apply access controls at the PicoFarm boundary.
 
 ## Backups and restore considerations
 

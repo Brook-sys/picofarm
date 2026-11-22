@@ -11,6 +11,8 @@ import (
 // Keep these wire types aligned with slicer-api/internal/slicer/toolpath.go.
 type SlicerToolpathPreview struct {
 	Version          int                   `json:"version"`
+	Mode             string                `json:"mode,omitempty"`
+	GeometryComplete bool                  `json:"geometryComplete,omitempty"`
 	PositionUnit     string                `json:"positionUnit"`
 	ExtrusionUnit    string                `json:"extrusionUnit"`
 	FeedrateUnit     string                `json:"feedrateUnit"`
@@ -57,6 +59,8 @@ type SlicerToolpathSegment struct {
 	To        [3]float64 `json:"to"`
 	Extrusion float64    `json:"extrusion"`
 	Feedrate  float64    `json:"feedrateMmSec,omitempty"`
+	Width     *float64   `json:"widthMm"`
+	Height    *float64   `json:"heightMm"`
 	Feature   string     `json:"feature,omitempty"`
 	Object    string     `json:"object,omitempty"`
 	Tool      int        `json:"tool"`

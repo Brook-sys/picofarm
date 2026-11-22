@@ -729,6 +729,7 @@ func (s *SlicerService) PreviewSTL(ctx context.Context, req SlicerPreviewRequest
 	addFormField(writer, "exportType", "gcode")
 	addFormField(writer, "resolveProfiles", "true")
 	addFormField(writer, "sanitizeProfiles", "true")
+	addFormField(writer, "toolpathMode", "full")
 	writeSlicerOptions(writer, req.Arrange, req.Orient, req.EnableSupport, req.BrimType, req.PrintSequenceByObject, req.MulticolorOnePlate)
 	writeSlicerGeometry(writer, quantity, req.Rotate, req.RotateX, req.RotateY)
 	if len(req.Overrides) > 0 {

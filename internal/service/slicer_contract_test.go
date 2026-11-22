@@ -91,7 +91,7 @@ func TestSlicerPreviewAndSliceForwardSameOptions(t *testing.T) {
 		}
 		if r.URL.Path == "/slice/preview" {
 			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte(`{"usesSupport":false,"printTime":120,"filamentUsedG":2,"filamentUsedMm":700,"thumbnail":"","quantity":3,"toolpaths":{"version":1,"sourceComplete":true,"warnings":["bounded"],"limits":{"segments":20000},"bounds":{"min":[0,1,2],"max":[3,4,5]},"layers":[{"index":0,"z":0.2,"segments":[{"from":[0,0,0.2],"to":[1,2,0.2],"extrusion":0.3,"feedrateMmSec":20,"feature":"support","object":"copy 1","tool":2}]}]}}`))
+			_, _ = w.Write([]byte(`{"usesSupport":false,"printTime":120,"filamentUsedG":2,"filamentUsedMm":700,"thumbnail":"","quantity":3,"toolpaths":{"version":2,"mode":"full","geometryComplete":true,"sourceComplete":true,"warnings":["bounded"],"limits":{"segments":250000},"bounds":{"min":[0,1,2],"max":[3,4,5]},"layers":[{"index":0,"z":0.2,"segments":[{"from":[0,0,0.2],"to":[1,2,0.2],"extrusion":0.3,"feedrateMmSec":20,"widthMm":0.42,"heightMm":null,"feature":"support","object":"copy 1","tool":2}]}]}}`))
 		} else {
 			// Stop before importing an artifact: this test exercises the outbound contract.
 			http.Error(w, "synthetic rejection", http.StatusUnprocessableEntity)
@@ -108,8 +108,15 @@ func TestSlicerPreviewAndSliceForwardSameOptions(t *testing.T) {
 	if preview.PrintTime != 120 {
 		t.Fatalf("preview = %+v", preview)
 	}
-	if preview.Quantity != 3 || preview.Toolpaths == nil || preview.Toolpaths.Layers[0].Segments[0].Object != "copy 1" || preview.Toolpaths.Bounds.Max[2] != 5 {
+	if preview.Quantity != 3 || preview.Toolpaths == nil || preview.Toolpaths.Layers[0].Segments[0].Object != "copy 1" || preview.Toolpaths.Bounds.Max[2] != 5 || preview.Toolpaths.Layers[0].Segments[0].Width == nil || *preview.Toolpaths.Layers[0].Segments[0].Width != 0.42 || preview.Toolpaths.Layers[0].Segments[0].Height != nil {
 		t.Fatalf("preview geometry lost: %+v", preview)
+	}
+	encodedPreview, err := json.Marshal(preview)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(encodedPreview), `"heightMm":null`) || !strings.Contains(string(encodedPreview), `"geometryComplete":true`) || preview.Toolpaths.Version != 2 || preview.Toolpaths.Mode != "full" {
+		t.Fatalf("full preview metadata lost in proxy JSON: %s", encodedPreview)
 	}
 	_, err = s.SliceSTL(ctx, SlicerSliceRequest{Quantity: 3, Arrange: true, Rotate: &angle, RotateX: &zero, STLFileID: stl.ID, Printer: "machine", Preset: "process", Filament: "filament", BrimType: true, PrintSequenceByObject: true, Overrides: overrides})
 	if err == nil || !strings.Contains(err.Error(), "422") {
@@ -124,8 +131,13 @@ func TestSlicerPreviewAndSliceForwardSameOptions(t *testing.T) {
 	if _, exists := sliceForm["rotateY"]; exists {
 		t.Error("absent rotation must stay absent")
 	}
-	if !reflect.DeepEqual(forms["/slice/preview"], sliceForm) {
-		t.Errorf("preview/slice differ: %v / %v", forms["/slice/preview"], sliceForm)
+	previewForm := forms["/slice/preview"]
+	if got := previewForm["toolpathMode"]; !reflect.DeepEqual(got, []string{"full"}) {
+		t.Errorf("toolpathMode = %v, want full", got)
+	}
+	delete(previewForm, "toolpathMode")
+	if !reflect.DeepEqual(previewForm, sliceForm) {
+		t.Errorf("preview/slice differ: %v / %v", previewForm, sliceForm)
 	}
 	var decoded map[string]map[string]any
 	if err := json.Unmarshal([]byte(sliceForm["overrides"][0]), &decoded); err != nil {

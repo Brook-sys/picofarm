@@ -23,7 +23,7 @@ This directory contains the operational documentation for PicoFarm. Prefer updat
 - [Regression matrix](REGRESSION_MATRIX.md) — critical user flows to validate manually or automate as tests.
 - [Improvements roadmap](IMPROVEMENTS_ROADMAP.md) — selected proposals and status of implemented local increments.
 - [Slicer refinements](SLICER_REFINEMENTS.md) — editor contracts, snapshots, viewer budgets, test evidence and limitations.
-- [Slicing and toolpath feasibility](SLICING_FEASIBILITY.md) — sourced investigation and POC gates for STL multiplication, arrangement, spacing and existing G-code preview; no implementation or renderer selected.
+- [Slicing and toolpath feasibility](SLICING_FEASIBILITY.md) — historical sourced investigation and POC gates, with a current-status note linking the locally implemented full 3D toolpath preview; historical proposals are not current contracts.
 - [Background slicer jobs](SLICER_JOBS.md) — bounded local queue, idempotency, recovery and cancellation boundaries.
 - [Printer reconnection](PRINTER_RECONNECTION.md) — configurable attempt interval/concurrency, deadlines and power-cycle recovery limits.
 - [Security model](SECURITY_MODEL.md) — current assumptions and hardening work for local/self-hosted operation.
