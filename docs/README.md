@@ -17,7 +17,8 @@ This directory contains the operational documentation for PicoFarm. Prefer updat
 - [Architecture](ARCHITECTURE.md) — backend, frontend, database, realtime, integrations, and where to make common changes.
 - [API and data contracts](API_CONTRACTS.md) — HTTP/JSON conventions, route groups, shared enum values, and Go/TypeScript synchronization rules.
 - [Sales channels architecture](SALES_CHANNELS.md) — modular provider/adapters plan for Etsy, Squarespace, Shopify, and future commerce channels.
-- [Quotation and costing decisions](QUOTING.md) — approved FDM pricing scope, linked price fields, project/batch rules, customer proposal scope and implementation gates; planned, not implemented behavior.
+- [Quotation and costing decisions](QUOTING.md) — approved FDM pricing scope, linked price fields, project/batch rules, customer proposal scope and implementation gates.
+- [Pricing calculator](PRICING_CALCULATOR.md) — calculator-first delivery boundary, numerical reference cases, validation gates and residual limitations; proposal/PDF integration is a subsequent increment.
 - [Interface languages](I18N.md) — en/pt-BR catalogs, per-device preference, currency independence, adding languages and validation.
 - [UX and accessibility review](UX_REVIEW.md) — heuristic findings, glossary/microcopy standard and the manual validation plan (proposals, not completed research).
 - [Regression matrix](REGRESSION_MATRIX.md) — critical user flows to validate manually or automate as tests.

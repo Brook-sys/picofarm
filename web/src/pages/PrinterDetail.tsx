@@ -11,6 +11,7 @@ import { cn, getStatusBadge, formatDuration, PRINT_JOB_STATUS_LABELS } from '../
 import { useCurrency } from '../hooks/useCurrency'
 import { ExpandableJobEvents } from '../components/JobEventTimeline'
 import AutoDispatchSettings from '../components/AutoDispatchSettings'
+import PrinterPricingSettings from '../components/PrinterPricingSettings'
 import type { PrintJob, PrinterUtilization, PrinterROI, PrinterHealth, PrinterPreparationAnalytics, PrinterMacro, QueueItem } from '../types'
 
 const SPEED_LABELS: Record<number, string> = {
@@ -443,6 +444,7 @@ export default function PrinterDetail() {
         <PrinterCostSetting printerId={printer.id} costPerHourCents={printer.cost_per_hour_cents} printerModel={printer.model} />
 
         {/* AUTO-DISPATCH SETTINGS */}
+        <PrinterPricingSettings key={printer.id} printer={printer} />
         <AutoDispatchSettings printerId={printer.id} />
 
         {/* CONTROLS */}

@@ -172,6 +172,9 @@ func NewRouterWithOptions(services *service.Services, hub *realtime.Hub, opts Ro
 		}
 		r.Use(ApiTokenAuth(opts.ApiToken, opts.RequireApiToken, tokenValidator))
 
+		// Stateless calculator; deliberately independent of stored quote formulas.
+		r.Post("/pricing/calculate", CalculatePricing)
+
 		// Provider-neutral sales-channel endpoints.
 		if services.SalesChannels != nil {
 			salesChannelHandler := NewSalesChannelHandler(services.SalesChannels, services.SalesChannelData, services.Orders)

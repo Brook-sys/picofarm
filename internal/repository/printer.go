@@ -30,11 +30,15 @@ func (r *PrinterRepository) Create(ctx context.Context, p *model.Printer) error 
 	}
 
 	buildVolumeJSON, _ := json.Marshal(p.BuildVolume)
+	pricingConfigJSON, err := marshalPrinterPricing(p.PricingConfig)
+	if err != nil {
+		return err
+	}
 
-	_, err := r.db.ExecContext(ctx, `
-		INSERT INTO printers (id, name, model, manufacturer, connection_type, connection_uri, fluidd_url, api_key, serial_number, status, build_volume, nozzle_diameter, location, notes, min_material_percent, cost_per_hour_cents, purchase_price_cents, maintenance_mode, restrict_gcode_model, default_print_folder, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, p.ID, p.Name, p.Model, p.Manufacturer, p.ConnectionType, p.ConnectionURI, p.FluiddURL, p.APIKey, p.SerialNumber, p.Status, buildVolumeJSON, p.NozzleDiameter, p.Location, p.Notes, p.MinMaterialPercent, p.CostPerHourCents, p.PurchasePriceCents, p.MaintenanceMode, p.RestrictGCodeModel, p.DefaultPrintFolder, p.CreatedAt, p.UpdatedAt)
+	_, err = r.db.ExecContext(ctx, `
+		INSERT INTO printers (id, name, model, manufacturer, connection_type, connection_uri, fluidd_url, api_key, serial_number, status, build_volume, nozzle_diameter, location, notes, min_material_percent, cost_per_hour_cents, purchase_price_cents, pricing_config, maintenance_mode, restrict_gcode_model, default_print_folder, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, p.ID, p.Name, p.Model, p.Manufacturer, p.ConnectionType, p.ConnectionURI, p.FluiddURL, p.APIKey, p.SerialNumber, p.Status, buildVolumeJSON, p.NozzleDiameter, p.Location, p.Notes, p.MinMaterialPercent, p.CostPerHourCents, p.PurchasePriceCents, pricingConfigJSON, p.MaintenanceMode, p.RestrictGCodeModel, p.DefaultPrintFolder, p.CreatedAt, p.UpdatedAt)
 	return err
 }
 
@@ -42,10 +46,11 @@ func (r *PrinterRepository) Create(ctx context.Context, p *model.Printer) error 
 func (r *PrinterRepository) GetByID(ctx context.Context, id uuid.UUID) (*model.Printer, error) {
 	var p model.Printer
 	var buildVolumeJSON []byte
+	var pricingConfigJSON sql.NullString
 	err := scanRow(r.db.QueryRowContext(ctx, `
-		SELECT id, name, model, manufacturer, connection_type, connection_uri, fluidd_url, api_key, serial_number, status, build_volume, nozzle_diameter, location, notes, min_material_percent, cost_per_hour_cents, purchase_price_cents, maintenance_mode, restrict_gcode_model, default_print_folder, created_at, updated_at
+		SELECT id, name, model, manufacturer, connection_type, connection_uri, fluidd_url, api_key, serial_number, status, build_volume, nozzle_diameter, location, notes, min_material_percent, cost_per_hour_cents, purchase_price_cents, pricing_config, maintenance_mode, restrict_gcode_model, default_print_folder, created_at, updated_at
 		FROM printers WHERE id = ?
-	`, id), &p.ID, &p.Name, &p.Model, &p.Manufacturer, &p.ConnectionType, &p.ConnectionURI, &p.FluiddURL, &p.APIKey, &p.SerialNumber, &p.Status, &buildVolumeJSON, &p.NozzleDiameter, &p.Location, &p.Notes, &p.MinMaterialPercent, &p.CostPerHourCents, &p.PurchasePriceCents, &p.MaintenanceMode, &p.RestrictGCodeModel, &p.DefaultPrintFolder, &p.CreatedAt, &p.UpdatedAt)
+	`, id), &p.ID, &p.Name, &p.Model, &p.Manufacturer, &p.ConnectionType, &p.ConnectionURI, &p.FluiddURL, &p.APIKey, &p.SerialNumber, &p.Status, &buildVolumeJSON, &p.NozzleDiameter, &p.Location, &p.Notes, &p.MinMaterialPercent, &p.CostPerHourCents, &p.PurchasePriceCents, &pricingConfigJSON, &p.MaintenanceMode, &p.RestrictGCodeModel, &p.DefaultPrintFolder, &p.CreatedAt, &p.UpdatedAt)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -55,13 +60,16 @@ func (r *PrinterRepository) GetByID(ctx context.Context, id uuid.UUID) (*model.P
 	if buildVolumeJSON != nil {
 		json.Unmarshal(buildVolumeJSON, &p.BuildVolume)
 	}
+	if err := unmarshalPrinterPricing(pricingConfigJSON, &p); err != nil {
+		return nil, err
+	}
 	return &p, nil
 }
 
 // List retrieves all printers.
 func (r *PrinterRepository) List(ctx context.Context) ([]model.Printer, error) {
 	rows, err := r.db.QueryContext(ctx, `
-		SELECT id, name, model, manufacturer, connection_type, connection_uri, fluidd_url, api_key, serial_number, status, build_volume, nozzle_diameter, location, notes, min_material_percent, cost_per_hour_cents, purchase_price_cents, maintenance_mode, restrict_gcode_model, default_print_folder, created_at, updated_at
+		SELECT id, name, model, manufacturer, connection_type, connection_uri, fluidd_url, api_key, serial_number, status, build_volume, nozzle_diameter, location, notes, min_material_percent, cost_per_hour_cents, purchase_price_cents, pricing_config, maintenance_mode, restrict_gcode_model, default_print_folder, created_at, updated_at
 		FROM printers ORDER BY name ASC
 	`)
 	if err != nil {
@@ -73,11 +81,15 @@ func (r *PrinterRepository) List(ctx context.Context) ([]model.Printer, error) {
 	for rows.Next() {
 		var p model.Printer
 		var buildVolumeJSON []byte
-		if err := scanRow(rows, &p.ID, &p.Name, &p.Model, &p.Manufacturer, &p.ConnectionType, &p.ConnectionURI, &p.FluiddURL, &p.APIKey, &p.SerialNumber, &p.Status, &buildVolumeJSON, &p.NozzleDiameter, &p.Location, &p.Notes, &p.MinMaterialPercent, &p.CostPerHourCents, &p.PurchasePriceCents, &p.MaintenanceMode, &p.RestrictGCodeModel, &p.DefaultPrintFolder, &p.CreatedAt, &p.UpdatedAt); err != nil {
+		var pricingConfigJSON sql.NullString
+		if err := scanRow(rows, &p.ID, &p.Name, &p.Model, &p.Manufacturer, &p.ConnectionType, &p.ConnectionURI, &p.FluiddURL, &p.APIKey, &p.SerialNumber, &p.Status, &buildVolumeJSON, &p.NozzleDiameter, &p.Location, &p.Notes, &p.MinMaterialPercent, &p.CostPerHourCents, &p.PurchasePriceCents, &pricingConfigJSON, &p.MaintenanceMode, &p.RestrictGCodeModel, &p.DefaultPrintFolder, &p.CreatedAt, &p.UpdatedAt); err != nil {
 			return nil, err
 		}
 		if buildVolumeJSON != nil {
 			json.Unmarshal(buildVolumeJSON, &p.BuildVolume)
+		}
+		if err := unmarshalPrinterPricing(pricingConfigJSON, &p); err != nil {
+			return nil, err
 		}
 		printers = append(printers, p)
 	}
@@ -88,11 +100,15 @@ func (r *PrinterRepository) List(ctx context.Context) ([]model.Printer, error) {
 func (r *PrinterRepository) Update(ctx context.Context, p *model.Printer) error {
 	p.UpdatedAt = time.Now()
 	buildVolumeJSON, _ := json.Marshal(p.BuildVolume)
+	pricingConfigJSON, err := marshalPrinterPricing(p.PricingConfig)
+	if err != nil {
+		return err
+	}
 
-	_, err := r.db.ExecContext(ctx, `
-		UPDATE printers SET name = ?, model = ?, manufacturer = ?, connection_type = ?, connection_uri = ?, fluidd_url = ?, api_key = ?, serial_number = ?, status = ?, build_volume = ?, nozzle_diameter = ?, location = ?, notes = ?, min_material_percent = ?, cost_per_hour_cents = ?, purchase_price_cents = ?, maintenance_mode = ?, restrict_gcode_model = ?, default_print_folder = ?, updated_at = ?
+	_, err = r.db.ExecContext(ctx, `
+		UPDATE printers SET name = ?, model = ?, manufacturer = ?, connection_type = ?, connection_uri = ?, fluidd_url = ?, api_key = ?, serial_number = ?, status = ?, build_volume = ?, nozzle_diameter = ?, location = ?, notes = ?, min_material_percent = ?, cost_per_hour_cents = ?, purchase_price_cents = ?, pricing_config = ?, maintenance_mode = ?, restrict_gcode_model = ?, default_print_folder = ?, updated_at = ?
 		WHERE id = ?
-	`, p.Name, p.Model, p.Manufacturer, p.ConnectionType, p.ConnectionURI, p.FluiddURL, p.APIKey, p.SerialNumber, p.Status, buildVolumeJSON, p.NozzleDiameter, p.Location, p.Notes, p.MinMaterialPercent, p.CostPerHourCents, p.PurchasePriceCents, p.MaintenanceMode, p.RestrictGCodeModel, p.DefaultPrintFolder, p.UpdatedAt, p.ID)
+	`, p.Name, p.Model, p.Manufacturer, p.ConnectionType, p.ConnectionURI, p.FluiddURL, p.APIKey, p.SerialNumber, p.Status, buildVolumeJSON, p.NozzleDiameter, p.Location, p.Notes, p.MinMaterialPercent, p.CostPerHourCents, p.PurchasePriceCents, pricingConfigJSON, p.MaintenanceMode, p.RestrictGCodeModel, p.DefaultPrintFolder, p.UpdatedAt, p.ID)
 	return err
 }
 
@@ -331,3 +347,17 @@ func (r *PrinterRepository) GetPrinterRevenueAttribution(ctx context.Context, pr
 }
 
 // MaterialRepository handles material database operations.
+
+func marshalPrinterPricing(config *model.PrinterPricingConfig) (any, error) {
+	if config == nil {
+		return nil, nil
+	}
+	data, err := json.Marshal(config)
+	return string(data), err
+}
+func unmarshalPrinterPricing(data sql.NullString, p *model.Printer) error {
+	if !data.Valid {
+		return nil
+	}
+	return json.Unmarshal([]byte(data.String), &p.PricingConfig)
+}

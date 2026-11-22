@@ -20,6 +20,10 @@ PicoFarm currently appears optimized for local or trusted-network operation. It 
 
 Treat remote exposure as a separate hardening project. Do not assume that a LAN or reverse proxy is safe by default.
 
+## Commercial calculation data
+
+Calculator inputs may disclose internal prices, margins and production assumptions. Keep them under the existing API authorization boundary; do not add them to request logs, public quote projections or automatic browser draft storage. Calculation is stateless and must not trigger printer actions, stock movements or quote/order creation. Limit body size, decimal precision and line counts before arithmetic. Currency confirmation for legacy records prevents accidental denomination assumptions; it is not exchange-rate conversion or a certification of financial correctness. See [calculator scope and gates](PRICING_CALCULATOR.md).
+
 ## Secrets and credentials
 
 Never commit or print real credentials. Examples include:

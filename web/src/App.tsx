@@ -11,6 +11,7 @@ import PrinterDetail from './pages/PrinterDetail'
 import PrinterFiles from './pages/PrinterFiles'
 import Materials from './pages/Materials'
 import Expenses from './pages/Expenses'
+import PricingCalculator from './pages/PricingCalculator'
 import Sales from './pages/Sales'
 import Settings from './pages/Settings'
 import Channels from './pages/Channels'
@@ -72,6 +73,7 @@ function App() {
         <Route path="/archives" element={<Archives />} />
         <Route path="/materials" element={<Materials />} />
         <Route path="/expenses" element={<Expenses />} />
+        <Route path="/pricing" element={<PricingCalculator />} />
         <Route path="/sales" element={<Sales />} />
         <Route path="/channels" element={<Channels />} />
         {/* Legacy routes redirect to unified Channels page */}

@@ -390,28 +390,29 @@ type BuildVolume struct {
 
 // Printer represents a 3D printer in the farm.
 type Printer struct {
-	ID                 uuid.UUID      `json:"id"`
-	Name               string         `json:"name"`
-	Model              string         `json:"model"`
-	Manufacturer       string         `json:"manufacturer"`
-	ConnectionType     ConnectionType `json:"connection_type"`
-	ConnectionURI      string         `json:"connection_uri"`
-	FluiddURL          string         `json:"fluidd_url,omitempty"`
-	APIKey             string         `json:"api_key,omitempty"`
-	SerialNumber       string         `json:"serial_number,omitempty"`
-	Status             PrinterStatus  `json:"status"`
-	BuildVolume        *BuildVolume   `json:"build_volume,omitempty"`
-	NozzleDiameter     float64        `json:"nozzle_diameter"`
-	Location           string         `json:"location"`
-	Notes              string         `json:"notes"`
-	MinMaterialPercent int            `json:"min_material_percent"` // Minimum % before warning (default 10)
-	CostPerHourCents   int            `json:"cost_per_hour_cents"`  // Hourly cost in cents (e.g. 150 = $1.50/hr)
-	PurchasePriceCents int            `json:"purchase_price_cents"` // Purchase price in cents for ROI tracking
-	MaintenanceMode    bool           `json:"maintenance_mode"`     // When true, printer is out of service (no dispatch, no MQTT)
-	RestrictGCodeModel bool           `json:"restrict_gcode_model"` // When true, only runs G-code for matching printer_model
-	DefaultPrintFolder string         `json:"default_print_folder"` // Remote folder relative to the printer's G-code root
-	CreatedAt          time.Time      `json:"created_at"`
-	UpdatedAt          time.Time      `json:"updated_at"`
+	ID                 uuid.UUID             `json:"id"`
+	Name               string                `json:"name"`
+	Model              string                `json:"model"`
+	Manufacturer       string                `json:"manufacturer"`
+	ConnectionType     ConnectionType        `json:"connection_type"`
+	ConnectionURI      string                `json:"connection_uri"`
+	FluiddURL          string                `json:"fluidd_url,omitempty"`
+	APIKey             string                `json:"api_key,omitempty"`
+	SerialNumber       string                `json:"serial_number,omitempty"`
+	Status             PrinterStatus         `json:"status"`
+	BuildVolume        *BuildVolume          `json:"build_volume,omitempty"`
+	NozzleDiameter     float64               `json:"nozzle_diameter"`
+	Location           string                `json:"location"`
+	Notes              string                `json:"notes"`
+	MinMaterialPercent int                   `json:"min_material_percent"` // Minimum % before warning (default 10)
+	PricingConfig      *PrinterPricingConfig `json:"pricing_config,omitempty"`
+	CostPerHourCents   int                   `json:"cost_per_hour_cents"`  // Hourly cost in cents (e.g. 150 = $1.50/hr)
+	PurchasePriceCents int                   `json:"purchase_price_cents"` // Purchase price in cents for ROI tracking
+	MaintenanceMode    bool                  `json:"maintenance_mode"`     // When true, printer is out of service (no dispatch, no MQTT)
+	RestrictGCodeModel bool                  `json:"restrict_gcode_model"` // When true, only runs G-code for matching printer_model
+	DefaultPrintFolder string                `json:"default_print_folder"` // Remote folder relative to the printer's G-code root
+	CreatedAt          time.Time             `json:"created_at"`
+	UpdatedAt          time.Time             `json:"updated_at"`
 }
 
 type PrinterMacro struct {

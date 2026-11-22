@@ -2,9 +2,26 @@
 
 This document records the approved product decisions for quotation, cost estimation and commercial pricing.
 
-**Status:** decision record and implementation plan. **It does not mean the pricing engine, calculator fields or workflow changes are already implemented.** Current PicoFarm still has the quote/order behavior described in [API contracts](API_CONTRACTS.md#orders-customers-and-quotes) and the costing gaps listed below.
+**Status:** broader decision record and implementation plan. The standalone calculator-first increment is implemented locally; see [calculator scope, evidence and limitations](PRICING_CALCULATOR.md). This does not implement the broader proposal/PDF/revision/order workflow below. Existing quotes/orders retain the behavior described in [API contracts](API_CONTRACTS.md#orders-customers-and-quotes); historical costing paths are unchanged.
 
-Last update: 2026-11-20.
+Last update: 2026-11-22.
+
+## Implementation scope approved on 2026-11-22
+
+The first increment is the pricing calculator, not the PDF/proposal workflow. Detailed delivery boundaries and numerical validation cases: [PRICING_CALCULATOR.md](PRICING_CALCULATOR.md). Quick and complete modes use the same backend calculation engine; quick mode is an insight into considered costs, not a guarantee of net profit. Complete mode exposes additional cost inputs without claiming that unmeasured costs are certain. PDF output, proposal revisions/acceptance and order conversion remain subsequent increments.
+
+Confirmed product decisions:
+
+- Reuse printer-level costing configuration: either a direct hourly rate or a rate derived from acquisition/residual value, productive lifetime and maintenance. Allow an explicit quote/calculator-local hourly override without rewriting the printer. Declare whether energy/maintenance are included to prevent duplicate charges.
+- Pricing practices vary by job: machine time, active labor, fixed unit/service price, minimum charge and manual selling price must not hide the underlying production cost. Always show estimated gain/loss for the costs considered.
+- BRL is the operator's initial currency, not a hardcoded product restriction. Support explicit supported currency codes; no automatic exchange-rate conversion. Reject or require explicit resolution of source-currency mismatches.
+- Allow configurable selling fees for direct sales and marketplaces without assuming universal presets or rates. Distinguish fixed/percentage fees and their applicable bases.
+- Support per-unit proportional estimates and sliced batches with explicit units per plate. Do not silently prorate a full plate into a measured partial-plate result; distinguish full-batch and proportional estimates.
+- Later customer proposals must support itemized or project-level prices, configurable shipping treatment and conditional payment discounts (for example Pix). Quantity alternatives are required future functionality, not required for the first calculator increment.
+- Preserve the agreed revision/approval workflow and allow quick calculations without customer registration. Approval remains internal and must not trigger hardware.
+- Keep the calculator UI concise: primary inputs/results visible, advanced costs and explanations available on demand. Preserve inputs when switching presentation modes. No automatic sensitive draft persistence in browser storage.
+
+This approval authorizes local implementation and validation of the calculator. It does not authorize publishing or deployment. The remaining sections describe the broader target; individual features must be reported as implemented only after validation.
 
 ## 1. Scope and priority
 

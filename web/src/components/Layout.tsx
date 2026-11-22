@@ -45,6 +45,7 @@ const navigation = [
   {
     label: 'Commerce',
     items: [
+      { name: 'Pricing calculator', href: '/pricing', icon: DollarSign },
       { name: 'Quotes', href: '/quotes', icon: FileText },
       { name: 'Customers', href: '/customers', icon: Users },
       { name: 'Projects', href: '/projects', icon: FolderKanban },

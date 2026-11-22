@@ -45,6 +45,23 @@ When an endpoint or JSON shape changes, update the backend model/handler, fronte
 - `respondError` returns `{ "error": "message" }`. `respondValidationError` can instead return `{ "errors": [{ "field": "name", "message": "is required" }] }` with `400` for `validation.ValidationError`. The frontend fetch wrapper currently reads only `error.error` and falls back to `HTTP <status>`, so field-level details are not surfaced by that wrapper. Do not assume every error response has an `error` key.
 - `204 No Content` maps to `undefined` in the frontend wrapper.
 
+## Stateless pricing calculator
+
+`POST /api/pricing/calculate` uses `PricingCalculationRequest`/`PricingCalculationResult` in `internal/service/pricing_calculator.go`. It returns the result directly, not an envelope. It does not change legacy quotation totals or create a quote/order/job. The existing `/api` authentication and route-prefix token scopes apply.
+
+- Decimal inputs and canonical outputs are base-10 strings, not JSON floating numbers. Quantity and units per batch are integers (`1`–`1,000,000`). Supported currency is explicit; no currency conversion occurs.
+- Request body is capped at 128 KiB including trailing data (`413`). Unknown properties, extra JSON values and validation errors return `400` with `{error}`. Extras and fees each allow at most 50 entries; decimal inputs allow at most nine fractional digits and magnitude up to one billion.
+- `production.mode`: `proportional` (grams/hours per unit) or `batches` (grams/hours per entire plate plus `units_per_batch`). A final partial-demand plate is costed as a full batch and warned.
+- Optional `machine`: `direct` hourly rate or `derived` acquisition/residual/productive lifetime. Energy/maintenance inclusion flags prevent duplicate charges. Labor minutes are per requested unit. Extras declare `unit`, `batch`, `project` or `order` scope.
+- Fees declare percentage, fixed charge, `unit`/`order` occurrence and `goods`/`total` base; `total` includes separately charged shipping. The percentage is applied to the aggregate relevant sale base once; per-unit occurrence multiplies the fixed charge.
+- `target.anchor` is `price`, `gain` or `margin`; value denotes total goods price, total gain or gain divided by goods price in percent. Goods price excludes separately charged shipping. Keep the last edited anchor when recalculating after a cost change.
+- Result includes base and optional discounted scenarios, production totals, cost breakdown, minimum sale price and warning codes. Missing costs are not confirmation of zero. Scenario cost totals include selling fees; the breakdown contains production/operating costs and shipping before those fees.
+- Money is rounded at the selected currency precision (JPY/CLP zero decimals; remaining supported currencies two), halves away from zero. Actual scenario gain is evaluated from the rounded goods price. Break-even minimum must round upward to an attainable minor unit. Independently rounded rows and per-unit values need not sum exactly to rounded totals.
+
+Printer JSON optionally includes `pricing_config`, a self-contained costing profile stored in a nullable `printers.pricing_config` JSON text column. It carries explicit `currency`, `rate_mode`, `direct_rate_per_hour`, `purchase_price`, `residual_value`, `productive_lifetime_hours`, `maintenance_per_hour`, `average_power_watts`, `energy_tariff` and inclusion booleans; decimal values are major-unit strings. It does not reinterpret the legacy `cost_per_hour_cents` or `purchase_price_cents` used by existing analytics. Omitted configuration on a printer update preserves the existing profile; explicit `null` clears it. Legacy missing configuration means unconfigured, not free.
+
+Calculator scope, numerical cases and evidence: [PRICING_CALCULATOR.md](PRICING_CALCULATOR.md). Broader quotation decisions: [QUOTING.md](QUOTING.md).
+
 ## Shared enum contract
 
 Keep these literal sets synchronized between Go and TypeScript.

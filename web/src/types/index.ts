@@ -225,6 +225,21 @@ export interface PrinterFileMetadata {
   thumbnails?: string[]
 }
 
+// Explicit major-unit decimal strings; empty means unknown, not zero.
+export interface PrinterPricingConfig {
+  currency: string
+  rate_mode: 'direct' | 'derived'
+  direct_rate_per_hour: string
+  purchase_price: string
+  residual_value: string
+  productive_lifetime_hours: string
+  maintenance_per_hour: string
+  average_power_watts: string
+  energy_tariff: string // currency per kWh
+  includes_energy: boolean
+  includes_maintenance: boolean
+}
+
 export interface Printer {
   id: string
   name: string
@@ -243,6 +258,7 @@ export interface Printer {
   min_material_percent: number
   cost_per_hour_cents: number // Hourly cost in minor units (e.g. 150 = 1.50/hr in the configured currency)
   purchase_price_cents: number // Purchase price in cents for ROI tracking
+  pricing_config?: PrinterPricingConfig | null
   maintenance_mode?: boolean // When true, printer is out of service
   restrict_gcode_model?: boolean
   default_print_folder?: string

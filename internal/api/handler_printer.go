@@ -54,6 +54,10 @@ func (h *PrinterHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.service.Create(r.Context(), &printer); err != nil {
+		if _, ok := err.(*validation.ValidationError); ok {
+			respondValidationError(w, err)
+			return
+		}
 		respondError(w, http.StatusBadRequest, err.Error())
 		return
 	}

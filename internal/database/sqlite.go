@@ -85,6 +85,7 @@ func RunMigrations(db *sql.DB) error {
 	alterStatements := []string{
 		`ALTER TABLE printers ADD COLUMN serial_number TEXT DEFAULT ''`,
 		`ALTER TABLE printers ADD COLUMN cost_per_hour_cents INTEGER DEFAULT 0`,
+		`ALTER TABLE printers ADD COLUMN pricing_config TEXT`,
 		`ALTER TABLE printers ADD COLUMN purchase_price_cents INTEGER DEFAULT 0`,
 		`ALTER TABLE printers ADD COLUMN maintenance_mode BOOLEAN NOT NULL DEFAULT FALSE`,
 		`ALTER TABLE printers ADD COLUMN restrict_gcode_model BOOLEAN NOT NULL DEFAULT TRUE`,

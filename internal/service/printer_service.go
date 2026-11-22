@@ -43,6 +43,9 @@ func (s *PrinterService) Create(ctx context.Context, p *model.Printer) error {
 	if p.Name == "" {
 		return fmt.Errorf("printer name is required")
 	}
+	if err := validatePrinterPricing(p); err != nil {
+		return err
+	}
 	if err := normalizePrinterPrintFolder(p); err != nil {
 		return err
 	}
@@ -160,6 +163,9 @@ func normalizePrinterPrintFolder(p *model.Printer) error {
 
 // Update updates a printer.
 func (s *PrinterService) Update(ctx context.Context, p *model.Printer) error {
+	if err := validatePrinterPricing(p); err != nil {
+		return err
+	}
 	if err := normalizePrinterPrintFolder(p); err != nil {
 		return err
 	}

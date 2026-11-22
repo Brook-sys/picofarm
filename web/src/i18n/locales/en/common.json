@@ -26,5 +26,6 @@
   "Main navigation": "Main navigation",
   "{{count}}s": "{{count}}s",
   "{{minutes}}m {{seconds}}s": "{{minutes}}m {{seconds}}s",
-  "{{hours}}h {{minutes}}m": "{{hours}}h {{minutes}}m"
+  "{{hours}}h {{minutes}}m": "{{hours}}h {{minutes}}m",
+  "Pricing calculator": "Pricing calculator"
 }

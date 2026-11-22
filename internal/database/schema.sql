@@ -66,6 +66,7 @@ CREATE TABLE IF NOT EXISTS printers (
     min_material_percent INTEGER DEFAULT 10,
     cost_per_hour_cents INTEGER DEFAULT 0,
     purchase_price_cents INTEGER DEFAULT 0,
+    pricing_config TEXT,
     maintenance_mode BOOLEAN DEFAULT FALSE,
     restrict_gcode_model BOOLEAN NOT NULL DEFAULT TRUE,
     default_print_folder TEXT NOT NULL DEFAULT '',

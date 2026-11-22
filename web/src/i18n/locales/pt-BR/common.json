@@ -26,5 +26,6 @@
   "Main navigation": "Navegação principal",
   "{{count}}s": "{{count}}s",
   "{{minutes}}m {{seconds}}s": "{{minutes}}min {{seconds}}s",
-  "{{hours}}h {{minutes}}m": "{{hours}}h {{minutes}}min"
+  "{{hours}}h {{minutes}}m": "{{hours}}h {{minutes}}min",
+  "Pricing calculator": "Calculadora de preços"
 }

@@ -34,6 +34,10 @@ Before exposing PicoFarm outside a trusted local network, either:
 | `GET /api/public/business-info` | Public | Business profile fields only; do not include private settings or credentials. |
 | `GET /*` | Public/frontend | Static SPA fallback when `STATIC_DIR` exists. |
 
+## Pricing calculation boundary
+
+`POST /api/pricing/calculate` is a stateless business calculation under the existing `/api` token/scope policy, not a public quote endpoint. Requests can contain private cost/rate assumptions and must not be logged as payloads. The handler must bound request bytes, numeric precision and list sizes and reject malformed input. Calculating must not persist drafts, update catalog records, create orders/jobs or invoke hardware. Printer costing configuration uses existing printer create/update routes and their authorization boundary; it is not an independent hardware action.
+
 ## Hardware and printer-control endpoints
 
 | Routes | Class | Notes |

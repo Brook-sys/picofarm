@@ -127,6 +127,10 @@ Sales channels have a dedicated architecture guide in `docs/SALES_CHANNELS.md`. 
 
 Use mocks/fakes or isolated unit tests when adding regression coverage for external systems.
 
+## Pricing calculator boundary
+
+The calculator is deliberately separate from legacy quote-total and historical production-cost paths. `internal/service/pricing_calculator.go` owns a pure decimal-rational engine; `internal/api/pricing_calculator.go` bounds/parses requests and exposes the compute-only endpoint. It has no repository, external slicer or printer dependency. `web/src/pages/PricingCalculator.tsx` owns the standalone workflow and `web/src/lib/pricingCalculator.ts` mirrors the typed contract and input-state helpers. Reusable printer costing is optional metadata stored in the nullable `printers.pricing_config` column, with both fresh-schema and idempotent compatibility migration support. It is independent of legacy hourly/purchase cents fields used by production analytics. Local calculator overrides must not update it. See [scope and numerical gates](PRICING_CALCULATOR.md).
+
 ## Where to make common changes
 
 | Change | Start here | Also check |

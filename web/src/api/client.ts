@@ -76,6 +76,13 @@ async function fetchApi<T>(
   }
 }
 
+export const pricingApi = {
+  calculate: (data: import('../lib/pricingCalculator').PricingRequest, signal?: AbortSignal) =>
+    fetchApi<import('../lib/pricingCalculator').PricingResult>('/pricing/calculate', {
+      method: 'POST', body: JSON.stringify(data), signal,
+    }),
+}
+
 // Projects API
 export const projectsApi = {
   list: () =>

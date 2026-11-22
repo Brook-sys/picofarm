@@ -5,7 +5,7 @@
 
 ## Decisões posteriores registradas
 
-- [Orçamento e custeio](QUOTING.md): decisões de produto aprovadas para FDM, múltiplos projetos/peças/componentes, preço dinâmico por último campo editado, proposta inicial em PDF e condições comerciais simples. Isso é escopo planejado, não funcionalidade entregue.
+- [Orçamento e custeio](QUOTING.md): decisões de produto aprovadas para FDM, múltiplos projetos/peças/componentes, preço dinâmico por último campo editado e condições comerciais simples. Em 2026-11-22, a calculadora de precificação com modos rápido/completo foi selecionada para implementação e validação local primeiro; PDF, propostas/revisões e conversão em pedido ficam para incrementos seguintes. A calculadora independente foi implementada e validada localmente; evidências e limitações em [PRICING_CALCULATOR.md](PRICING_CALCULATOR.md). Isso não entrega o restante do fluxo comercial nem indica publicação/deploy.
 - **Nova prioridade aprovada para investigação:** duplicação e arranjo de instâncias do mesmo STL na mesa, espaçamento, reorientação e visualização de camadas/trajetórias do G-code. A [análise de viabilidade](SLICING_FEASIBILITY.md) separa o preview de G-code já armazenado, a multiplicação pelo CLI Orca e o preview anterior ao fatiamento, com gates mensuráveis. Nenhum renderer ou contrato novo foi implementado ou selecionado.
 
 ## Funcionalidade futura — mesas com múltiplos STLs
